@@ -1,0 +1,231 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-success: var(--success);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  /* Warm rounded sans for the restrained Ghibli direction — loaded via
+     Google Fonts link in index.html. No light/dark variance, so declared
+     directly rather than routed through a :root custom property. */
+  --font-sans:
+    'Nunito', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+}
+
+:root {
+  /* Neutrals tinted toward the warm terracotta brand hue (40) at very low
+     chroma for subconscious cohesion — see .impeccable.md Aesthetic Direction.
+     --background/--card/--popover carry slightly more chroma than before
+     (0.0026 -> 0.0055) so the UI reads as warm cream paper rather than
+     clinical white, restrained Ghibli direction. */
+  --background: oklch(0.984 0.0055 40);
+  --foreground: oklch(0.2103 0.0059 40);
+  --card: oklch(0.984 0.0055 40);
+  --card-foreground: oklch(0.2103 0.0059 40);
+  --popover: oklch(0.984 0.0055 40);
+  --popover-foreground: oklch(0.2103 0.0059 40);
+  --primary: oklch(0.605 0.152 40);
+  --primary-foreground: oklch(0.9911 0.0026 40);
+  --secondary: oklch(0.9535 0.0063 40);
+  --secondary-foreground: oklch(0.2103 0.0059 40);
+  --muted: oklch(0.9535 0.0063 40);
+  --muted-foreground: oklch(0.551 0.0114 40);
+  --accent: oklch(0.9535 0.0063 40);
+  --accent-foreground: oklch(0.2103 0.0059 40);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.9852 0 0);
+  --border: oklch(0.9067 0.0122 40);
+  --input: oklch(0.9067 0.0122 40);
+  --ring: oklch(0.605 0.152 40);
+  /* Functional colors for Finanzas — retinted into the warm cozy family
+     (was stock Tailwind green/red, read as "colores básicos" against the
+     rest of the app). Income shares the --success sage hue (145, positive/
+     growth), expense is a warm rust distinct from --primary's terracotta
+     (hue 30 vs 40) so income/expense stay visually distinguishable while
+     both fit the same tonal family as the rest of the UI. */
+  --income: oklch(0.58 0.1 145);
+  --expense: oklch(0.55 0.16 30);
+  /* Totoro-coded muted sage/forest green — a second natural accent for
+     generic "positive/success" states (dashboard trend-up, query success)
+     that are distinct from the Finanzas --income convention above: lower
+     chroma, more forest than lawn, so it doesn't compete with the money
+     color. See .impeccable.md Aesthetic Direction. */
+  --success: oklch(0.6 0.09 145);
+  /* Categorical chart palette — 8 slots, fixed order, never cycled (a 9th+
+     category folds into "Otros" rather than generating a new hue). Warm/
+     earthy family coordinated with the terracotta brand hue, validated with
+     dataviz's validate_palette.js against this exact surface: lightness
+     band, chroma floor, CVD adjacent-pair separation, and contrast all
+     pass (two categories sit in the CVD 8-12 floor band / sub-3:1 contrast
+     WARN zone — legal only because CategoryChart always pairs marks with a
+     visible legend + direct labels, never color alone). */
+  --chart-1: #c1603a;
+  --chart-2: #3d4f99;
+  --chart-3: #c99a3b;
+  --chart-4: #0891b2;
+  --chart-5: #8b4aa6;
+  --chart-6: #4f8f52;
+  --chart-7: #d4657a;
+  --chart-8: #a6512a;
+  --radius: 0.7rem;
+
+  /* "Night ink" palette — scoped exclusively to the Citas page hero cover
+     (CoupleCover.tsx). A deliberate, explicit exception to the restrained
+     Ghibli direction above: the user asked for ONE page to be more
+     "llamativa" via a wabi-sabi sumi-e illustration. Do not reuse these
+     tokens outside the cover, and do not let them influence --background/
+     --primary/etc. Deep indigo-charcoal dusk wash with a soft gold moon and
+     a blush sakura accent. */
+  --cover-sky-top: oklch(0.34 0.05 265);
+  --cover-sky-bottom: oklch(0.2 0.045 274);
+  --cover-ink-far: oklch(0.44 0.035 270);
+  --cover-ink-mid: oklch(0.3 0.04 268);
+  --cover-ink-near: oklch(0.16 0.028 265);
+  --cover-moon: oklch(0.88 0.05 85);
+  --cover-sakura: oklch(0.78 0.08 16);
+  --cover-sakura-dark: oklch(0.6 0.1 20);
+  --cover-text: oklch(0.99 0.004 90);
+  --cover-scrim: oklch(0.08 0.02 265 / 0.6);
+}
+
+.dark {
+  /* Faint warm-charcoal nudge to match the light-mode paper tone, same
+     restraint (0.0059 -> 0.008 chroma, L unchanged). */
+  --background: oklch(0.2103 0.008 40);
+  --foreground: oklch(0.9911 0.0026 40);
+  --card: oklch(0.2103 0.008 40);
+  --card-foreground: oklch(0.9911 0.0026 40);
+  --popover: oklch(0.2103 0.008 40);
+  --popover-foreground: oklch(0.9911 0.0026 40);
+  --primary: oklch(0.745 0.135 40);
+  --primary-foreground: oklch(0.2103 0.0059 40);
+  --secondary: oklch(0.3211 0.0078 40);
+  --secondary-foreground: oklch(0.9911 0.0026 40);
+  --muted: oklch(0.3211 0.0078 40);
+  --muted-foreground: oklch(0.7155 0.0113 40);
+  --accent: oklch(0.3211 0.0078 40);
+  --accent-foreground: oklch(0.9911 0.0026 40);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.9852 0 0);
+  --border: oklch(0.3211 0.0078 40);
+  --input: oklch(0.3211 0.0078 40);
+  --ring: oklch(0.745 0.135 40);
+  --income: oklch(0.7 0.11 145);
+  --expense: oklch(0.68 0.15 30);
+  --success: oklch(0.72 0.1 145);
+  /* Same 8 categorical slots, lightened/rebalanced for the dark surface —
+     validated separately against the dark background (own lightness band,
+     own contrast check), not an automatic flip of the light values. */
+  --chart-1: #d67349;
+  --chart-2: #5468b8;
+  --chart-3: #b8862a;
+  --chart-4: #1e97b6;
+  --chart-5: #a05cbd;
+  --chart-6: #63a365;
+  --chart-7: #d66f84;
+  --chart-8: #bc6335;
+
+  /* Night ink cover palette, dark-theme variant — deepened slightly so the
+     band still reads as a distinct nocturnal scene against the app's own
+     dark background rather than blending flat. See :root for context. */
+  --cover-sky-top: oklch(0.26 0.04 265);
+  --cover-sky-bottom: oklch(0.13 0.032 274);
+  --cover-ink-far: oklch(0.34 0.03 268);
+  --cover-ink-mid: oklch(0.21 0.032 266);
+  --cover-ink-near: oklch(0.1 0.02 265);
+  --cover-moon: oklch(0.9 0.06 85);
+  --cover-sakura: oklch(0.75 0.09 18);
+  --cover-sakura-dark: oklch(0.58 0.11 20);
+  --cover-text: oklch(0.99 0.004 90);
+  --cover-scrim: oklch(0.05 0.015 265 / 0.65);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* iOS Safari renders input[type=date] internals with their own padding/
+     line-height/alignment, ignoring the input's own px-3 py-1 — this
+     resets those webkit-only pseudo-elements so the date text lines up
+     like a normal text input. */
+  input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+  }
+  input[type='date']::-webkit-datetime-edit {
+    padding: 0;
+    line-height: 1;
+  }
+  input[type='date']::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    margin-left: 0.25rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@theme inline {
+  --animate-card-in: card-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
