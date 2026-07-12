@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 export const COZY_CARD_CLASS =
   'border-0 rounded-[var(--radius)] shadow-[0_1px_2px_oklch(0.35_0.03_40/0.07),0_12px_28px_-10px_oklch(0.35_0.06_40/0.18)] transition-shadow duration-300 hover:shadow-[0_2px_4px_oklch(0.35_0.03_40/0.09),0_18px_36px_-10px_oklch(0.35_0.07_40/0.22)]'
 
+// eslint-disable-next-line react-refresh/only-export-components -- shadcn/ui convention: variants/constants exported alongside the component
 export const paperSurfaceStyle: React.CSSProperties = {
   backgroundColor: 'color-mix(in oklch, var(--primary) 3%, var(--card))',
   backgroundImage:
