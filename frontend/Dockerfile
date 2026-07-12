@@ -8,6 +8,11 @@ ENV VITE_API_URL=$VITE_API_URL
 RUN bun run build
 
 FROM nginx:1.27-alpine
+# Parchea CVEs del SO base. CACHEBUST invalida esta capa en cada build — con
+# cache-to: type=gha el resultado de "apk upgrade" quedaría cacheado
+# indefinidamente y nunca traería parches nuevos tras el build inicial.
+ARG CACHEBUST=1
+RUN apk upgrade --no-cache
 COPY --from=build /src/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

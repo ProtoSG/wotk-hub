@@ -69,6 +69,7 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ github.sha }}
           build-args: |
             VITE_API_URL=${{ vars.VITE_API_URL }}
+            CACHEBUST=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Scan image (Trivy)
