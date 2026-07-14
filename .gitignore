@@ -6,3 +6,4 @@ dist/
 .DS_Store
 *.cookies.txt
 admin_cookies.txt
+.vite/
