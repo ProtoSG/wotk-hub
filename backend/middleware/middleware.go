@@ -39,6 +39,10 @@ func CORS(origins string) func(http.Handler) http.Handler {
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			// Content-Disposition isn't in the browser's default exposed-header
+			// safelist, so cross-origin JS (ytdlp's blob download) can't read the
+			// real filename without this — it silently falls back to a default.
+			w.Header().Set("Access-Control-Expose-Headers", "Content-Disposition")
 			// Cookies are how auth travels now (JWTAuth reads access_token),
 			// so cross-origin requests must be allowed to carry them.
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -138,4 +142,11 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(status int) {
 	rw.status = status
 	rw.ResponseWriter.WriteHeader(status)
+}
+
+// Unwrap lets http.ResponseController (used e.g. by ytdlp.Download to extend
+// the write deadline for long streaming responses) reach the underlying
+// ResponseWriter instead of stopping at this wrapper.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
 }
