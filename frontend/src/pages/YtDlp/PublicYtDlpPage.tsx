@@ -17,7 +17,7 @@ export default function PublicYtDlpPage() {
   const [error, setError] = useState<string | null>(null)
   const [messageIndex, setMessageIndex] = useState(() => Math.floor(Math.random() * LOVE_MESSAGES.length))
   const { downloadMp3 } = usePublicYtdlpApi()
-  const intervalRef = useRef<ReturnType<typeof setInterval>>()
+  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   useEffect(() => {
     if (!loading) {
