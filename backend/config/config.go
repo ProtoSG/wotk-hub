@@ -13,6 +13,10 @@ type Config struct {
 	// CookieSecure controls the Secure flag on auth cookies. false for local
 	// http dev (the default), set COOKIE_SECURE=true in production (https).
 	CookieSecure bool
+	// YtdlpPublicToken, when set, mounts an unauthenticated /api/ytdlp/public
+	// route gated by this shared token instead of JWT login. Empty (default)
+	// means the public route isn't mounted at all.
+	YtdlpPublicToken string
 }
 
 func Load() Config {
@@ -32,11 +36,13 @@ func Load() Config {
 	dbURL := os.Getenv("DATABASE_URL")
 	jwtSecret := os.Getenv("JWT_SECRET")
 	cookieSecure := os.Getenv("COOKIE_SECURE") == "true"
+	ytdlpPublicToken := os.Getenv("YTDLP_PUBLIC_TOKEN")
 	return Config{
-		Port:         port,
-		CORSOrigin:   origin,
-		DatabaseURL:  dbURL,
-		JWTSecret:    jwtSecret,
-		CookieSecure: cookieSecure,
+		Port:             port,
+		CORSOrigin:       origin,
+		DatabaseURL:      dbURL,
+		JWTSecret:        jwtSecret,
+		CookieSecure:     cookieSecure,
+		YtdlpPublicToken: ytdlpPublicToken,
 	}
 }

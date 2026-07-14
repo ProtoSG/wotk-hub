@@ -4,7 +4,16 @@ import AppLayout from '@/layouts/AppLayout'
 import AuthGuard from './AuthGuard'
 import RequireRole from './RequireRole'
 import RouteFallback from './RouteFallback'
-import { DashboardPage, DbManagerPage, FinancesPage, CouplePage, ConfigurationPage, LoginPage } from './lazyPages'
+import {
+  DashboardPage,
+  DbManagerPage,
+  FinancesPage,
+  CouplePage,
+  YtdlpPage,
+  PublicYtdlpPage,
+  ConfigurationPage,
+  LoginPage,
+} from './lazyPages'
 
 export const router = createBrowserRouter([
   {
@@ -12,6 +21,16 @@ export const router = createBrowserRouter([
     element: (
       <Suspense fallback={<RouteFallback />}>
         <LoginPage />
+      </Suspense>
+    ),
+  },
+  {
+    // Token-gated, not JWT — intentionally outside AuthGuard/AppLayout so it
+    // works for someone with no account on this app (see usePublicYtdlpApi).
+    path: '/publico/ytdlp',
+    element: (
+      <Suspense fallback={<RouteFallback />}>
+        <PublicYtdlpPage />
       </Suspense>
     ),
   },
@@ -55,6 +74,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<RouteFallback />}>
             <CouplePage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'ytdlp',
+        element: (
+          <Suspense fallback={<RouteFallback />}>
+            <YtdlpPage />
           </Suspense>
         ),
       },
