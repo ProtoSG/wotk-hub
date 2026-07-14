@@ -116,7 +116,7 @@ func filenameUTF8(name string) string {
 	return clean + ext
 }
 
-// rfc5987Encode percent-encodes s for use as the value of `filename*=UTF-8''...`
+// rfc5987Encode percent-encodes s for use as the value of `filename*=UTF-8”...`
 // (RFC 5987/6266). url.QueryEscape already percent-encodes every byte outside
 // the unreserved set, except it turns spaces into "+" — swap those back to
 // the "%20" that RFC 5987 expects.

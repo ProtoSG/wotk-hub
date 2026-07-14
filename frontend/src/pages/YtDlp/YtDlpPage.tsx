@@ -13,7 +13,7 @@ export default function YtDlpPage() {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [messageIndex, setMessageIndex] = useState(0)
+  const [messageIndex, setMessageIndex] = useState(() => Math.floor(Math.random() * LOVE_MESSAGES.length))
   const { downloadMp3 } = useYtdlpApi()
   const intervalRef = useRef<ReturnType<typeof setInterval>>()
 
@@ -22,7 +22,6 @@ export default function YtDlpPage() {
       clearInterval(intervalRef.current)
       return
     }
-    setMessageIndex(Math.floor(Math.random() * LOVE_MESSAGES.length))
     intervalRef.current = setInterval(() => {
       setMessageIndex((i) => (i + 1) % LOVE_MESSAGES.length)
     }, MESSAGE_INTERVAL_MS)

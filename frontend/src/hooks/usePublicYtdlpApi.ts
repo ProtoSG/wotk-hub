@@ -28,13 +28,15 @@ export function usePublicYtdlpApi() {
       if (axios.isAxiosError(err)) {
         const backendMsg = await readBackendError(err.response?.data)
         if (err.response?.status === 401) {
-          if (backendMsg === 'missing token') throw new Error('Falta el token en el link.')
-          throw new Error('El token del link es incorrecto.')
+          if (backendMsg === 'missing token') throw new Error('Falta el token en el link.', { cause: err })
+          throw new Error('El token del link es incorrecto.', { cause: err })
         }
-        if (err.response?.status === 429) throw new Error('El servidor está ocupado, probá de nuevo en un momento.')
-        if (err.response?.status === 400) throw new Error('Ese link no es de YouTube.')
+        if (err.response?.status === 429) {
+          throw new Error('El servidor está ocupado, probá de nuevo en un momento.', { cause: err })
+        }
+        if (err.response?.status === 400) throw new Error('Ese link no es de YouTube.', { cause: err })
       }
-      throw new Error('No se pudo descargar el audio.')
+      throw new Error('No se pudo descargar el audio.', { cause: err })
     }
   }
 
