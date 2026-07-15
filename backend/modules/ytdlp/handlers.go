@@ -195,7 +195,7 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 	args := []string{
 		"-x", "--audio-format", "mp3", "--audio-quality", "0",
 		"--no-playlist",
-		"--js-runtimes", "node",
+		"--js-runtimes", "deno",
 	}
 	if h.cookiesPath != "" {
 		// Datacenter IPs get "Sign in to confirm you're not a bot" from

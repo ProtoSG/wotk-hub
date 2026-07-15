@@ -5,12 +5,18 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/workhub .
 
-FROM alpine:3.20
-# ffmpeg + nodejs are yt-dlp's runtime deps (audio extraction, and YouTube's
-# JS signature challenge — apk's yt-dlp lags releases, so it's installed via
-# pip instead to stay current against YouTube's anti-bot changes).
-RUN apk add --no-cache ca-certificates ffmpeg nodejs python3 py3-pip && \
-    pip install --no-cache-dir --break-system-packages yt-dlp
+FROM denoland/deno:bin AS deno
+
+# Debian, not alpine: yt-dlp's JS "n" signature challenge solver is only
+# fully supported on deno (node support is best-effort and fails on some
+# challenges), and deno's official binary is glibc-linked — doesn't run on
+# alpine/musl without extra compat shims.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates ffmpeg python3 python3-pip && \
+    pip install --no-cache-dir --break-system-packages yt-dlp && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=deno /deno /usr/local/bin/deno
 WORKDIR /app
 COPY --from=build /out/workhub .
 EXPOSE 3001
