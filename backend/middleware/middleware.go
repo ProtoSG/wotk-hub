@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"log"
 	"net/http"
 	"slices"
@@ -130,6 +132,32 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CLITokenAuth validates a static CLI token passed as
+// Authorization: Bearer <token>. Uses constant-time comparison (like ytdlp's
+// public token) so the token's length/content don't leak through timing.
+// On success, stores a minimal authUser in context (userID=1, role=admin).
+func CLITokenAuth(token string) func(http.Handler) http.Handler {
+	expectedHash := sha256.Sum256([]byte(token))
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			if !strings.HasPrefix(auth, "Bearer ") {
+				httpx.WriteError(w, http.StatusUnauthorized, "missing token")
+				return
+			}
+			provided := strings.TrimPrefix(auth, "Bearer ")
+			providedHash := sha256.Sum256([]byte(provided))
+			if subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) != 1 {
+				httpx.WriteError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			// CLI callers get admin role by default (they have the secret token)
+			ctx := context.WithValue(r.Context(), userContextKey, authUser{userID: 1, role: "admin"})
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

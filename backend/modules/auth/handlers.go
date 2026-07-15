@@ -7,6 +7,7 @@ import (
 	"workhub/httpx"
 	"workhub/middleware"
 
+	chi "github.com/go-chi/chi/v5"
 	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -247,4 +248,56 @@ func (h *handler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 	clearAuthCookies(w, h.secure)
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	result, err := h.db.Exec(`DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		log.Printf("auth: delete user failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "delete failed")
+		return
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		httpx.WriteError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (h *handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(`SELECT id, name, email, role, created_at FROM users ORDER BY id`)
+	if err != nil {
+		log.Printf("auth: list users failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "query failed")
+		return
+	}
+	defer rows.Close()
+
+	var users []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var name, email, role string
+		var createdAt []byte
+		if err := rows.Scan(&id, &name, &email, &role, &createdAt); err != nil {
+			continue
+		}
+		users = append(users, map[string]interface{}{
+			"id":         id,
+			"name":       name,
+			"email":      email,
+			"role":       role,
+			"created_at": string(createdAt),
+		})
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, users)
 }

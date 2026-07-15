@@ -12,6 +12,7 @@ import (
 	"workhub/config"
 	"workhub/middleware"
 	"workhub/modules/auth"
+	"workhub/modules/cli"
 	"workhub/modules/couple"
 	"workhub/modules/dbmanager"
 	"workhub/modules/finances"
@@ -76,6 +77,12 @@ func main() {
 	// YTDLP_PUBLIC_TOKEN is set, so it can't be exposed by accident.
 	if cfg.YtdlpPublicToken != "" {
 		r.Mount("/api/ytdlp/public", ytdlp.PublicRoutes(cfg.YtdlpPublicToken, cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
+	}
+
+	// CLI routes for workhubctl — gated by static CLI_TOKEN. Not mounted
+	// unless CLI_TOKEN is set. The token uses sha256 constant-time compare.
+	if cfg.CLIToken != "" {
+		r.Mount("/api/cli", cli.Routes(appDB, 1, cfg.CLIToken, middleware.CLITokenAuth(cfg.CLIToken)))
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

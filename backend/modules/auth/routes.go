@@ -31,6 +31,8 @@ func Routes(db *sql.DB, secret string, cookieSecure bool) http.Handler {
 		pr.Use(middleware.JWTAuth(secret))
 		pr.Get("/me", h.Me)
 		pr.Post("/logout", h.Logout)
+		pr.Delete("/users/{id}", h.DeleteUser)
+		pr.Get("/users", h.ListUsers)
 	})
 
 	return r
