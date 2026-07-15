@@ -40,6 +40,7 @@ var allowedHosts = map[string]bool{
 
 type handler struct {
 	cookiesPath string
+	proxyURL    string
 }
 
 type downloadRequest struct {
@@ -202,6 +203,12 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 		// YouTube regardless of yt-dlp version — only an authenticated
 		// session's cookies reliably get past it.
 		args = append(args, "--cookies", h.cookiesPath)
+	}
+	if h.proxyURL != "" {
+		// Cookies alone don't help when it's the IP's reputation getting
+		// flagged (common on datacenter VPS ranges) — route through a
+		// residential proxy instead.
+		args = append(args, "--proxy", h.proxyURL)
 	}
 	args = append(args, "-o", outputTemplate, "--", req.URL)
 	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
