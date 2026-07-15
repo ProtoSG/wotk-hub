@@ -23,6 +23,11 @@ type Config struct {
 	// cookies.txt exported from an authenticated YouTube session, mounted
 	// into the container. Empty (default) skips the flag entirely.
 	YtdlpCookiesPath string
+	// YtdlpProxyURL, when set, is passed to yt-dlp as --proxy (e.g.
+	// http://user:pass@host:port). Needed if the host's own IP is blocked by
+	// YouTube regardless of cookies — routes the request through a
+	// residential proxy instead. Empty (default) skips the flag entirely.
+	YtdlpProxyURL string
 }
 
 func Load() Config {
@@ -44,6 +49,7 @@ func Load() Config {
 	cookieSecure := os.Getenv("COOKIE_SECURE") == "true"
 	ytdlpPublicToken := os.Getenv("YTDLP_PUBLIC_TOKEN")
 	ytdlpCookiesPath := os.Getenv("YTDLP_COOKIES_PATH")
+	ytdlpProxyURL := os.Getenv("YTDLP_PROXY_URL")
 	return Config{
 		Port:             port,
 		CORSOrigin:       origin,
@@ -52,5 +58,6 @@ func Load() Config {
 		CookieSecure:     cookieSecure,
 		YtdlpPublicToken: ytdlpPublicToken,
 		YtdlpCookiesPath: ytdlpCookiesPath,
+		YtdlpProxyURL:    ytdlpProxyURL,
 	}
 }
