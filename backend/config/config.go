@@ -28,6 +28,10 @@ type Config struct {
 	// YouTube regardless of cookies — routes the request through a
 	// residential proxy instead. Empty (default) skips the flag entirely.
 	YtdlpProxyURL string
+	// CLIToken, when set, enables a static token for CLI access. Unlike JWT
+	// (which expires), this token doesn't expire — useful for scripts and
+	// the workhubctl CLI. Mounted at /api/cli/* behind CLITokenAuth.
+	CLIToken string
 }
 
 func Load() Config {
@@ -50,6 +54,7 @@ func Load() Config {
 	ytdlpPublicToken := os.Getenv("YTDLP_PUBLIC_TOKEN")
 	ytdlpCookiesPath := os.Getenv("YTDLP_COOKIES_PATH")
 	ytdlpProxyURL := os.Getenv("YTDLP_PROXY_URL")
+	cliToken := os.Getenv("CLI_TOKEN")
 	return Config{
 		Port:             port,
 		CORSOrigin:       origin,
@@ -59,5 +64,6 @@ func Load() Config {
 		YtdlpPublicToken: ytdlpPublicToken,
 		YtdlpCookiesPath: ytdlpCookiesPath,
 		YtdlpProxyURL:    ytdlpProxyURL,
+		CLIToken:         cliToken,
 	}
 }
