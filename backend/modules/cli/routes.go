@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// handler holds dependencies for CLI routes.
 type handler struct {
 	db        *sql.DB
 	cliUserID int64 // default user ID for CLI token auth
