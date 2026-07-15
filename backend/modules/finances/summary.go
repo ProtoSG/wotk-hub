@@ -14,13 +14,13 @@ import (
 func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 
 	start, end, err := monthRange(r.URL.Query().Get("month"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
@@ -33,7 +33,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	err = h.db.QueryRow(balanceQuery, balanceArgs...).Scan(&s.BalanceCents)
 	if err != nil {
 		log.Printf("finances: summary balance query failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	err = h.db.QueryRow(monthQuery, monthArgs...).Scan(&s.MonthIncomeCents, &s.MonthExpenseCents)
 	if err != nil {
 		log.Printf("finances: summary month query failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(trendQuery+" GROUP BY m, type", trendArgs...)
 	if err != nil {
 		log.Printf("finances: summary trend query failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer rows.Close()
@@ -76,7 +76,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 		var sum int64
 		if err := rows.Scan(&m, &typ, &sum); err != nil {
 			log.Printf("finances: summary trend scan failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
 		if p, ok := buckets[m]; ok {
@@ -97,7 +97,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	catRows, err := h.db.Query(catQuery+" GROUP BY category ORDER BY 2 DESC", catArgs...)
 	if err != nil {
 		log.Printf("finances: summary category query failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer catRows.Close()
@@ -106,7 +106,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 		var c CategoryAmount
 		if err := catRows.Scan(&c.Category, &c.AmountCents); err != nil {
 			log.Printf("finances: summary category scan failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
 		s.CategoryBreakdown = append(s.CategoryBreakdown, c)

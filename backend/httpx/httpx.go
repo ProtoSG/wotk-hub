@@ -20,11 +20,6 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-// WriteError writes a JSON error response of the form {"error": msg}.
-func WriteError(w http.ResponseWriter, status int, msg string) {
-	WriteJSON(w, status, map[string]string{"error": msg})
-}
-
 // DecodeJSON decodes the JSON request body into dst, enforcing maxBytes as an
 // upper bound on the body size via http.MaxBytesReader. Callers are
 // responsible for writing an error response when a non-nil error is

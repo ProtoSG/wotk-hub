@@ -48,18 +48,18 @@ func init() {
 func (h *handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	if err := req.validate(); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
 	if err != nil {
 		log.Printf("auth: hash password failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -72,25 +72,25 @@ func (h *handler) Register(w http.ResponseWriter, r *http.Request) {
 	tx, err := h.db.Begin()
 	if err != nil {
 		log.Printf("auth: begin registration tx failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`SELECT pg_advisory_xact_lock($1)`, registerLockKey); err != nil {
 		log.Printf("auth: acquire registration lock failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
 	var count int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
 		log.Printf("auth: count users failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if count >= maxUsers {
-		httpx.WriteError(w, http.StatusForbidden, "registration is closed")
+		httpx.WriteError(w, http.StatusForbidden, httpx.CodeForbidden, "registration is closed")
 		return
 	}
 	// First registrant is admin, second is guest — server-decided, never
@@ -106,24 +106,24 @@ func (h *handler) Register(w http.ResponseWriter, r *http.Request) {
 		req.Email, string(hash), req.Name, role,
 	).Scan(&userID)
 	if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == postgresUniqueViolation {
-		httpx.WriteError(w, http.StatusConflict, "email already registered")
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, "email already registered")
 		return
 	}
 	if err != nil {
 		log.Printf("auth: create user failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
 		log.Printf("auth: commit registration tx failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
 	if err := h.issueTokens(w, userID, role); err != nil {
 		log.Printf("auth: issue tokens failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, User{ID: userID, Name: req.Name, Email: req.Email, Role: role})
@@ -132,11 +132,11 @@ func (h *handler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	if err := req.validate(); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
@@ -151,22 +151,22 @@ func (h *handler) Login(w http.ResponseWriter, r *http.Request) {
 		// below — otherwise the latency difference leaks whether an
 		// email is registered.
 		bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(req.Password))
-		httpx.WriteError(w, http.StatusUnauthorized, "invalid email or password")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "invalid email or password")
 		return
 	}
 	if err != nil {
 		log.Printf("auth: lookup user failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		httpx.WriteError(w, http.StatusUnauthorized, "invalid email or password")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "invalid email or password")
 		return
 	}
 
 	if err := h.issueTokens(w, u.ID, u.Role); err != nil {
 		log.Printf("auth: issue tokens failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, u)
@@ -175,7 +175,7 @@ func (h *handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	hash := hashToken(cookie.Value)
@@ -192,25 +192,25 @@ func (h *handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		 RETURNING user_id`, hash,
 	).Scan(&userID)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	if err != nil {
 		log.Printf("auth: claim refresh token failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
 	var role string
 	if err := h.db.QueryRow(`SELECT role FROM users WHERE id = $1`, userID).Scan(&role); err != nil {
 		log.Printf("auth: lookup user role failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
 	if err := h.issueTokens(w, userID, role); err != nil {
 		log.Printf("auth: issue tokens failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
@@ -219,19 +219,19 @@ func (h *handler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	var u User
 	err := h.db.QueryRow(`SELECT id, name, email, role FROM users WHERE id = $1`, userID).
 		Scan(&u.ID, &u.Name, &u.Email, &u.Role)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	if err != nil {
 		log.Printf("auth: lookup me failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, u)
@@ -253,20 +253,20 @@ func (h *handler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		httpx.WriteError(w, http.StatusBadRequest, "id is required")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "id is required")
 		return
 	}
 
 	result, err := h.db.Exec(`DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("auth: delete user failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "delete failed")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "delete failed")
 		return
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		httpx.WriteError(w, http.StatusNotFound, "user not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "user not found")
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`SELECT id, name, email, role, created_at FROM users ORDER BY id`)
 	if err != nil {
 		log.Printf("auth: list users failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "query failed")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "query failed")
 		return
 	}
 	defer rows.Close()

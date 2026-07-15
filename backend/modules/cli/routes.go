@@ -30,11 +30,11 @@ func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
 	var name, email, role string
 	err := h.db.QueryRow(`SELECT id, name, email, role FROM users WHERE id = $1`, h.cliUserID).Scan(&id, &name, &email, &role)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusNotFound, "cli user not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "cli user not found")
 		return
 	}
 	if err != nil {
-		httpx.WriteError(w, http.StatusInternalServerError, "database error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "database error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]interface{}{

@@ -76,7 +76,7 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("access_token")
 			if err != nil {
-				httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 				return
 			}
 
@@ -88,18 +88,18 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 				return []byte(secret), nil
 			})
 			if err != nil || !token.Valid {
-				httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 				return
 			}
 
 			sub, err := claims.GetSubject()
 			if err != nil {
-				httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 				return
 			}
 			userID, err := strconv.ParseInt(sub, 10, 64)
 			if err != nil {
-				httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 				return
 			}
 			role, _ := claims["role"].(string)
@@ -128,7 +128,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, role, ok := UserFromContext(r.Context())
 			if !ok || !slices.Contains(roles, role) {
-				httpx.WriteError(w, http.StatusForbidden, "forbidden")
+				httpx.WriteError(w, http.StatusForbidden, httpx.CodeForbidden, "forbidden")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -146,13 +146,13 @@ func CLITokenAuth(token string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth := r.Header.Get("Authorization")
 			if !strings.HasPrefix(auth, "Bearer ") {
-				httpx.WriteError(w, http.StatusUnauthorized, "missing token")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "missing token")
 				return
 			}
 			provided := strings.TrimPrefix(auth, "Bearer ")
 			providedHash := sha256.Sum256([]byte(provided))
 			if subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) != 1 {
-				httpx.WriteError(w, http.StatusUnauthorized, "invalid token")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "invalid token")
 				return
 			}
 			// CLI callers get admin role by default (they have the secret token)

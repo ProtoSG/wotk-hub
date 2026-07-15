@@ -131,7 +131,7 @@ func rfc5987Encode(s string) string {
 // main.go) — the UserFromContext check is defense-in-depth on top of that.
 func (h *handler) Download(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := middleware.UserFromContext(r.Context()); !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	h.doDownload(w, r)
@@ -151,18 +151,18 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 	case downloadSlots <- struct{}{}:
 		defer func() { <-downloadSlots }()
 	default:
-		httpx.WriteError(w, http.StatusTooManyRequests, "server busy, try again in a moment")
+		httpx.WriteError(w, http.StatusTooManyRequests, httpx.CodeServiceUnavailable, "server busy, try again in a moment")
 		return
 	}
 
 	var req downloadRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 
 	if _, err := validateYouTubeURL(req.URL); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
@@ -177,14 +177,14 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 	ytdlpPath, err := exec.LookPath("yt-dlp")
 	if err != nil {
 		log.Printf("ytdlp: yt-dlp binary not found: %v", err)
-		httpx.WriteError(w, http.StatusServiceUnavailable, "download service unavailable")
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "download service unavailable")
 		return
 	}
 
 	tempDir, err := os.MkdirTemp("", "ytdlp-*")
 	if err != nil {
 		log.Printf("ytdlp: mkdir temp failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer os.RemoveAll(tempDir)
@@ -218,19 +218,19 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 	runErr := cmd.Run()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		log.Printf("ytdlp: download timed out after %s: %s", downloadTimeout, stderr.String())
-		httpx.WriteError(w, http.StatusBadGateway, "download failed")
+		httpx.WriteError(w, http.StatusBadGateway, httpx.CodeInternal, "download failed")
 		return
 	}
 	if runErr != nil {
 		log.Printf("ytdlp: yt-dlp failed: %v: %s", runErr, stderr.String())
-		httpx.WriteError(w, http.StatusBadGateway, "download failed")
+		httpx.WriteError(w, http.StatusBadGateway, httpx.CodeInternal, "download failed")
 		return
 	}
 
 	entries, err := os.ReadDir(tempDir)
 	if err != nil || len(entries) == 0 {
 		log.Printf("ytdlp: no output file found (err=%v)", err)
-		httpx.WriteError(w, http.StatusBadGateway, "download failed")
+		httpx.WriteError(w, http.StatusBadGateway, httpx.CodeInternal, "download failed")
 		return
 	}
 
@@ -238,7 +238,7 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open(filepath.Join(tempDir, outputName))
 	if err != nil {
 		log.Printf("ytdlp: open output file failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer f.Close()

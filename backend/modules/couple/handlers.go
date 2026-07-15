@@ -35,7 +35,7 @@ func (h *handler) ListDates(w http.ResponseWriter, r *http.Request) {
 		FROM couple_dates ORDER BY occurred_on DESC, id DESC`)
 	if err != nil {
 		log.Printf("couple: list dates failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer rows.Close()
@@ -45,7 +45,7 @@ func (h *handler) ListDates(w http.ResponseWriter, r *http.Request) {
 		d, err := scanDate(rows)
 		if err != nil {
 			log.Printf("couple: scan date failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
 		dates = append(dates, d)
@@ -58,12 +58,12 @@ func (h *handler) ListDates(w http.ResponseWriter, r *http.Request) {
 func (h *handler) CreateDate(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	var req dateRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	if req.Status == "" {
@@ -71,7 +71,7 @@ func (h *handler) CreateDate(w http.ResponseWriter, r *http.Request) {
 	}
 	occurredOn, err := req.validate()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	row := h.db.QueryRow(
@@ -83,7 +83,7 @@ func (h *handler) CreateDate(w http.ResponseWriter, r *http.Request) {
 	d, err := scanDate(row)
 	if err != nil {
 		log.Printf("couple: create date failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, d)
@@ -92,17 +92,17 @@ func (h *handler) CreateDate(w http.ResponseWriter, r *http.Request) {
 func (h *handler) UpdateDate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	var req dateRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	occurredOn, err := req.validate()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	row := h.db.QueryRow(
@@ -114,12 +114,12 @@ func (h *handler) UpdateDate(w http.ResponseWriter, r *http.Request) {
 	)
 	d, err := scanDate(row)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusNotFound, "date not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "date not found")
 		return
 	}
 	if err != nil {
 		log.Printf("couple: update date failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, d)
@@ -128,17 +128,17 @@ func (h *handler) UpdateDate(w http.ResponseWriter, r *http.Request) {
 func (h *handler) DeleteDate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	res, err := h.db.Exec(`DELETE FROM couple_dates WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("couple: delete date failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		httpx.WriteError(w, http.StatusNotFound, "date not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "date not found")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
