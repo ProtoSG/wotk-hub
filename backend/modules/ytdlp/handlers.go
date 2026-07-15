@@ -38,7 +38,9 @@ var allowedHosts = map[string]bool{
 	"youtu.be":          true,
 }
 
-type handler struct{}
+type handler struct {
+	cookiesPath string
+}
 
 type downloadRequest struct {
 	URL string `json:"url"`
@@ -190,13 +192,19 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	outputTemplate := filepath.Join(tempDir, "%(title)s.%(ext)s")
-	cmd := exec.CommandContext(ctx, ytdlpPath,
+	args := []string{
 		"-x", "--audio-format", "mp3", "--audio-quality", "0",
 		"--no-playlist",
 		"--js-runtimes", "node",
-		"-o", outputTemplate,
-		"--", req.URL,
-	)
+	}
+	if h.cookiesPath != "" {
+		// Datacenter IPs get "Sign in to confirm you're not a bot" from
+		// YouTube regardless of yt-dlp version — only an authenticated
+		// session's cookies reliably get past it.
+		args = append(args, "--cookies", h.cookiesPath)
+	}
+	args = append(args, "-o", outputTemplate, "--", req.URL)
+	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 

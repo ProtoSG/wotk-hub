@@ -17,6 +17,12 @@ type Config struct {
 	// route gated by this shared token instead of JWT login. Empty (default)
 	// means the public route isn't mounted at all.
 	YtdlpPublicToken string
+	// YtdlpCookiesPath, when set, is passed to yt-dlp as --cookies. Needed on
+	// hosts with a datacenter IP (YouTube blocks those with "Sign in to
+	// confirm you're not a bot" regardless of yt-dlp version) — points at a
+	// cookies.txt exported from an authenticated YouTube session, mounted
+	// into the container. Empty (default) skips the flag entirely.
+	YtdlpCookiesPath string
 }
 
 func Load() Config {
@@ -37,6 +43,7 @@ func Load() Config {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	cookieSecure := os.Getenv("COOKIE_SECURE") == "true"
 	ytdlpPublicToken := os.Getenv("YTDLP_PUBLIC_TOKEN")
+	ytdlpCookiesPath := os.Getenv("YTDLP_COOKIES_PATH")
 	return Config{
 		Port:             port,
 		CORSOrigin:       origin,
@@ -44,5 +51,6 @@ func Load() Config {
 		JWTSecret:        jwtSecret,
 		CookieSecure:     cookieSecure,
 		YtdlpPublicToken: ytdlpPublicToken,
+		YtdlpCookiesPath: ytdlpCookiesPath,
 	}
 }

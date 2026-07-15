@@ -68,14 +68,14 @@ func main() {
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
 		pr.Mount("/api/finances", finances.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB))
-		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes())
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath))
 	})
 
 	// Unauthenticated by design (token-gated, not JWT) — for sharing with
 	// someone who doesn't have an account. Not mounted at all unless
 	// YTDLP_PUBLIC_TOKEN is set, so it can't be exposed by accident.
 	if cfg.YtdlpPublicToken != "" {
-		r.Mount("/api/ytdlp/public", ytdlp.PublicRoutes(cfg.YtdlpPublicToken))
+		r.Mount("/api/ytdlp/public", ytdlp.PublicRoutes(cfg.YtdlpPublicToken, cfg.YtdlpCookiesPath))
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
