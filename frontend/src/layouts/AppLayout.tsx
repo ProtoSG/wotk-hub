@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
-import { Toaster } from 'sonner'
 import { useThemeStore } from '@/store/themeStore'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
@@ -60,8 +59,6 @@ export default function AppLayout() {
           <Sidebar />
         </SheetContent>
       </Sheet>
-
-      <Toaster richColors position="top-right" />
     </div>
   )
 }
