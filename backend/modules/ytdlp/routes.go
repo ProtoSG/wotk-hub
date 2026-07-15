@@ -53,12 +53,12 @@ func requireToken(expected string) func(http.Handler) http.Handler {
 			// doesn't reveal anything about the real token) and saves a
 			// round trip of guessing when someone's link got truncated.
 			if provided == "" {
-				httpx.WriteError(w, http.StatusUnauthorized, "missing token")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "missing token")
 				return
 			}
 			providedHash := sha256.Sum256([]byte(provided))
 			if subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) != 1 {
-				httpx.WriteError(w, http.StatusUnauthorized, "invalid token")
+				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "invalid token")
 				return
 			}
 			next.ServeHTTP(w, r)

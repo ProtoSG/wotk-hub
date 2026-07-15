@@ -27,7 +27,7 @@ func scanTransaction(row interface{ Scan(...any) error }) (Transaction, error) {
 func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 
@@ -40,7 +40,7 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	if month := q.Get("month"); month != "" {
 		start, end, err := monthRange(month)
 		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 			return
 		}
 		args = append(args, start, end)
@@ -59,7 +59,7 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
 		log.Printf("finances: list transactions failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer rows.Close()
@@ -69,7 +69,7 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		t, err := scanTransaction(rows)
 		if err != nil {
 			log.Printf("finances: scan transaction failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
 		transactions = append(transactions, t)
@@ -82,17 +82,17 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	var req transactionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	date, err := req.validate()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	row := h.db.QueryRow(
@@ -104,7 +104,7 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	t, err := scanTransaction(row)
 	if err != nil {
 		log.Printf("finances: create transaction failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, t)
@@ -115,22 +115,22 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	id, err := parseID(r)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	var req transactionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	date, err := req.validate()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
@@ -144,12 +144,12 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	row := h.db.QueryRow(query, args...)
 	t, err := scanTransaction(row)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusNotFound, "transaction not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
 		return
 	}
 	if err != nil {
 		log.Printf("finances: update transaction failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, t)
@@ -159,12 +159,12 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	id, err := parseID(r)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
@@ -175,11 +175,11 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		log.Printf("finances: delete transaction failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		httpx.WriteError(w, http.StatusNotFound, "transaction not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})

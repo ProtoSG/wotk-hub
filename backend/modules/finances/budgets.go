@@ -15,13 +15,13 @@ import (
 func (h *handler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 
 	start, end, err := monthRange(r.URL.Query().Get("month"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	query, args := scopeToOwner(
@@ -34,7 +34,7 @@ func (h *handler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(query+" GROUP BY b.id ORDER BY b.category", args...)
 	if err != nil {
 		log.Printf("finances: list budgets failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer rows.Close()
@@ -44,7 +44,7 @@ func (h *handler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 		var b Budget
 		if err := rows.Scan(&b.ID, &b.Category, &b.MonthlyLimitCents, &b.SpentCents); err != nil {
 			log.Printf("finances: scan budget failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
 		budgets = append(budgets, b)
@@ -56,11 +56,11 @@ func (h *handler) UpsertBudget(w http.ResponseWriter, r *http.Request) {
 	category := chi.URLParam(r, "category")
 	var req budgetRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	if err := req.validate(category); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	var b Budget
@@ -73,7 +73,7 @@ func (h *handler) UpsertBudget(w http.ResponseWriter, r *http.Request) {
 	).Scan(&b.ID, &b.Category, &b.MonthlyLimitCents)
 	if err != nil {
 		log.Printf("finances: upsert budget failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, b)
@@ -84,11 +84,11 @@ func (h *handler) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 	res, err := h.db.Exec(`DELETE FROM budgets WHERE category = $1`, category)
 	if err != nil {
 		log.Printf("finances: delete budget failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		httpx.WriteError(w, http.StatusNotFound, "budget not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "budget not found")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})

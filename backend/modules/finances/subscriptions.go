@@ -120,7 +120,7 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		 FROM subscriptions ORDER BY next_billing_on ASC, id ASC`)
 	if err != nil {
 		log.Printf("finances: list subscriptions failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	defer rows.Close()
@@ -131,7 +131,7 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		s, err := scanSubscription(rows)
 		if err != nil {
 			log.Printf("finances: scan subscription failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
 		if s.Active {
@@ -148,12 +148,12 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	var req subscriptionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	next, err := req.validate()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	row := h.db.QueryRow(
@@ -165,7 +165,7 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	s, err := scanSubscription(row)
 	if err != nil {
 		log.Printf("finances: create subscription failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, s)
@@ -174,29 +174,29 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	var req subscriptionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
 		return
 	}
 	next, err := req.validate()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
 	var wasActive bool
 	err = h.db.QueryRow(`SELECT active FROM subscriptions WHERE id = $1`, id).Scan(&wasActive)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusNotFound, "subscription not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
 		return
 	}
 	if err != nil {
 		log.Printf("finances: lookup subscription failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -220,12 +220,12 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	)
 	s, err := scanSubscription(row)
 	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusNotFound, "subscription not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
 		return
 	}
 	if err != nil {
 		log.Printf("finances: update subscription failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, s)
@@ -234,17 +234,17 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 func (h *handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 	res, err := h.db.Exec(`DELETE FROM subscriptions WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("finances: delete subscription failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal server error")
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		httpx.WriteError(w, http.StatusNotFound, "subscription not found")
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
