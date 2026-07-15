@@ -3,17 +3,15 @@ package cli
 import (
 	"database/sql"
 	"net/http"
-	"strconv"
 
 	"workhub/httpx"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// handler holds dependencies for CLI routes.
 type handler struct {
-	db      *sql.DB
-	cliUserID int64  // default user ID for CLI token auth
+	db        *sql.DB
+	cliUserID int64 // default user ID for CLI token auth
 }
 
 // Routes mounts CLI routes behind CLITokenAuth. These are admin-only
