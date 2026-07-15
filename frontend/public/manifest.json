@@ -1,0 +1,16 @@
+{
+  "name": "Work Hub",
+  "short_name": "WorkHub",
+  "description": "Gestión de finanzas, citas y más",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#863bff",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
