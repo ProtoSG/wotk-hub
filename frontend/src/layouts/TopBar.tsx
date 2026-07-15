@@ -5,10 +5,12 @@ import { useThemeStore } from '@/store/themeStore'
 import { useAuthStore } from '@/store/authStore'
 import { useAuthApi } from '@/hooks/useAuthApi'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import Sidebar from './Sidebar'
 
-export default function TopBar() {
+interface TopBarProps {
+  onMenuClick: () => void
+}
+
+export default function TopBar({ onMenuClick }: TopBarProps) {
   const { theme, toggleTheme } = useThemeStore()
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
@@ -28,16 +30,15 @@ export default function TopBar() {
 
   return (
     <header className="flex h-14 items-center border-b bg-card px-4 gap-3">
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Abrir menú de navegación">
-            <Menu size={18} />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-56 p-0">
-          <Sidebar />
-        </SheetContent>
-      </Sheet>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="lg:hidden"
+        aria-label="Abrir menú de navegación"
+        onClick={onMenuClick}
+      >
+        <Menu size={18} />
+      </Button>
 
       <div className="flex flex-1 items-center justify-end gap-3">
         {user && <span className="text-sm text-muted-foreground">{user.name}</span>}
