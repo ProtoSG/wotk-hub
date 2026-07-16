@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -99,7 +98,8 @@ function TarjetasTabWrapper() {
       .then(data => { if (!ignore) setCards(data) })
       .catch(() => {})
     return () => { ignore = true }
-  }, [listCards])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (cards.length === 0) {
     return (
@@ -109,5 +109,9 @@ function TarjetasTabWrapper() {
     )
   }
 
-  return <TarjetasTab cards={cards} onRefresh={() => listCards().then(setCards)} />
+  const handleRefresh = useCallback(() => {
+    listCards().then(setCards).catch(() => {})
+  }, [listCards])
+
+  return <TarjetasTab cards={cards} onRefresh={handleRefresh} />
 }
