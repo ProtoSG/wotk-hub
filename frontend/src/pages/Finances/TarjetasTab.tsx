@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 import { CreditCard, Plus, RefreshCw, Trash2, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Card } from '@/types/finance.types'
+import type { Card, CardType } from '@/types/finance.types'
 
 const CARD_COLORS = [
   '#863bff', '#3b82f6', '#10b981', '#f59e0b',
@@ -43,7 +43,8 @@ export function CardForm({ open, onClose, onSuccess, editCard }: CardFormProps) 
   const { createCard, updateCard } = useFinanceApi()
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState(editCard?.name ?? '')
-  const [type, setType] = useState<string>(editCard?.type ?? 'debito')
+  const [type, setType] = useState<CardType>(editCard?.type ?? 'debito')
+  const handleTypeChange = (val: string) => setType(val as CardType)
   const [bank, setBank] = useState(editCard?.bank ?? '')
   const [last4, setLast4] = useState(editCard?.last4 ?? '')
   const [color, setColor] = useState(editCard?.color ?? CARD_COLORS[0])
@@ -86,7 +87,7 @@ export function CardForm({ open, onClose, onSuccess, editCard }: CardFormProps) 
           </div>
           <div>
             <label className="text-sm font-medium">Tipo</label>
-            <Select value={type} onValueChange={setType}>
+            <Select value={type} onValueChange={handleTypeChange}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CARD_TYPES.map(t => (
