@@ -145,7 +145,16 @@ function TarjetasTabWrapper() {
   if (cards.length === 0) {
     return (
       <>
-        <div className="hidden justify-end sm:flex mb-4">
+        <div className="mb-4 sm:hidden">
+          <FloatingActionButton
+            label="Nueva tarjeta"
+            onClick={() => {
+              setEditCard(undefined)
+              setFormOpen(true)
+            }}
+          />
+        </div>
+        <div className="hidden sm:block mb-4">
           <Button
             onClick={() => {
               setEditCard(undefined)
@@ -156,15 +165,6 @@ function TarjetasTabWrapper() {
             Nueva tarjeta
           </Button>
         </div>
-
-        <FloatingActionButton
-          label="Nueva tarjeta"
-          onClick={() => {
-            setEditCard(undefined)
-            setFormOpen(true)
-          }}
-          className="mb-4"
-        />
         <CardForm
           open={formOpen}
           onClose={() => setFormOpen(false)}
@@ -181,7 +181,16 @@ function TarjetasTabWrapper() {
 
   return (
     <>
-      <div className="hidden justify-end sm:flex mb-4">
+      <div className="mb-4 sm:hidden">
+        <FloatingActionButton
+          label="Nueva tarjeta"
+          onClick={() => {
+            setEditCard(undefined)
+            setFormOpen(true)
+          }}
+        />
+      </div>
+      <div className="hidden sm:block mb-4">
         <Button
           onClick={() => {
             setEditCard(undefined)
@@ -192,15 +201,6 @@ function TarjetasTabWrapper() {
           Nueva tarjeta
         </Button>
       </div>
-
-      <FloatingActionButton
-        label="Nueva tarjeta"
-        onClick={() => {
-          setEditCard(undefined)
-          setFormOpen(true)
-        }}
-        className="mb-4"
-      />
       <CardForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
