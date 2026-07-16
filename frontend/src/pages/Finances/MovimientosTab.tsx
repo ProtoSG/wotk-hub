@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CardContent } from '@/components/ui/card'
@@ -48,7 +49,7 @@ export default function MovimientosTab({ month }: Props) {
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const { listTransactions, deleteTransaction, listCards } = useFinanceApi()
+  const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
 
   const load = useCallback(async () => {
@@ -112,6 +113,31 @@ export default function MovimientosTab({ month }: Props) {
         },
       },
     })
+  }
+
+  const [refundTarget, setRefundTarget] = useState<Transaction | null>(null)
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false)
+  const [refunding, setRefunding] = useState(false)
+
+  function handleRefund(t: Transaction) {
+    setRefundTarget(t)
+    setRefundDialogOpen(true)
+  }
+
+  async function confirmRefund() {
+    if (!refundTarget) return
+    setRefunding(true)
+    try {
+      await refundTransaction(refundTarget.id)
+      toast.success('Gasto marcado como reembolsado')
+      setRefundDialogOpen(false)
+      setRefundTarget(null)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo marcar como reembolsado')
+    } finally {
+      setRefunding(false)
+    }
   }
 
   const allCategories = [...new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])]

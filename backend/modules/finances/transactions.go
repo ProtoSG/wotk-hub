@@ -224,12 +224,25 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.CardID != nil {
-		if err := applyCardDeltas(tx, map[int64]cardDelta{*req.CardID: delta}); err != nil {
-			log.Printf("finances: create transaction card adjustment failed: %v", err)
+	if req.CardID != nil && !delta.isZero() && delta.balanceCents < 0 {
+		var balanceCents int64
+		if err := tx.QueryRow(`SELECT balance_cents FROM cards WHERE id = $1 FOR UPDATE`, *req.CardID).Scan(&balanceCents); err != nil {
+			tx.Rollback()
+			log.Printf("finances: create transaction failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
+		if balanceCents < -delta.balanceCents {
+			tx.Rollback()
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "saldo insuficiente en tarjeta")
+			return
+		}
+	}
+
+	if err := applyCardDeltas(tx, map[int64]cardDelta{*req.CardID: delta}); err != nil {
+		log.Printf("finances: create transaction card adjustment failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
