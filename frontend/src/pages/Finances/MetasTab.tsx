@@ -366,6 +366,8 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null)
   const [editGoal, setEditGoal] = useState<SavingsGoal | undefined>()
   const [cards, setCards] = useState<Card[]>([])
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [goalToDelete, setGoalToDelete] = useState<SavingsGoal | null>(null)
 
   useEffect(() => {
     listCards().then(setCards).catch(() => {})
@@ -375,10 +377,15 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
   const formatPEN = (cents: number) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(cents / 100)
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar esta meta?')) return
+  const openDeleteDialog = (goal: SavingsGoal) => {
+    setGoalToDelete(goal)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!goalToDelete) return
     try {
-      await deleteGoal(id)
+      await deleteGoal(goalToDelete.id)
       toast.success('Meta eliminada')
       onRefresh()
     } catch {
@@ -473,7 +480,7 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
                     <Pencil className="w-3 h-3 text-muted-foreground" />
                   </button>
                   <button
-                    onClick={() => handleDelete(goal.id)}
+                    onClick={() => openDeleteDialog(goal)}
                     className="p-1 hover:bg-accent rounded"
                   >
                     <Trash2 className="w-3 h-3 text-destructive" />
@@ -563,6 +570,13 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
           goal={selectedGoal}
         />
       )}
+
+      <DeleteGoalDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleConfirmDelete}
+        goal={goalToDelete}
+      />
     </div>
   )
 }
