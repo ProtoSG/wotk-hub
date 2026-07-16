@@ -91,24 +91,37 @@ export default function FinancesPage() {
 function TarjetasTabWrapper() {
   const { listCards } = useFinanceApi()
   const [cards, setCards] = useState<Card[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     let ignore = false
     listCards()
-      .then(data => { if (!ignore) setCards(data) })
-      .catch(() => {})
+      .then(data => { if (!ignore) { setCards(data); setIsLoading(false) } })
+      .catch(() => { if (!ignore) setIsLoading(false) })
     return () => { ignore = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRefresh = useCallback(() => {
-    listCards().then(setCards).catch(() => {})
+    setIsLoading(true)
+    listCards()
+      .then(data => { setCards(data); setIsLoading(false) })
+      .catch(() => setIsLoading(false))
   }, [listCards])
 
-  if (cards.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-8">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (cards.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+        <CreditCard className="h-8 w-8" />
+        <p>No hay tarjetas registradas</p>
       </div>
     )
   }
