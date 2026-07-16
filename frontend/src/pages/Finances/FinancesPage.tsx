@@ -92,19 +92,16 @@ export default function FinancesPage() {
 function TarjetasTabWrapper() {
   const { listCards } = useFinanceApi()
   const [cards, setCards] = useState<Card[]>([])
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     let ignore = false
-    setLoading(true)
     listCards()
       .then(data => { if (!ignore) setCards(data) })
       .catch(() => {})
-      .finally(() => { if (!ignore) setLoading(false) })
     return () => { ignore = true }
   }, [listCards])
 
-  if (loading) {
+  if (cards.length === 0) {
     return (
       <div className="flex justify-center py-8">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -112,5 +109,5 @@ function TarjetasTabWrapper() {
     )
   }
 
-  return <TarjetasTabWrapper />
+  return <TarjetasTab cards={cards} onRefresh={() => listCards().then(setCards)} />
 }
