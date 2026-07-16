@@ -1,4 +1,5 @@
-import { Moon, Sun, Trash2 } from 'lucide-react'
+import { Moon, Sun, Trash2, ShieldOff } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
@@ -10,11 +11,16 @@ import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useThemeStore } from '@/store/themeStore'
 import { useDbStore } from '@/store/dbStore'
+import { useAuthStore } from '@/store/authStore'
+import { useAuthApi } from '@/hooks/useAuthApi'
 import type { SavedConnection } from '@/types/db.types'
 
 export default function ConfigurationPage() {
   const { theme, toggleTheme } = useThemeStore()
   const { connections, activeConnectionId, addConnection, removeConnection, setActiveConnection } = useDbStore()
+  const setUser = useAuthStore((s) => s.setUser)
+  const { logoutAll } = useAuthApi()
+  const navigate = useNavigate()
 
   function handleDeleteConnection(conn: SavedConnection) {
     const wasActive = activeConnectionId === conn.id
@@ -29,6 +35,17 @@ export default function ConfigurationPage() {
         },
       },
     })
+  }
+
+  async function handleLogoutAll() {
+    try {
+      await logoutAll()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo cerrar la sesión en todos los dispositivos')
+      return
+    }
+    setUser(null)
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -103,6 +120,19 @@ export default function ConfigurationPage() {
       </CozyCard>
 
       <CozyCard className="animate-card-in [animation-delay:120ms]">
+        <CardHeader>
+          <CardTitle>Seguridad</CardTitle>
+          <CardDescription>Cerrá la sesión en todos los dispositivos donde iniciaste sesión</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="text-destructive hover:text-destructive" onClick={handleLogoutAll}>
+            <ShieldOff size={16} />
+            Cerrar sesión en todos los dispositivos
+          </Button>
+        </CardContent>
+      </CozyCard>
+
+      <CozyCard className="animate-card-in [animation-delay:180ms]">
         <CardHeader>
           <CardTitle>Acerca de</CardTitle>
         </CardHeader>

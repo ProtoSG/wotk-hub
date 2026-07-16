@@ -11,10 +11,14 @@ export function useAuthApi() {
     await api.post('/api/auth/logout')
   }
 
+  async function logoutAll(): Promise<void> {
+    await api.post('/api/auth/logout-all')
+  }
+
   async function me(): Promise<AuthUser> {
     const res = await api.get<AuthUser>('/api/auth/me')
     return res.data
   }
 
-  return { login, logout, me }
+  return { login, logout, logoutAll, me }
 }
