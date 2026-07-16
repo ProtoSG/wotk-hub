@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CreditCard, RefreshCw, Trash2, Pencil } from 'lucide-react'
+import { CreditCard, Plus, RefreshCw, Trash2, Pencil } from 'lucide-react'
 import FloatingActionButton from './FloatingActionButton'
 import { toast } from 'sonner'
 import type { Card, CardType } from '@/types/finance.types'
@@ -166,13 +166,24 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center sticky top-0 bg-background z-10 py-2">
-        <h2 className="text-lg font-semibold">Mis tarjetas</h2>
+      <div className="hidden justify-end sm:flex">
+        <Button
+          onClick={() => {
+            setEditCard(undefined)
+            setFormOpen(true)
+          }}
+        >
+          <Plus size={14} />
+          Nueva tarjeta
+        </Button>
       </div>
 
       <FloatingActionButton
         label="Nueva tarjeta"
-        onClick={() => { setEditCard(undefined); setFormOpen(true) }}
+        onClick={() => {
+          setEditCard(undefined)
+          setFormOpen(true)
+        }}
       />
 
       {cards.length === 0 && (
