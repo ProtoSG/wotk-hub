@@ -187,9 +187,15 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
       />
 
       {cards.length === 0 && (
-        <UICard className="p-6 text-center text-muted-foreground">
-          <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <UICard className="p-6 flex flex-col items-center gap-2 text-center text-muted-foreground">
+          <CreditCard className="w-10 h-10 opacity-30" />
           <p>No tienes tarjetas registradas</p>
+          <button
+            onClick={() => { setEditCard(undefined); setFormOpen(true) }}
+            className="mt-1 text-sm text-primary hover:underline"
+          >
+            Agregar primera tarjeta
+          </button>
         </UICard>
       )}
 
