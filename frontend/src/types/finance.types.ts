@@ -49,6 +49,7 @@ export interface Transaction {
   category: string
   description: string
   date: string // YYYY-MM-DD
+  cardId?: number
   createdAt: string
 }
 
@@ -58,6 +59,7 @@ export interface TransactionInput {
   category: string
   description: string
   date: string
+  cardId?: number
 }
 
 export interface Subscription {
@@ -123,6 +125,9 @@ export interface Card {
   color: string
   icon: string
   balanceCents: number
+  initialBalanceCents: number
+  creditLimitCents: number
+  usedCreditCents: number
   createdAt: string
 }
 
@@ -133,6 +138,8 @@ export interface CardInput {
   last4: string
   color: string
   icon: string
+  initialBalanceCents?: number
+  creditLimitCents?: number
 }
 
 export interface CardReload {

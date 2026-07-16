@@ -29,6 +29,7 @@ import {
   CATEGORY_LABELS,
   type Transaction,
   type TransactionType,
+  type Card,
 } from '@/types/finance.types'
 import TransactionForm from './TransactionForm'
 import FloatingActionButton from './FloatingActionButton'
@@ -42,21 +43,26 @@ interface Props {
 
 export default function MovimientosTab({ month }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [cards, setCards] = useState<Card[]>([])
   const [typeFilter, setTypeFilter] = useState<string>(ALL)
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const { listTransactions, deleteTransaction } = useFinanceApi()
+  const { listTransactions, deleteTransaction, listCards } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
 
   const load = useCallback(async () => {
     try {
-      const data = await listTransactions({
-        month,
-        ...(typeFilter !== ALL && { type: typeFilter as TransactionType }),
-        ...(categoryFilter !== ALL && { category: categoryFilter }),
-      })
+      const [data, cardData] = await Promise.all([
+        listTransactions({
+          month,
+          ...(typeFilter !== ALL && { type: typeFilter as TransactionType }),
+          ...(categoryFilter !== ALL && { category: categoryFilter }),
+        }),
+        listCards(),
+      ])
       setTransactions(data)
+      setCards(cardData)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los movimientos')
     }
@@ -166,6 +172,7 @@ export default function MovimientosTab({ month }: Props) {
                 <TableHead>Tipo</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead>Descripción</TableHead>
+                <TableHead>Tarjeta</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
@@ -173,7 +180,7 @@ export default function MovimientosTab({ month }: Props) {
             <TableBody>
               {transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     Sin movimientos este mes
                   </TableCell>
                 </TableRow>
@@ -189,6 +196,28 @@ export default function MovimientosTab({ month }: Props) {
                     <TableCell>{CATEGORY_LABELS[t.category] ?? t.category}</TableCell>
                     <TableCell className="max-w-64 truncate text-muted-foreground">
                       {t.description || '—'}
+                    </TableCell>
+                    <TableCell>
+                      {t.cardId != null ? (
+                        (() => {
+                          const card = cards.find((c) => c.id === t.cardId)
+                          return card ? (
+                            <Badge
+                              variant="outline"
+                              style={{ borderColor: card.color, color: card.color }}
+                              className="text-xs"
+                            >
+                              {card.name} ({card.last4})
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">
+                              #{t.cardId}
+                            </Badge>
+                          )
+                        })()
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell
                       className={`text-right font-medium ${
