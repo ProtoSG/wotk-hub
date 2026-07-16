@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
@@ -9,12 +10,16 @@ import ResumenTab from './ResumenTab'
 import MovimientosTab from './MovimientosTab'
 import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
+import { TarjetasTab } from './TarjetasTab'
+import { useFinanceApi } from '@/hooks/useFinanceApi'
+import type { Card } from '@/types/finance.types'
 
 const TABS = [
   { value: 'resumen', label: 'Resumen', icon: LayoutDashboard },
   { value: 'movimientos', label: 'Movimientos', icon: ArrowLeftRight },
   { value: 'suscripciones', label: 'Suscripciones', icon: Repeat },
   { value: 'presupuestos', label: 'Presupuestos', icon: Target },
+  { value: 'tarjetas', label: 'Tarjetas', icon: CreditCard },
 ]
 
 export default function FinancesPage() {
@@ -49,6 +54,9 @@ export default function FinancesPage() {
         <TabsContent value="presupuestos" className="mt-4">
           <PresupuestosTab month={month} />
         </TabsContent>
+        <TabsContent value="tarjetas" className="mt-4">
+          <TarjetasTabWrapper />
+        </TabsContent>
       </Tabs>
 
       <nav
@@ -79,4 +87,33 @@ export default function FinancesPage() {
       </nav>
     </div>
   )
+}
+
+function TarjetasTabWrapper() {
+  const { listCards } = useFinanceApi()
+  const [cards, setCards] = useState<Card[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchCards = async () => {
+    try {
+      const data = await listCards()
+      setCards(data)
+    } catch {
+      // silently fail, cards will be empty
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchCards() }, [])
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-8">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  return <TarjetasTab cards={cards} onRefresh={fetchCards} />
 }

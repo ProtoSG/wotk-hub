@@ -67,6 +67,29 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
 		`ALTER TABLE couple_dates ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
 		`ALTER TABLE couple_dates ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'done' CHECK (status IN ('planned','done'))`,
+		`CREATE TABLE IF NOT EXISTS cards (
+			id            BIGSERIAL PRIMARY KEY,
+			name          TEXT   NOT NULL,
+			type          TEXT   NOT NULL CHECK (type IN ('debito','credito','prepago')),
+			bank          TEXT   NOT NULL DEFAULT '',
+			last4         TEXT   NOT NULL DEFAULT '',
+			color         TEXT   NOT NULL DEFAULT '#3B82F6',
+			icon          TEXT   NOT NULL DEFAULT 'credit-card',
+			balance_cents BIGINT NOT NULL DEFAULT 0,
+			created_by    BIGINT REFERENCES users(id),
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS card_reloads (
+			id            BIGSERIAL PRIMARY KEY,
+			card_id       BIGINT NOT NULL REFERENCES cards(id),
+			amount_cents  BIGINT NOT NULL CHECK (amount_cents > 0),
+			occurred_on   DATE   NOT NULL,
+			note          TEXT   NOT NULL DEFAULT '',
+			created_by    BIGINT REFERENCES users(id),
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_card_reloads_card_id ON card_reloads (card_id)`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_id BIGINT REFERENCES cards(id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
