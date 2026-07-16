@@ -115,6 +115,7 @@ func Migrate(db *sql.DB) error {
 			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_savings_contributions_goal_id ON savings_contributions (goal_id)`,
+		`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS default_card_id BIGINT REFERENCES cards(id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

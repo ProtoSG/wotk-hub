@@ -13,12 +13,16 @@ func scanGoal(row interface{ Scan(...any) error }) (SavingsGoal, error) {
 	var g SavingsGoal
 	var createdAt time.Time
 	var deadline sql.NullTime
-	err := row.Scan(&g.ID, &g.Name, &g.TargetCents, &g.CurrentCents, &deadline, &g.Icon, &g.Color, &g.CreatedBy, &createdAt)
+	var defaultCardID sql.NullInt64
+	err := row.Scan(&g.ID, &g.Name, &g.TargetCents, &g.CurrentCents, &deadline, &g.Icon, &g.Color, &g.DefaultCardID, &g.CreatedBy, &createdAt)
 	if err != nil {
 		return g, err
 	}
 	if deadline.Valid {
 		g.Deadline = deadline.Time.Format(dateLayout)
+	}
+	if defaultCardID.Valid {
+		g.DefaultCardID = &defaultCardID.Int64
 	}
 	g.CreatedAt = createdAt.Format(time.RFC3339)
 	return g, nil
@@ -45,7 +49,7 @@ func (h *handler) ListGoals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `SELECT id, name, target_cents, current_cents, deadline, icon, color, created_by, created_at
+	query := `SELECT id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at
 		FROM savings_goals WHERE 1=1`
 	args := []any{}
 	query, args = scopeToOwner(query, args, role, userID)
@@ -91,10 +95,10 @@ func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	row := h.db.QueryRow(
-		`INSERT INTO savings_goals (name, target_cents, current_cents, deadline, icon, color, created_by)
-		 VALUES ($1, $2, 0, $3, $4, $5, $6)
-		 RETURNING id, name, target_cents, current_cents, deadline, icon, color, created_by, created_at`,
-		req.Name, req.TargetCents, req.Deadline, req.Icon, req.Color, userID,
+		`INSERT INTO savings_goals (name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by)
+		 VALUES ($1, $2, 0, $3, $4, $5, $6, $7)
+		 RETURNING id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at`,
+		req.Name, req.TargetCents, req.Deadline, req.Icon, req.Color, req.DefaultCardID, userID,
 	)
 	g, err := scanGoal(row)
 	if err != nil {
@@ -130,11 +134,11 @@ func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `UPDATE savings_goals
-		SET name = $1, target_cents = $2, deadline = $3, icon = $4, color = $5
-		WHERE id = $6`
-	args := []any{req.Name, req.TargetCents, req.Deadline, req.Icon, req.Color, id}
+		SET name = $1, target_cents = $2, deadline = $3, icon = $4, color = $5, default_card_id = $6
+		WHERE id = $7`
+	args := []any{req.Name, req.TargetCents, req.Deadline, req.Icon, req.Color, req.DefaultCardID, id}
 	query, args = scopeToOwner(query, args, role, userID)
-	query += ` RETURNING id, name, target_cents, current_cents, deadline, icon, color, created_by, created_at`
+	query += ` RETURNING id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at`
 
 	row := h.db.QueryRow(query, args...)
 	g, err := scanGoal(row)
@@ -238,6 +242,8 @@ func (h *handler) ListContributions(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateContribution atomically inserts a contribution and updates the goal's current_cents.
+// If the goal has a default_card_id set, the contribution amount is also deducted from
+// that card's balance_cents in the same transaction.
 func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -277,6 +283,15 @@ func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch the goal's default_card_id inside the transaction.
+	var defaultCardID sql.NullInt64
+	if err := tx.QueryRow(`SELECT default_card_id FROM savings_goals WHERE id = $1`, id).Scan(&defaultCardID); err != nil {
+		tx.Rollback()
+		log.Printf("finances: create contribution failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
 	row := tx.QueryRow(
 		`INSERT INTO savings_contributions (goal_id, amount_cents, occurred_on, note, created_by)
 		 VALUES ($1, $2, $3, $4, $5)
@@ -296,6 +311,16 @@ func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
 		log.Printf("finances: create contribution failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
+	}
+
+	// If a default card is set, deduct the contribution amount from the card's balance.
+	if defaultCardID.Valid {
+		if _, err := tx.Exec(`UPDATE cards SET balance_cents = balance_cents - $1 WHERE id = $2`, req.AmountCents, defaultCardID.Int64); err != nil {
+			tx.Rollback()
+			log.Printf("finances: create contribution failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

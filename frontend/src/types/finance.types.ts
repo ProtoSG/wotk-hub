@@ -193,6 +193,7 @@ export interface SavingsGoal {
   deadline?: string
   icon: string
   color: string
+  defaultCardId?: number
   createdBy: number
   createdAt: string
 }
@@ -203,6 +204,7 @@ export interface SavingsGoalInput {
   deadline?: string
   icon: string
   color: string
+  defaultCardId?: number
 }
 
 export interface SavingsContribution {
