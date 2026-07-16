@@ -314,7 +314,20 @@ func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If a default card is set, deduct the contribution amount from the card's balance.
+	// Enforce sufficient balance to prevent overdraw.
 	if defaultCardID.Valid {
+		var balanceCents int64
+		if err := tx.QueryRow(`SELECT balance_cents FROM cards WHERE id = $1 FOR UPDATE`, defaultCardID.Int64).Scan(&balanceCents); err != nil {
+			tx.Rollback()
+			log.Printf("finances: create contribution failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		if balanceCents < req.AmountCents {
+			tx.Rollback()
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "saldo insuficiente en tarjeta")
+			return
+		}
 		if _, err := tx.Exec(`UPDATE cards SET balance_cents = balance_cents - $1 WHERE id = $2`, req.AmountCents, defaultCardID.Int64); err != nil {
 			tx.Rollback()
 			log.Printf("finances: create contribution failed: %v", err)
