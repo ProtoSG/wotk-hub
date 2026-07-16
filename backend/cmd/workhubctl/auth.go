@@ -45,7 +45,7 @@ The environment variable takes precedence.`,
 	cmd.AddCommand(&cobra.Command{
 		Use:   "status",
 		Short: "Check if stored token is valid",
-		Run:  runAuthStatus,
+		Run:   runAuthStatus,
 	})
 	return cmd
 }
