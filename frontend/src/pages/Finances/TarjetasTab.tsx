@@ -217,7 +217,7 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
         ))}
       </div>
 
-      <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSuccess={handleRefresh} editCard={editCard} />
+      <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSuccess={() => { setFormOpen(false); onRefresh() }} editCard={editCard} />
       {selectedCard && (
         <ReloadForm open={reloadOpen} onClose={() => setReloadOpen(false)} onSuccess={() => { setReloadOpen(false); onRefresh() }} card={selectedCard} />
       )}
