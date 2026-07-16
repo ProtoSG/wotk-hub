@@ -187,10 +187,10 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
       />
 
       {cards.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          <CreditCard className="w-12 h-12 mx-auto mb-2 opacity-30" />
+        <UICard className="p-6 text-center text-muted-foreground">
+          <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p>No tienes tarjetas registradas</p>
-        </div>
+        </UICard>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
