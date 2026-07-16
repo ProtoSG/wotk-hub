@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, AlertCircle, PiggyBank } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, AlertCircle, PiggyBank, Plus } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
@@ -168,6 +168,18 @@ function TarjetasTabWrapper() {
 
   return (
     <>
+      <div className="hidden justify-end sm:flex">
+        <Button
+          onClick={() => {
+            setEditCard(undefined)
+            setFormOpen(true)
+          }}
+        >
+          <Plus size={14} />
+          Nueva tarjeta
+        </Button>
+      </div>
+
       <FloatingActionButton
         label="Nueva tarjeta"
         onClick={() => { setEditCard(undefined); setFormOpen(true) }}
