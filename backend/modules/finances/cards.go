@@ -145,7 +145,7 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 		 WHERE id = $7`
 	args := []any{req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, id}
 	query, args = scopeToOwner(query, args, role, userID)
-	query += ` RETURNING id, name, type, bank, last4, color, icon, balance_cents, created_at`
+	query += ` RETURNING id, name, type, bank, last4, color, icon, balance_cents, initial_balance_cents, credit_limit_cents, used_credit_cents, created_at`
 
 	row := h.db.QueryRow(query, args...)
 	c, err := scanCard(row)

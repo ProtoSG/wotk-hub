@@ -241,11 +241,43 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
               </div>
             </div>
             <div className="flex justify-between items-end">
-              <p className="text-2xl font-bold">{formatBalance(card.balanceCents)}</p>
+              {card.type === 'credito' ? (
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm text-muted-foreground">
+                    Usado: <span className="font-medium text-foreground">{formatBalance(card.usedCreditCents)}</span>
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {formatBalance(card.creditLimitCents - card.usedCreditCents)}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">disponible</span>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-2xl font-bold">{formatBalance(card.balanceCents)}</p>
+              )}
               <Button size="sm" variant="ghost" className="text-xs" onClick={() => { setSelectedCard(card); setReloadOpen(true) }}>
                 <RefreshCw className="w-3 h-3 mr-1" /> Recargar
               </Button>
             </div>
+            {card.type === 'credito' && card.creditLimitCents > 0 && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Límite: {formatBalance(card.creditLimitCents)}</span>
+                  <span>{Math.round((card.usedCreditCents / card.creditLimitCents) * 100)}% usado</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      (card.usedCreditCents / card.creditLimitCents) > 0.8
+                        ? 'bg-destructive'
+                        : (card.usedCreditCents / card.creditLimitCents) > 0.5
+                        ? 'bg-amber-500'
+                        : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min((card.usedCreditCents / card.creditLimitCents) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </UICard>
         ))}
       </div>
