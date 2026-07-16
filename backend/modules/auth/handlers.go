@@ -250,6 +250,23 @@ func (h *handler) Logout(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
+func (h *handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	if _, err := h.db.Exec(
+		`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, userID,
+	); err != nil {
+		log.Printf("auth: revoke all on logout-all failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	clearAuthCookies(w, h.secure)
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
 func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
