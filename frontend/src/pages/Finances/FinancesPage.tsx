@@ -144,10 +144,25 @@ function TarjetasTabWrapper() {
 
   if (cards.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-        <CreditCard className="h-8 w-8" />
-        <p>No hay tarjetas registradas</p>
-      </div>
+      <>
+        <FloatingActionButton
+          label="Nueva tarjeta"
+          onClick={() => { setEditCard(undefined); setFormOpen(true) }}
+        />
+        <CardForm
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          onSuccess={(card) => {
+            setCards([card])
+            setFormOpen(false)
+          }}
+          editCard={editCard}
+        />
+        <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+          <CreditCard className="h-8 w-8" />
+          <p>No hay tarjetas registradas</p>
+        </div>
+      </>
     )
   }
 
