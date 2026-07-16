@@ -164,7 +164,7 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center sticky top-0 bg-background z-10 py-2">
         <h2 className="text-lg font-semibold">Mis tarjetas</h2>
         <Button size="sm" onClick={() => { setEditCard(undefined); setFormOpen(true) }}>
           <Plus className="w-4 h-4 mr-1" /> Nueva
