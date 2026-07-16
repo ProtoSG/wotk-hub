@@ -97,7 +97,6 @@ function TarjetasTabWrapper() {
 
   useEffect(() => {
     let ignore = false
-    setHasError(false)
     listCards()
       .then(data => { if (!ignore) { setCards(data); setIsLoading(false) } })
       .catch(() => { if (!ignore) { setHasError(true); setIsLoading(false) } })
