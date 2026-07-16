@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, AlertCircle } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, AlertCircle, PiggyBank } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
@@ -11,9 +11,10 @@ import MovimientosTab from './MovimientosTab'
 import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
 import { TarjetasTab, CardForm } from './TarjetasTab'
+import { MetasTab } from './MetasTab'
 import FloatingActionButton from './FloatingActionButton'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
-import type { Card } from '@/types/finance.types'
+import type { Card, SavingsGoal } from '@/types/finance.types'
 
 const TABS = [
   { value: 'resumen', label: 'Resumen', icon: LayoutDashboard },
@@ -21,6 +22,7 @@ const TABS = [
   { value: 'suscripciones', label: 'Suscripciones', icon: Repeat },
   { value: 'presupuestos', label: 'Presupuestos', icon: Target },
   { value: 'tarjetas', label: 'Tarjetas', icon: CreditCard },
+  { value: 'metas', label: 'Metas', icon: PiggyBank },
 ]
 
 export default function FinancesPage() {
@@ -57,6 +59,9 @@ export default function FinancesPage() {
         </TabsContent>
         <TabsContent value="tarjetas" className="mt-4">
           <TarjetasTabWrapper />
+        </TabsContent>
+        <TabsContent value="metas" className="mt-4">
+          <MetasTabWrapper />
         </TabsContent>
       </Tabs>
 
@@ -168,4 +173,52 @@ function TarjetasTabWrapper() {
       <TarjetasTab cards={cards} onRefresh={handleRefresh} />
     </>
   )
+}
+
+function MetasTabWrapper() {
+  const { listGoals } = useFinanceApi()
+  const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    let ignore = false
+    listGoals()
+      .then(data => { if (!ignore) { setGoals(data); setIsLoading(false) } })
+      .catch(() => { if (!ignore) { setHasError(true); setIsLoading(false) } })
+    return () => { ignore = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleRefresh = useCallback(() => {
+    setIsLoading(true)
+    setHasError(false)
+    listGoals()
+      .then(data => { setGoals(data); setIsLoading(false) })
+      .catch(() => { setHasError(true); setIsLoading(false) })
+  }, [listGoals])
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (hasError) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <div className="text-destructive">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <p className="text-sm text-muted-foreground">No se pudieron cargar las metas</p>
+        <Button size="sm" variant="outline" onClick={handleRefresh}>
+          Reintentar
+        </Button>
+      </div>
+    )
+  }
+
+  return <MetasTab goals={goals} onRefresh={handleRefresh} />
 }

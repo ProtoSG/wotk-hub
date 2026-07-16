@@ -201,3 +201,65 @@ type Summary struct {
 	MonthlyTrend      []TrendPoint     `json:"monthlyTrend"`
 	CategoryBreakdown []CategoryAmount `json:"categoryBreakdown"`
 }
+
+type SavingsGoal struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	TargetCents  int64  `json:"targetCents"`
+	CurrentCents int64  `json:"currentCents"`
+	Deadline     string `json:"deadline,omitempty"`
+	Icon         string `json:"icon"`
+	Color        string `json:"color"`
+	CreatedBy    int64  `json:"createdBy"`
+	CreatedAt    string `json:"createdAt"`
+}
+
+type SavingsContribution struct {
+	ID          int64  `json:"id"`
+	GoalID      int64  `json:"goalId"`
+	AmountCents int64  `json:"amountCents"`
+	Date        string `json:"date"`
+	Note        string `json:"note,omitempty"`
+	CreatedBy   int64  `json:"createdBy"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type savingsGoalRequest struct {
+	Name        string `json:"name"`
+	TargetCents int64  `json:"targetCents"`
+	Deadline    string `json:"deadline"`
+	Icon        string `json:"icon"`
+	Color       string `json:"color"`
+}
+
+func (r savingsGoalRequest) validate() error {
+	if r.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if r.TargetCents <= 0 {
+		return fmt.Errorf("targetCents must be positive")
+	}
+	if r.Deadline != "" {
+		if _, err := time.Parse(dateLayout, r.Deadline); err != nil {
+			return fmt.Errorf("invalid deadline date")
+		}
+	}
+	return nil
+}
+
+type savingsContributionRequest struct {
+	AmountCents int64  `json:"amountCents"`
+	Date        string `json:"date"`
+	Note        string `json:"note"`
+}
+
+func (r savingsContributionRequest) validate() (time.Time, error) {
+	if r.AmountCents <= 0 {
+		return time.Time{}, fmt.Errorf("amountCents must be positive")
+	}
+	d, err := time.Parse(dateLayout, r.Date)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date")
+	}
+	return d, nil
+}

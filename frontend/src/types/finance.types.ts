@@ -155,3 +155,61 @@ export interface TransactionFilters {
   type?: TransactionType
   category?: string
 }
+
+export const GOAL_ICONS = [
+  'piggy-bank',
+  'target',
+  'plane',
+  'home',
+  'car',
+  'graduation-cap',
+] as const
+export type GoalIcon = (typeof GOAL_ICONS)[number]
+
+export const GOAL_COLORS = [
+  '#10b981',
+  '#3b82f6',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#06b6d4',
+  '#ec4899',
+  '#84cc16',
+] as const
+export type GoalColor = (typeof GOAL_COLORS)[number]
+
+export interface SavingsGoal {
+  id: number
+  name: string
+  targetCents: number
+  currentCents: number
+  deadline?: string
+  icon: string
+  color: string
+  createdBy: number
+  createdAt: string
+}
+
+export interface SavingsGoalInput {
+  name: string
+  targetCents: number
+  deadline?: string
+  icon: string
+  color: string
+}
+
+export interface SavingsContribution {
+  id: number
+  goalId: number
+  amountCents: number
+  date: string
+  note?: string
+  createdBy: number
+  createdAt: string
+}
+
+export interface SavingsContributionInput {
+  amountCents: number
+  date: string
+  note?: string
+}

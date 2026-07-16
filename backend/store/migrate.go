@@ -90,6 +90,27 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_card_reloads_card_id ON card_reloads (card_id)`,
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_id BIGINT REFERENCES cards(id)`,
+		`CREATE TABLE IF NOT EXISTS savings_goals (
+			id            BIGSERIAL PRIMARY KEY,
+			name          TEXT   NOT NULL,
+			target_cents  BIGINT NOT NULL CHECK (target_cents > 0),
+			current_cents BIGINT NOT NULL DEFAULT 0,
+			deadline      DATE,
+			icon          TEXT   NOT NULL DEFAULT 'piggy-bank',
+			color         TEXT   NOT NULL DEFAULT '#10b981',
+			created_by    BIGINT REFERENCES users(id),
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS savings_contributions (
+			id            BIGSERIAL PRIMARY KEY,
+			goal_id       BIGINT NOT NULL REFERENCES savings_goals(id),
+			amount_cents  BIGINT NOT NULL CHECK (amount_cents > 0),
+			occurred_on   DATE   NOT NULL,
+			note          TEXT   NOT NULL DEFAULT '',
+			created_by    BIGINT REFERENCES users(id),
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_savings_contributions_goal_id ON savings_contributions (goal_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
