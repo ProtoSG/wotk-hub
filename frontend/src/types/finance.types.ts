@@ -106,6 +106,50 @@ export interface FinanceSummary {
   categoryBreakdown: CategoryAmount[]
 }
 
+export type CardType = 'debito' | 'credito' | 'prepago'
+
+export const CARD_TYPE_LABELS: Record<CardType, string> = {
+  debito: 'Débito',
+  credito: 'Crédito',
+  prepago: 'Prepago',
+}
+
+export interface Card {
+  id: number
+  name: string
+  type: CardType
+  bank: string
+  last4: string
+  color: string
+  icon: string
+  balanceCents: number
+  createdAt: string
+}
+
+export interface CardInput {
+  name: string
+  type: CardType
+  bank: string
+  last4: string
+  color: string
+  icon: string
+}
+
+export interface CardReload {
+  id: number
+  cardId: number
+  amountCents: number
+  date: string
+  note: string
+  createdAt: string
+}
+
+export interface CardReloadInput {
+  amountCents: number
+  date: string
+  note: string
+}
+
 export interface TransactionFilters {
   month?: string
   type?: TransactionType

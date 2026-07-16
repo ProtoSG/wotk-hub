@@ -9,9 +9,8 @@ import (
 )
 
 var (
-	version   = "0.1.0"
+	version   = "0.1.2"
 	serverURL string
-	apiKey    string
 )
 
 func main() {
@@ -21,9 +20,13 @@ func main() {
 		Long: `WorkHub CLI - A powerful command-line interface for managing your WorkHub server.
 
 Quick start:
+  workhubctl auth login
   workhubctl server start
-  workhubctl user create --email admin@test.com --role admin
-  workhubctl health`,
+  workhubctl health
+
+Auth: Set the CLI_TOKEN environment variable, or place your token in
+  ~/.config/workhub/credentials (0600 permissions).
+  Environment variable takes precedence.`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if serverURL == "" {
 				serverURL = "http://localhost:8080"
@@ -32,10 +35,10 @@ Quick start:
 	}
 
 	rootCmd.PersistentFlags().StringVarP(&serverURL, "server", "s", "", "Server URL (default: http://localhost:8080)")
-	rootCmd.PersistentFlags().StringVar(&apiKey, "api-key", "", "API key for authentication")
 
 	rootCmd.AddCommand(serverCmd())
 	rootCmd.AddCommand(userCmd())
+	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(dbCmd())
 	rootCmd.AddCommand(financesCmd())
 	rootCmd.AddCommand(ytdlpCmd())

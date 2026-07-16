@@ -7,6 +7,10 @@ import type {
   SubscriptionInput,
   Budget,
   FinanceSummary,
+  Card,
+  CardInput,
+  CardReload,
+  CardReloadInput,
 } from '@/types/finance.types'
 
 export function useFinanceApi() {
@@ -78,6 +82,35 @@ export function useFinanceApi() {
     return res.data
   }
 
+  async function listCards(): Promise<Card[]> {
+    const res = await api.get<{ cards: Card[] }>('/api/finances/cards')
+    return res.data.cards
+  }
+
+  async function createCard(input: CardInput): Promise<Card> {
+    const res = await api.post<Card>('/api/finances/cards', input)
+    return res.data
+  }
+
+  async function updateCard(id: number, input: CardInput): Promise<Card> {
+    const res = await api.put<Card>(`/api/finances/cards/${id}`, input)
+    return res.data
+  }
+
+  async function deleteCard(id: number): Promise<void> {
+    await api.delete(`/api/finances/cards/${id}`)
+  }
+
+  async function listReloads(cardId: number): Promise<CardReload[]> {
+    const res = await api.get<{ reloads: CardReload[] }>(`/api/finances/cards/${cardId}/reloads`)
+    return res.data.reloads
+  }
+
+  async function createReload(cardId: number, input: CardReloadInput): Promise<CardReload> {
+    const res = await api.post<CardReload>(`/api/finances/cards/${cardId}/reloads`, input)
+    return res.data
+  }
+
   return {
     listTransactions,
     createTransaction,
@@ -91,5 +124,11 @@ export function useFinanceApi() {
     upsertBudget,
     deleteBudget,
     getSummary,
+    listCards,
+    createCard,
+    updateCard,
+    deleteCard,
+    listReloads,
+    createReload,
   }
 }

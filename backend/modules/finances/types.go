@@ -124,6 +124,65 @@ func (r budgetRequest) validate(category string) error {
 	return nil
 }
 
+type Card struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Bank         string `json:"bank"`
+	Last4        string `json:"last4"`
+	Color        string `json:"color"`
+	Icon         string `json:"icon"`
+	BalanceCents int64  `json:"balanceCents"`
+	CreatedAt    string `json:"createdAt"`
+}
+
+var cardTypes = []string{"debito", "credito", "prepago"}
+
+type cardRequest struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Bank  string `json:"bank"`
+	Last4 string `json:"last4"`
+	Color string `json:"color"`
+	Icon  string `json:"icon"`
+}
+
+func (r cardRequest) validate() error {
+	if r.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if !slices.Contains(cardTypes, r.Type) {
+		return fmt.Errorf("invalid type: %s", r.Type)
+	}
+	return nil
+}
+
+type CardReload struct {
+	ID          int64  `json:"id"`
+	CardID      int64  `json:"cardId"`
+	AmountCents int64  `json:"amountCents"`
+	Date        string `json:"date"`
+	Note        string `json:"note"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type cardReloadRequest struct {
+	AmountCents int64  `json:"amountCents"`
+	Date        string `json:"date"`
+	Note        string `json:"note"`
+}
+
+func (r cardReloadRequest) validate() (time.Time, error) {
+	if r.AmountCents <= 0 {
+		return time.Time{}, fmt.Errorf("amountCents must be positive")
+	}
+	d, err := time.Parse(dateLayout, r.Date)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date: %s", r.Date)
+	}
+	return d, nil
+}
+
 type TrendPoint struct {
 	Month        string `json:"month"`
 	IncomeCents  int64  `json:"incomeCents"`
