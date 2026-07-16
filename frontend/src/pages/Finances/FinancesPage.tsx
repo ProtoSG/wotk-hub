@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button'
 import MovimientosTab from './MovimientosTab'
 import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
-import { TarjetasTab } from './TarjetasTab'
+import { TarjetasTab, CardForm } from './TarjetasTab'
+import FloatingActionButton from './FloatingActionButton'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import type { Card } from '@/types/finance.types'
 
@@ -94,6 +95,8 @@ function TarjetasTabWrapper() {
   const [cards, setCards] = useState<Card[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
+  const [editCard, setEditCard] = useState<Card | undefined>()
+  const [formOpen, setFormOpen] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -143,5 +146,26 @@ function TarjetasTabWrapper() {
     )
   }
 
-  return <TarjetasTab cards={cards} onRefresh={handleRefresh} />
+  return (
+    <>
+      <FloatingActionButton
+        label="Nueva tarjeta"
+        onClick={() => { setEditCard(undefined); setFormOpen(true) }}
+      />
+      <CardForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={(card) => {
+          if (editCard) {
+            setCards(prev => prev.map(c => c.id === card.id ? card : c))
+          } else {
+            setCards(prev => [...prev, card])
+          }
+          setFormOpen(false)
+        }}
+        editCard={editCard}
+      />
+      <TarjetasTab cards={cards} onRefresh={handleRefresh} />
+    </>
+  )
 }
