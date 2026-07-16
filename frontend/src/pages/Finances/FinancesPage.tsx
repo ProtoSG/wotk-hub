@@ -92,20 +92,17 @@ export default function FinancesPage() {
 function TarjetasTabWrapper() {
   const { listCards } = useFinanceApi()
   const [cards, setCards] = useState<Card[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
-  const fetchCards = async () => {
-    try {
-      const data = await listCards()
-      setCards(data)
-    } catch {
-      // silently fail, cards will be empty
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchCards() }, [])
+  useEffect(() => {
+    let ignore = false
+    setLoading(true)
+    listCards()
+      .then(data => { if (!ignore) setCards(data) })
+      .catch(() => {})
+      .finally(() => { if (!ignore) setLoading(false) })
+    return () => { ignore = true }
+  }, [listCards])
 
   if (loading) {
     return (
@@ -115,5 +112,5 @@ function TarjetasTabWrapper() {
     )
   }
 
-  return <TarjetasTab cards={cards} onRefresh={fetchCards} />
+  return <TarjetasTabWrapper />
 }
