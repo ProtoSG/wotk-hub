@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CreditCard, Plus, RefreshCw, Trash2, Pencil } from 'lucide-react'
+import { CreditCard, RefreshCw, Trash2, Pencil } from 'lucide-react'
 import FloatingActionButton from './FloatingActionButton'
 import { toast } from 'sonner'
 import type { Card, CardType } from '@/types/finance.types'
