@@ -406,3 +406,71 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
+
+// RefundTransaction creates a new income transaction that reimburses an expense.
+// The original expense row is left unchanged.
+func (h *handler) RefundTransaction(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	id, err := parseID(r)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		log.Printf("finances: refund transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer tx.Rollback()
+
+	// Lock and fetch the original transaction.
+	old, _, err := lockTransaction(tx, id, role, userID)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
+		return
+	}
+	if err != nil {
+		log.Printf("finances: refund transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if old.Type != "expense" {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "only expense transactions can be refunded")
+		return
+	}
+
+	// Build the compensating income transaction.
+	refundDesc := "Reembolso: " + old.Description
+	refundDate := time.Now().Format(dateLayout)
+
+	// Note: incomes with a cardId do not auto-update the card balance
+	// (cardAdjustment returns zero delta for income type). This is the
+	// documented limitation — the refund restores the ledger balance
+	// but does not reload the card.
+	row := tx.QueryRow(
+		`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by, card_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING `+transactionColumns,
+		"income", old.AmountCents, old.Category, refundDesc, refundDate, userID, old.CardID,
+	)
+	t, err := scanTransaction(row)
+	if err != nil {
+		log.Printf("finances: refund transaction insert failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("finances: refund transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, t)
+}

@@ -39,6 +39,11 @@ export function useFinanceApi() {
     await api.delete(`/api/finances/transactions/${id}`)
   }
 
+  async function refundTransaction(id: number): Promise<Transaction> {
+    const res = await api.post<Transaction>(`/api/finances/transactions/${id}/refund`)
+    return res.data
+  }
+
   async function listSubscriptions(): Promise<{
     subscriptions: Subscription[]
     monthlyCommittedCents: number
