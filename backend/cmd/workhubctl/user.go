@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var authToken string
 var cookieJar *cookiejar.Jar
 
 func init() {
@@ -24,33 +23,15 @@ func init() {
 	cookieJar = jar
 }
 
-func tokenFile() string {
-	return filepath.Join(os.Getenv("HOME"), ".workhub", "token")
-}
-
-func saveToken(token string) error {
-	dir := filepath.Dir(tokenFile())
-	os.MkdirAll(dir, 0700)
-	return os.WriteFile(tokenFile(), []byte(token), 0600)
-}
-
-func loadToken() string {
-	data, err := os.ReadFile(tokenFile())
-	if err != nil {
-		return ""
-	}
-	return string(bytes.TrimSpace(data))
-}
-
 func userCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "user",
-		Short: "User authentication and info",
+		Short: "User management and info",
 	}
 
 	registerCmd := &cobra.Command{
 		Use:   "register",
-		Short: "Register a new user",
+		Short: "Register a new user (admin only)",
 		Run:   runUserRegister,
 	}
 	registerCmd.Flags().String("name", "", "User name (required)")
@@ -60,7 +41,7 @@ func userCmd() *cobra.Command {
 
 	loginCmd := &cobra.Command{
 		Use:   "login",
-		Short: "Login and get auth token",
+		Short: "Login as an existing user (stores session cookie)",
 		Run:   runUserLogin,
 	}
 	loginCmd.Flags().String("email", "", "User email")
@@ -69,7 +50,7 @@ func userCmd() *cobra.Command {
 
 	meCmd := &cobra.Command{
 		Use:   "me",
-		Short: "Show current authenticated user info",
+		Short: "Show identity used by the CLI (from stored CLI token)",
 		Run:   runUserMe,
 	}
 	cmd.AddCommand(meCmd)
@@ -84,15 +65,6 @@ func newClient() *http.Client {
 	}
 }
 
-func extractToken(resp *http.Response) string {
-	for _, c := range resp.Cookies() {
-		if c.Name == "access_token" {
-			return c.Value
-		}
-	}
-	return ""
-}
-
 func runUserRegister(cmd *cobra.Command, args []string) {
 	email, _ := cmd.Flags().GetString("email")
 	password, _ := cmd.Flags().GetString("password")
@@ -103,20 +75,26 @@ func runUserRegister(cmd *cobra.Command, args []string) {
 		color.Cyan("Usage: workhubctl user register --name \"John\" --email user@example.com --password secret123")
 		return
 	}
-
 	if len(password) < 8 {
 		color.Red("Error: password must be at least 8 characters")
 		return
 	}
 
-	payload := map[string]string{
-		"name":     name,
-		"email":    email,
-		"password": password,
+	payload := map[string]string{"name": name, "email": email, "password": password}
+	body, _ := json.Marshal(payload)
+
+	token := loadToken()
+	req, err := http.NewRequest("POST", serverURL+"/api/auth/register", bytes.NewBuffer(body))
+	if err != nil {
+		color.Red("Error: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	body, _ := json.Marshal(payload)
-	resp, err := newClient().Post(serverURL+"/api/auth/register", "application/json", bytes.NewBuffer(body))
+	resp, err := newClient().Do(req)
 	if err != nil {
 		color.Red("Error: %v", err)
 		return
@@ -134,9 +112,11 @@ func runUserRegister(cmd *cobra.Command, args []string) {
 		}
 	case http.StatusForbidden:
 		color.Red("✗ Registration closed (max users reached)")
+	case http.StatusUnauthorized:
+		color.Red("✗ Unauthorized. Set CLI_TOKEN env var or run 'workhubctl auth login <token>'.")
 	case http.StatusBadRequest:
-		if errMsg, ok := result["error"].(string); ok {
-			color.Red("✗ %s", errMsg)
+		if msg, ok := result["message"].(string); ok {
+			color.Red("✗ %s", msg)
 		}
 	default:
 		color.Red("✗ Failed (status: %d)", resp.StatusCode)
@@ -156,8 +136,7 @@ func runUserLogin(cmd *cobra.Command, args []string) {
 	payload := map[string]string{"email": email, "password": password}
 	body, _ := json.Marshal(payload)
 
-	client := newClient()
-	resp, err := client.Post(serverURL+"/api/auth/login", "application/json", bytes.NewBuffer(body))
+	resp, err := newClient().Post(serverURL+"/api/auth/login", "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		color.Red("Error: %v", err)
 		return
@@ -175,18 +154,10 @@ func runUserLogin(cmd *cobra.Command, args []string) {
 		if role, ok := result["role"].(string); ok {
 			color.Cyan("  Role: %s", role)
 		}
-
-		// Extract token from cookie and save
-		token := extractToken(resp)
-		if token != "" {
-			if err := saveToken(token); err != nil {
-				color.Yellow("Warning: could not save token: %v", err)
-			} else {
-				color.Cyan("  Token saved to ~/.workhub/token")
-			}
-		}
 	} else {
-		if errMsg, ok := result["error"].(string); ok {
+		if msg, ok := result["message"].(string); ok {
+			color.Red("✗ %s", msg)
+		} else if errMsg, ok := result["error"].(string); ok {
 			color.Red("✗ %s", errMsg)
 		} else {
 			color.Red("✗ Login failed (status: %d)", resp.StatusCode)
@@ -195,20 +166,21 @@ func runUserLogin(cmd *cobra.Command, args []string) {
 }
 
 func runUserMe(cmd *cobra.Command, args []string) {
-	token := loadToken()
+	token := strings.TrimSpace(loadToken())
 	if token == "" {
-		color.Red("✗ Not authenticated. Run 'workhubctl user login --email ... --password ...' first")
+		color.Red("✗ Not authenticated. Set CLI_TOKEN env var or run:")
+		color.Cyan("  workhubctl auth login <your-cli-token>")
 		return
 	}
 
-	req, err := http.NewRequest("GET", serverURL+"/api/auth/me", nil)
+	req, err := http.NewRequest("GET", serverURL+"/api/cli/me", nil)
 	if err != nil {
 		color.Red("Error: %v", err)
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := newClient()
+	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		color.Red("Error: %v", err)
@@ -217,9 +189,12 @@ func runUserMe(cmd *cobra.Command, args []string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		// Token expired - remove it
-		os.Remove(tokenFile())
-		color.Red("✗ Token expired. Run 'workhubctl user login --email ... --password ...' again")
+		color.Red("✗ Token invalid or expired.")
+		color.Cyan("Run 'workhubctl auth login <token>' to update.")
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		color.Red("✗ Request failed (status: %d)", resp.StatusCode)
 		return
 	}
 
@@ -227,15 +202,9 @@ func runUserMe(cmd *cobra.Command, args []string) {
 	var user map[string]interface{}
 	json.Unmarshal(bodyBytes, &user)
 
-	if resp.StatusCode != http.StatusOK {
-		color.Red("✗ Request failed (status: %d)", resp.StatusCode)
-		return
-	}
-
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Field", "Value"})
-
-	for _, field := range []string{"id", "name", "email", "role", "created_at"} {
+	for _, field := range []string{"id", "name", "email", "role"} {
 		if val, ok := user[field]; ok {
 			table.Append([]string{field, fmt.Sprintf("%v", val)})
 		}
