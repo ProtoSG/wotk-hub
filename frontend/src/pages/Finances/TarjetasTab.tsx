@@ -1,8 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useForm, type SubmitHandler } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { Card as UICard } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +36,17 @@ const CARD_TYPES = [
   { value: 'prepago', label: 'Prepago' },
 ]
 
+const cardSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido'),
+  type: z.enum(['debito', 'credito', 'prepago']),
+  bank: z.string(),
+  last4: z.string().length(4, 'Debe tener 4 dígitos'),
+  color: z.string(),
+  icon: z.string(),
+})
+
+type CardFormValues = z.infer<typeof cardSchema>
+
 interface CardFormProps {
   open: boolean
   onClose: () => void
@@ -39,31 +54,49 @@ interface CardFormProps {
   editCard?: Card
 }
 
+function cardDefaults(editCard?: Card): CardFormValues {
+  return {
+    name: editCard?.name ?? '',
+    type: editCard?.type ?? 'debito',
+    bank: editCard?.bank ?? '',
+    last4: editCard?.last4 ?? '',
+    color: editCard?.color ?? CARD_COLORS[0],
+    icon: editCard?.icon ?? 'credit-card',
+  }
+}
+
 export function CardForm({ open, onClose, onSuccess, editCard }: CardFormProps) {
   const { createCard, updateCard } = useFinanceApi()
   const [loading, setLoading] = useState(false)
-  const [name, setName] = useState(editCard?.name ?? '')
-  const [type, setType] = useState<CardType>(editCard?.type ?? 'debito')
-  const handleTypeChange = (val: string) => setType(val as CardType)
-  const [bank, setBank] = useState(editCard?.bank ?? '')
-  const [last4, setLast4] = useState(editCard?.last4 ?? '')
-  const [color, setColor] = useState(editCard?.color ?? CARD_COLORS[0])
-  const [icon] = useState(editCard?.icon ?? 'credit-card')
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) {
-      toast.error('El nombre es requerido')
-      return
-    }
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<CardFormValues>({
+    resolver: zodResolver(cardSchema),
+    defaultValues: cardDefaults(editCard),
+  })
+
+  const color = watch('color')
+  const type = watch('type')
+
+  useEffect(() => {
+    if (open) reset(cardDefaults(editCard))
+  }, [open, editCard, reset])
+
+  const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
     setLoading(true)
     try {
       let card: Card
       if (editCard) {
-        card = await updateCard(editCard.id, { name, type, bank, last4, color, icon })
+        card = await updateCard(editCard.id, values)
         toast.success('Tarjeta actualizada')
       } else {
-        card = await createCard({ name, type, bank, last4, color, icon })
+        card = await createCard(values)
         toast.success('Tarjeta creada')
       }
       onSuccess(card)
@@ -76,19 +109,20 @@ export function CardForm({ open, onClose, onSuccess, editCard }: CardFormProps) 
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editCard ? 'Editar tarjeta' : 'Nueva tarjeta'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Nombre</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ej: STM Lima, BCP Débito" />
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1">
+            <Label>Nombre</Label>
+            <Input {...register('name')} placeholder="Ej: STM Lima, BCP Débito" />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
-          <div>
-            <label className="text-sm font-medium">Tipo</label>
-            <Select value={type} onValueChange={handleTypeChange}>
+          <div className="space-y-1">
+            <Label>Tipo</Label>
+            <Select value={type} onValueChange={(v) => setValue('type', v as CardType)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CARD_TYPES.map(t => (
@@ -96,28 +130,31 @@ export function CardForm({ open, onClose, onSuccess, editCard }: CardFormProps) 
                 ))}
               </SelectContent>
             </Select>
+            {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
           </div>
-          <div>
-            <label className="text-sm font-medium">Banco</label>
-            <Input value={bank} onChange={e => setBank(e.target.value)} placeholder="Ej: BCP, Interbank" />
+          <div className="space-y-1">
+            <Label>Banco</Label>
+            <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
           </div>
-          <div>
-            <label className="text-sm font-medium">Últimos 4 dígitos</label>
-            <Input value={last4} onChange={e => setLast4(e.target.value)} placeholder="1234" maxLength={4} />
+          <div className="space-y-1">
+            <Label>Últimos 4 dígitos</Label>
+            <Input {...register('last4')} placeholder="1234" maxLength={4} />
+            {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
           </div>
-          <div>
-            <label className="text-sm font-medium">Color</label>
+          <div className="space-y-1">
+            <Label>Color</Label>
             <div className="flex gap-2 flex-wrap mt-1">
               {CARD_COLORS.map(c => (
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setColor(c)}
+                  onClick={() => setValue('color', c)}
                   className="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110"
                   style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
                 />
               ))}
             </div>
+            {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
@@ -228,24 +265,44 @@ interface ReloadFormProps {
   card: Card
 }
 
+const reloadSchema = z.object({
+  amount: z.number().positive('Debe ser mayor a 0'),
+  date: z.string().min(1, 'Requerido'),
+})
+
+type ReloadFormValues = z.infer<typeof reloadSchema>
+
+function reloadDefaults(): ReloadFormValues {
+  return {
+    amount: 0,
+    date: new Date().toISOString().split('T')[0],
+  }
+}
+
 function ReloadForm({ open, onClose, onSuccess, card }: ReloadFormProps) {
   const { createReload } = useFinanceApi()
   const [loading, setLoading] = useState(false)
-  const [amount, setAmount] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const amountCents = Math.round(parseFloat(amount) * 100)
-    if (!amount || isNaN(amountCents) || amountCents <= 0) {
-      toast.error('Monto inválido')
-      return
-    }
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ReloadFormValues>({
+    resolver: zodResolver(reloadSchema),
+    defaultValues: reloadDefaults(),
+  })
+
+  useEffect(() => {
+    if (open) reset(reloadDefaults())
+  }, [open, reset])
+
+  const onSubmit: SubmitHandler<ReloadFormValues> = async (values) => {
+    const amountCents = Math.round(values.amount * 100)
     setLoading(true)
     try {
-      await createReload(card.id, { amountCents, date, note: '' })
+      await createReload(card.id, { amountCents, date: values.date, note: '' })
       toast.success('Recarga registrada')
-      setAmount('')
       onSuccess()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al recargar')
@@ -255,19 +312,21 @@ function ReloadForm({ open, onClose, onSuccess, card }: ReloadFormProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Recargar {card.name}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Monto (PEN)</label>
-            <Input type="number" step="0.01" min="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1">
+            <Label>Monto (PEN)</Label>
+            <Input type="number" step="0.01" min="0.01" {...register('amount', { valueAsNumber: true })} placeholder="0.00" />
+            {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
           </div>
-          <div>
-            <label className="text-sm font-medium">Fecha</label>
-            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          <div className="space-y-1">
+            <Label>Fecha</Label>
+            <Input type="date" {...register('date')} />
+            {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
