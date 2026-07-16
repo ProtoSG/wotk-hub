@@ -36,7 +36,7 @@ const CARD_TYPES = [
 interface CardFormProps {
   open: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (card: Card) => void
   editCard?: Card
 }
 
@@ -59,14 +59,15 @@ export function CardForm({ open, onClose, onSuccess, editCard }: CardFormProps) 
     }
     setLoading(true)
     try {
+      let card: Card
       if (editCard) {
-        await updateCard(editCard.id, { name, type, bank, last4, color, icon })
+        card = await updateCard(editCard.id, { name, type, bank, last4, color, icon })
         toast.success('Tarjeta actualizada')
       } else {
-        await createCard({ name, type, bank, last4, color, icon })
+        card = await createCard({ name, type, bank, last4, color, icon })
         toast.success('Tarjeta creada')
       }
-      onSuccess()
+      onSuccess(card)
       onClose()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar')
@@ -216,7 +217,7 @@ export function TarjetasTab({ cards, onRefresh }: TarjetasTabProps) {
         ))}
       </div>
 
-      <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSuccess={onRefresh} editCard={editCard} />
+      <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSuccess={handleRefresh} editCard={editCard} />
       {selectedCard && (
         <ReloadForm open={reloadOpen} onClose={() => setReloadOpen(false)} onSuccess={() => { setReloadOpen(false); onRefresh() }} card={selectedCard} />
       )}
