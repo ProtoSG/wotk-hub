@@ -11,6 +11,10 @@ import type {
   CardInput,
   CardReload,
   CardReloadInput,
+  SavingsGoal,
+  SavingsGoalInput,
+  SavingsContribution,
+  SavingsContributionInput,
 } from '@/types/finance.types'
 
 export function useFinanceApi() {
@@ -111,6 +115,40 @@ export function useFinanceApi() {
     return res.data
   }
 
+  async function listGoals(): Promise<SavingsGoal[]> {
+    const res = await api.get<{ goals: SavingsGoal[] }>('/api/finances/savings-goals')
+    return res.data.goals
+  }
+
+  async function createGoal(input: SavingsGoalInput): Promise<SavingsGoal> {
+    const res = await api.post<SavingsGoal>('/api/finances/savings-goals', input)
+    return res.data
+  }
+
+  async function updateGoal(id: number, input: SavingsGoalInput): Promise<SavingsGoal> {
+    const res = await api.put<SavingsGoal>(`/api/finances/savings-goals/${id}`, input)
+    return res.data
+  }
+
+  async function deleteGoal(id: number): Promise<void> {
+    await api.delete(`/api/finances/savings-goals/${id}`)
+  }
+
+  async function listContributions(goalId: number): Promise<SavingsContribution[]> {
+    const res = await api.get<{ contributions: SavingsContribution[] }>(
+      `/api/finances/savings-goals/${goalId}/contributions`
+    )
+    return res.data.contributions
+  }
+
+  async function createContribution(goalId: number, input: SavingsContributionInput): Promise<SavingsContribution> {
+    const res = await api.post<SavingsContribution>(
+      `/api/finances/savings-goals/${goalId}/contributions`,
+      input
+    )
+    return res.data
+  }
+
   return {
     listTransactions,
     createTransaction,
@@ -130,5 +168,11 @@ export function useFinanceApi() {
     deleteCard,
     listReloads,
     createReload,
+    listGoals,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+    listContributions,
+    createContribution,
   }
 }
