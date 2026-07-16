@@ -145,9 +145,25 @@ function TarjetasTabWrapper() {
   if (cards.length === 0) {
     return (
       <>
+        <div className="hidden justify-end sm:flex mb-4">
+          <Button
+            onClick={() => {
+              setEditCard(undefined)
+              setFormOpen(true)
+            }}
+          >
+            <Plus size={14} />
+            Nueva tarjeta
+          </Button>
+        </div>
+
         <FloatingActionButton
           label="Nueva tarjeta"
-          onClick={() => { setEditCard(undefined); setFormOpen(true) }}
+          onClick={() => {
+            setEditCard(undefined)
+            setFormOpen(true)
+          }}
+          className="mb-4"
         />
         <CardForm
           open={formOpen}
@@ -158,17 +174,14 @@ function TarjetasTabWrapper() {
           }}
           editCard={editCard}
         />
-        <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-          <CreditCard className="h-8 w-8" />
-          <p>No hay tarjetas registradas</p>
-        </div>
+        <TarjetasTab cards={cards} onRefresh={handleRefresh} />
       </>
     )
   }
 
   return (
     <>
-      <div className="hidden justify-end sm:flex">
+      <div className="hidden justify-end sm:flex mb-4">
         <Button
           onClick={() => {
             setEditCard(undefined)
@@ -182,7 +195,11 @@ function TarjetasTabWrapper() {
 
       <FloatingActionButton
         label="Nueva tarjeta"
-        onClick={() => { setEditCard(undefined); setFormOpen(true) }}
+        onClick={() => {
+          setEditCard(undefined)
+          setFormOpen(true)
+        }}
+        className="mb-4"
       />
       <CardForm
         open={formOpen}
