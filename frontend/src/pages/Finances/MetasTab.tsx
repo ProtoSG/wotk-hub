@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { Card as UICard } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,10 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar } from 'lucide-react'
+import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar, CreditCard } from 'lucide-react'
 import FloatingActionButton from './FloatingActionButton'
 import { toast } from 'sonner'
-import type { SavingsGoal, SavingsGoalInput } from '@/types/finance.types'
+import type { SavingsGoal, SavingsGoalInput, Card } from '@/types/finance.types'
 import { GOAL_COLORS } from '@/types/finance.types'
 
 const GOAL_ICON_OPTIONS = [
@@ -40,7 +40,7 @@ interface GoalFormProps {
 }
 
 export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) {
-  const { createGoal, updateGoal } = useFinanceApi()
+  const { createGoal, updateGoal, listCards } = useFinanceApi()
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState(editGoal?.name ?? '')
   const [targetCents, setTargetCents] = useState(
@@ -49,6 +49,13 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
   const [deadline, setDeadline] = useState(editGoal?.deadline ?? '')
   const [icon, setIcon] = useState(editGoal?.icon ?? 'piggy-bank')
   const [color, setColor] = useState(editGoal?.color ?? GOAL_COLORS[0])
+  const [cards, setCards] = useState<Card[]>([])
+  const [defaultCardId, setDefaultCardId] = useState<string>(editGoal?.defaultCardId?.toString() ?? '')
+
+  useEffect(() => {
+    listCards().then(setCards).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,6 +76,7 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
         deadline: deadline || undefined,
         icon,
         color,
+        defaultCardId: defaultCardId ? parseInt(defaultCardId, 10) : undefined,
       }
       let goal: SavingsGoal
       if (editGoal) {
@@ -120,6 +128,25 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
               value={deadline}
               onChange={e => setDeadline(e.target.value)}
             />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Tarjeta predeterminada (opcional)</label>
+            <Select value={defaultCardId} onValueChange={setDefaultCardId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sin tarjeta predeterminada" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Sin tarjeta predeterminada</SelectItem>
+                {cards.map(card => (
+                  <SelectItem key={card.id} value={card.id.toString()}>
+                    {card.name} ({card.last4})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Las aportaciones descontarán de esta tarjeta automáticamente
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium">Icono</label>
@@ -242,11 +269,17 @@ interface MetasTabProps {
 }
 
 export function MetasTab({ goals, onRefresh }: MetasTabProps) {
-  const { deleteGoal } = useFinanceApi()
+  const { deleteGoal, listCards } = useFinanceApi()
   const [formOpen, setFormOpen] = useState(false)
   const [contributionOpen, setContributionOpen] = useState(false)
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null)
   const [editGoal, setEditGoal] = useState<SavingsGoal | undefined>()
+  const [cards, setCards] = useState<Card[]>([])
+
+  useEffect(() => {
+    listCards().then(setCards).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const formatPEN = (cents: number) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(cents / 100)
@@ -380,6 +413,24 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar className="w-3 h-3" />
                   <span>Limite: {new Date(goal.deadline + 'T00:00:00').toLocaleDateString('es-PE')}</span>
+                </div>
+              )}
+
+              {goal.defaultCardId != null && (() => {
+                const card = cards.find(c => c.id === goal.defaultCardId)
+                return card ? (
+                  <div className="flex items-center gap-1 text-xs">
+                    <CreditCard className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Descontará de</span>
+                    <span className="font-medium" style={{ color: card.color }}>{card.name}</span>
+                  </div>
+                ) : null
+              })()}
+
+              {!goal.defaultCardId && (
+                <div className="flex items-center gap-1 text-xs text-amber-600">
+                  <CreditCard className="w-3 h-3" />
+                  <span>Sin tarjeta — se descontará saldo general</span>
                 </div>
               )}
 
