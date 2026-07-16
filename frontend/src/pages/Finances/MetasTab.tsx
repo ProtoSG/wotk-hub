@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useForm, type SubmitHandler } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { Card as UICard } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -23,6 +27,28 @@ import { toast } from 'sonner'
 import type { SavingsGoal, SavingsGoalInput, Card } from '@/types/finance.types'
 import { GOAL_COLORS } from '@/types/finance.types'
 
+const schema = z.object({
+  name: z.string().min(1, 'El nombre es requerido'),
+  targetCents: z.number().positive('Debe ser mayor a 0'),
+  deadline: z.string().optional(),
+  icon: z.string(),
+  color: z.string(),
+  defaultCardId: z.string().optional(),
+})
+
+type FormValues = z.infer<typeof schema>
+
+function defaults(editGoal?: SavingsGoal): FormValues {
+  return {
+    name: editGoal?.name ?? '',
+    targetCents: editGoal ? editGoal.targetCents / 100 : 0,
+    deadline: editGoal?.deadline ?? '',
+    icon: editGoal?.icon ?? 'piggy-bank',
+    color: editGoal?.color ?? GOAL_COLORS[0],
+    defaultCardId: editGoal?.defaultCardId?.toString() ?? '',
+  }
+}
+
 const GOAL_ICON_OPTIONS = [
   { value: 'piggy-bank', label: 'Ahorro' },
   { value: 'target', label: 'Meta' },
@@ -41,43 +67,40 @@ interface GoalFormProps {
 
 export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) {
   const { createGoal, updateGoal, listCards } = useFinanceApi()
-  const [loading, setLoading] = useState(false)
-  const [name, setName] = useState(editGoal?.name ?? '')
-  const [targetCents, setTargetCents] = useState(
-    editGoal ? (editGoal.targetCents / 100).toFixed(2) : ''
-  )
-  const [deadline, setDeadline] = useState(editGoal?.deadline ?? '')
-  const [icon, setIcon] = useState(editGoal?.icon ?? 'piggy-bank')
-  const [color, setColor] = useState(editGoal?.color ?? GOAL_COLORS[0])
   const [cards, setCards] = useState<Card[]>([])
-  const [defaultCardId, setDefaultCardId] = useState<string>(editGoal?.defaultCardId?.toString() ?? '')
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: defaults(editGoal),
+  })
+
+  const color = watch('color')
 
   useEffect(() => {
-    listCards().then(setCards).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    listCards().then(setCards).catch(() => setCards([]))
+  }, [listCards])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) {
-      toast.error('El nombre es requerido')
-      return
+  useEffect(() => {
+    if (open) reset(defaults(editGoal))
+  }, [open, editGoal, reset])
+
+  const onSubmit: SubmitHandler<FormValues> = async (values) => {
+    const input: SavingsGoalInput = {
+      name: values.name,
+      targetCents: Math.round(values.targetCents * 100),
+      deadline: values.deadline || undefined,
+      icon: values.icon,
+      color: values.color,
+      defaultCardId: values.defaultCardId ? parseInt(values.defaultCardId, 10) : undefined,
     }
-    const target = Math.round(parseFloat(targetCents) * 100)
-    if (isNaN(target) || target <= 0) {
-      toast.error('Monto objetivo inválido')
-      return
-    }
-    setLoading(true)
     try {
-      const input: SavingsGoalInput = {
-        name,
-        targetCents: target,
-        deadline: deadline || undefined,
-        icon,
-        color,
-        defaultCardId: defaultCardId ? parseInt(defaultCardId, 10) : undefined,
-      }
       let goal: SavingsGoal
       if (editGoal) {
         goal = await updateGoal(editGoal.id, input)
@@ -90,48 +113,45 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
       onClose()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setLoading(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editGoal ? 'Editar meta' : 'Nueva meta de ahorro'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Nombre</label>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1">
+            <Label>Nombre</Label>
             <Input
-              value={name}
-              onChange={e => setName(e.target.value)}
+              {...register('name')}
               placeholder="Ej: Viaje a Cusco, Fondo emergencial"
             />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
-          <div>
-            <label className="text-sm font-medium">Monto objetivo (PEN)</label>
+          <div className="space-y-1">
+            <Label>Monto objetivo (PEN)</Label>
             <Input
               type="number"
               step="0.01"
               min="0.01"
-              value={targetCents}
-              onChange={e => setTargetCents(e.target.value)}
+              {...register('targetCents', { valueAsNumber: true })}
               placeholder="500.00"
             />
+            {errors.targetCents && <p className="text-xs text-destructive">{errors.targetCents.message}</p>}
           </div>
-          <div>
-            <label className="text-sm font-medium">Fecha límite (opcional)</label>
-            <Input
-              type="date"
-              value={deadline}
-              onChange={e => setDeadline(e.target.value)}
-            />
+          <div className="space-y-1">
+            <Label>Fecha límite (opcional)</Label>
+            <Input type="date" {...register('deadline')} />
           </div>
-          <div>
-            <label className="text-sm font-medium">Tarjeta predeterminada (opcional)</label>
-            <Select value={defaultCardId} onValueChange={setDefaultCardId}>
+          <div className="space-y-1">
+            <Label>Tarjeta predeterminada (opcional)</Label>
+            <Select
+              value={watch('defaultCardId') ?? ''}
+              onValueChange={(v) => setValue('defaultCardId', v || undefined)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Sin tarjeta predeterminada" />
               </SelectTrigger>
@@ -148,9 +168,12 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
               Las aportaciones descontarán de esta tarjeta automáticamente
             </p>
           </div>
-          <div>
-            <label className="text-sm font-medium">Icono</label>
-            <Select value={icon} onValueChange={val => setIcon(val)}>
+          <div className="space-y-1">
+            <Label>Icono</Label>
+            <Select
+              value={watch('icon')}
+              onValueChange={(v) => setValue('icon', v)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -163,14 +186,14 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <label className="text-sm font-medium">Color</label>
+          <div className="space-y-1">
+            <Label>Color</Label>
             <div className="flex gap-2 flex-wrap mt-1">
               {GOAL_COLORS.map(c => (
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setColor(c)}
+                  onClick={() => setValue('color', c)}
                   className="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110"
                   style={{
                     backgroundColor: c,
@@ -184,8 +207,8 @@ export function GoalForm({ open, onClose, onSuccess, editGoal }: GoalFormProps) 
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Guardando...' : editGoal ? 'Actualizar' : 'Crear'}
+            <Button type="submit">
+              {editGoal ? 'Actualizar' : 'Crear'}
             </Button>
           </DialogFooter>
         </form>
