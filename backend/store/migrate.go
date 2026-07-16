@@ -90,6 +90,10 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_card_reloads_card_id ON card_reloads (card_id)`,
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_id BIGINT REFERENCES cards(id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_card_id ON transactions (card_id)`,
+		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS initial_balance_cents BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS credit_limit_cents BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS used_credit_cents BIGINT NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS savings_goals (
 			id            BIGSERIAL PRIMARY KEY,
 			name          TEXT   NOT NULL,

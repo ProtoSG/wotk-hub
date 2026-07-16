@@ -24,6 +24,7 @@ type Transaction struct {
 	Category    string `json:"category"`
 	Description string `json:"description"`
 	Date        string `json:"date"`
+	CardID      *int64 `json:"cardId,omitempty"`
 	CreatedAt   string `json:"createdAt"`
 }
 
@@ -33,6 +34,7 @@ type transactionRequest struct {
 	Category    string `json:"category"`
 	Description string `json:"description"`
 	Date        string `json:"date"`
+	CardID      *int64 `json:"cardId"`
 }
 
 func (r transactionRequest) validate() (time.Time, error) {
@@ -48,6 +50,9 @@ func (r transactionRequest) validate() (time.Time, error) {
 	}
 	if !slices.Contains(cats, r.Category) {
 		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
+	}
+	if r.CardID != nil && *r.CardID <= 0 {
+		return time.Time{}, fmt.Errorf("invalid cardId")
 	}
 	d, err := time.Parse(dateLayout, r.Date)
 	if err != nil {
@@ -125,26 +130,36 @@ func (r budgetRequest) validate(category string) error {
 }
 
 type Card struct {
-	ID           int64  `json:"id"`
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Bank         string `json:"bank"`
-	Last4        string `json:"last4"`
-	Color        string `json:"color"`
-	Icon         string `json:"icon"`
-	BalanceCents int64  `json:"balanceCents"`
-	CreatedAt    string `json:"createdAt"`
+	ID                  int64  `json:"id"`
+	Name                string `json:"name"`
+	Type                string `json:"type"`
+	Bank                string `json:"bank"`
+	Last4               string `json:"last4"`
+	Color               string `json:"color"`
+	Icon                string `json:"icon"`
+	BalanceCents        int64  `json:"balanceCents"`
+	InitialBalanceCents int64  `json:"initialBalanceCents"`
+	CreditLimitCents    int64  `json:"creditLimitCents"`
+	UsedCreditCents     int64  `json:"usedCreditCents"`
+	CreatedAt           string `json:"createdAt"`
 }
 
-var cardTypes = []string{"debito", "credito", "prepago"}
+const cardTypeCredit = "credito"
 
+var cardTypes = []string{"debito", cardTypeCredit, "prepago"}
+
+// cardRequest leaves the balance fields as pointers so an omitted field means
+// "keep what's stored" rather than "set to zero" — the pre-existing card form
+// doesn't send them at all.
 type cardRequest struct {
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-	Bank  string `json:"bank"`
-	Last4 string `json:"last4"`
-	Color string `json:"color"`
-	Icon  string `json:"icon"`
+	Name                string `json:"name"`
+	Type                string `json:"type"`
+	Bank                string `json:"bank"`
+	Last4               string `json:"last4"`
+	Color               string `json:"color"`
+	Icon                string `json:"icon"`
+	InitialBalanceCents *int64 `json:"initialBalanceCents"`
+	CreditLimitCents    *int64 `json:"creditLimitCents"`
 }
 
 func (r cardRequest) validate() error {
@@ -154,7 +169,44 @@ func (r cardRequest) validate() error {
 	if !slices.Contains(cardTypes, r.Type) {
 		return fmt.Errorf("invalid type: %s", r.Type)
 	}
+	if r.InitialBalanceCents != nil && *r.InitialBalanceCents < 0 {
+		return fmt.Errorf("initialBalanceCents must not be negative")
+	}
+	if r.CreditLimitCents != nil && *r.CreditLimitCents < 0 {
+		return fmt.Errorf("creditLimitCents must not be negative")
+	}
 	return nil
+}
+
+// cardDelta is a pending adjustment to one card's counters, accumulated before
+// being written so that reversing and re-applying the same card collapses into
+// a single UPDATE.
+type cardDelta struct {
+	balanceCents    int64
+	usedCreditCents int64
+}
+
+// cardAdjustment reports how a transaction moves the counters of the card it
+// is tagged to. Only expenses move a card: an income is not a reload, so
+// tagging one to a card records where the money landed without topping it up.
+// A credit card's expense draws down its limit instead of its balance.
+func cardAdjustment(cardType, txType string, amountCents int64) cardDelta {
+	if txType != "expense" {
+		return cardDelta{}
+	}
+	if cardType == cardTypeCredit {
+		return cardDelta{usedCreditCents: amountCents}
+	}
+	return cardDelta{balanceCents: -amountCents}
+}
+
+// reverse returns the adjustment that undoes d.
+func (d cardDelta) reverse() cardDelta {
+	return cardDelta{balanceCents: -d.balanceCents, usedCreditCents: -d.usedCreditCents}
+}
+
+func (d cardDelta) isZero() bool {
+	return d.balanceCents == 0 && d.usedCreditCents == 0
 }
 
 type CardReload struct {

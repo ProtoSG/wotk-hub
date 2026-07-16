@@ -4,21 +4,112 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
 )
 
+// transactionColumns is the select list every transaction read shares, in the
+// order scanTransaction expects.
+const transactionColumns = `id, type, amount_cents, category, description, occurred_on, created_at, card_id`
+
 func scanTransaction(row interface{ Scan(...any) error }) (Transaction, error) {
 	var t Transaction
 	var occurredOn, createdAt time.Time
-	err := row.Scan(&t.ID, &t.Type, &t.AmountCents, &t.Category, &t.Description, &occurredOn, &createdAt)
+	var cardID sql.NullInt64
+	err := row.Scan(&t.ID, &t.Type, &t.AmountCents, &t.Category, &t.Description, &occurredOn, &createdAt, &cardID)
 	if err != nil {
 		return t, err
+	}
+	if cardID.Valid {
+		t.CardID = &cardID.Int64
 	}
 	t.Date = occurredOn.Format(dateLayout)
 	t.CreatedAt = createdAt.Format(time.RFC3339)
 	return t, nil
+}
+
+// applyCardDeltas writes accumulated adjustments, ordered by card id so two
+// concurrent edits touching the same pair of cards can't deadlock each other.
+func applyCardDeltas(tx *sql.Tx, deltas map[int64]cardDelta) error {
+	ids := make([]int64, 0, len(deltas))
+	for id := range deltas {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		d := deltas[id]
+		if d.isZero() {
+			continue
+		}
+		if _, err := tx.Exec(
+			`UPDATE cards SET balance_cents = balance_cents + $1, used_credit_cents = used_credit_cents + $2
+			 WHERE id = $3`,
+			d.balanceCents, d.usedCreditCents, id,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addDelta(deltas map[int64]cardDelta, cardID int64, d cardDelta) {
+	acc := deltas[cardID]
+	acc.balanceCents += d.balanceCents
+	acc.usedCreditCents += d.usedCreditCents
+	deltas[cardID] = acc
+}
+
+// cardTypeOwned resolves the type of a card the caller is tagging a
+// transaction to. It is scoped: tagging a card you don't own must not work,
+// and must not reveal that the card exists.
+func (h *handler) cardTypeOwned(cardID int64, role string, userID int64) (string, error) {
+	query := `SELECT type FROM cards WHERE id = $1`
+	args := []any{cardID}
+	query, args = scopeToOwner(query, args, role, userID)
+	var t string
+	err := h.db.QueryRow(query, args...).Scan(&t)
+	return t, err
+}
+
+// cardTypeByID resolves the type of the card a transaction is already tagged
+// to, so its adjustment can be reversed. Unscoped on purpose: ownership was
+// settled when the tag was written, and the type is only used to compute a
+// delta, never returned to the caller.
+func cardTypeByID(tx *sql.Tx, cardID int64) (string, error) {
+	var t string
+	err := tx.QueryRow(`SELECT type FROM cards WHERE id = $1`, cardID).Scan(&t)
+	return t, err
+}
+
+// lockTransaction reads the row a write is about to change and holds it until
+// commit, so a concurrent edit can't compute its card delta from stale
+// amounts. Returns the delta the stored row currently contributes to its card.
+func lockTransaction(tx *sql.Tx, id int64, role string, userID int64) (old Transaction, oldDelta cardDelta, err error) {
+	query := `SELECT ` + transactionColumns + ` FROM transactions WHERE id = $1`
+	args := []any{id}
+	query, args = scopeToOwner(query, args, role, userID)
+	query += ` FOR UPDATE`
+
+	old, err = scanTransaction(tx.QueryRow(query, args...))
+	if err != nil {
+		return old, cardDelta{}, err
+	}
+	if old.CardID == nil {
+		return old, cardDelta{}, nil
+	}
+	cardType, err := cardTypeByID(tx, *old.CardID)
+	if err == sql.ErrNoRows {
+		// The card is gone but the tag survived; there is no counter left to
+		// restore, so let the write proceed rather than stranding the row.
+		log.Printf("finances: transaction %d tagged to missing card %d, skipping reversal", id, *old.CardID)
+		return old, cardDelta{}, nil
+	}
+	if err != nil {
+		return old, cardDelta{}, err
+	}
+	return old, cardAdjustment(cardType, old.Type, old.AmountCents), nil
 }
 
 // ListTransactions scopes results by created_by for guests (their personal
@@ -32,7 +123,7 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	query := `SELECT id, type, amount_cents, category, description, occurred_on, created_at
+	query := `SELECT ` + transactionColumns + `
 		FROM transactions WHERE 1=1`
 	args := []any{}
 
@@ -78,9 +169,11 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateTransaction always stamps created_by from the authenticated user —
-// provenance for admin, the ownership boundary guests are scoped by.
+// provenance for admin, the ownership boundary guests are scoped by. When the
+// transaction is tagged to a card, the insert and the card's counters move
+// together or not at all.
 func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
-	userID, _, ok := middleware.UserFromContext(r.Context())
+	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
@@ -95,14 +188,51 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
-	row := h.db.QueryRow(
-		`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, type, amount_cents, category, description, occurred_on, created_at`,
-		req.Type, req.AmountCents, req.Category, req.Description, date, userID,
+
+	var delta cardDelta
+	if req.CardID != nil {
+		cardType, err := h.cardTypeOwned(*req.CardID, role, userID)
+		if err == sql.ErrNoRows {
+			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+			return
+		} else if err != nil {
+			log.Printf("finances: create transaction failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		delta = cardAdjustment(cardType, req.Type, req.AmountCents)
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		log.Printf("finances: create transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRow(
+		`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by, card_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING `+transactionColumns,
+		req.Type, req.AmountCents, req.Category, req.Description, date, userID, req.CardID,
 	)
 	t, err := scanTransaction(row)
 	if err != nil {
+		log.Printf("finances: create transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if req.CardID != nil {
+		if err := applyCardDeltas(tx, map[int64]cardDelta{*req.CardID: delta}); err != nil {
+			log.Printf("finances: create transaction card adjustment failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		log.Printf("finances: create transaction failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
@@ -134,15 +264,31 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `UPDATE transactions
-		 SET type = $1, amount_cents = $2, category = $3, description = $4, occurred_on = $5
-		 WHERE id = $6`
-	args := []any{req.Type, req.AmountCents, req.Category, req.Description, date, id}
-	query, args = scopeToOwner(query, args, role, userID)
-	query += ` RETURNING id, type, amount_cents, category, description, occurred_on, created_at`
+	// The new card is resolved before opening the write so an unowned cardId
+	// is a clean 404 rather than a rolled-back write.
+	var newDelta cardDelta
+	if req.CardID != nil {
+		cardType, err := h.cardTypeOwned(*req.CardID, role, userID)
+		if err == sql.ErrNoRows {
+			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+			return
+		} else if err != nil {
+			log.Printf("finances: update transaction failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		newDelta = cardAdjustment(cardType, req.Type, req.AmountCents)
+	}
 
-	row := h.db.QueryRow(query, args...)
-	t, err := scanTransaction(row)
+	tx, err := h.db.Begin()
+	if err != nil {
+		log.Printf("finances: update transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer tx.Rollback()
+
+	old, oldDelta, err := lockTransaction(tx, id, role, userID)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
 		return
@@ -152,10 +298,53 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
+
+	// Undo what the stored row contributed, then apply what the new one does.
+	// When the card is unchanged both land on the same key and collapse into a
+	// single net UPDATE.
+	deltas := map[int64]cardDelta{}
+	if old.CardID != nil {
+		addDelta(deltas, *old.CardID, oldDelta.reverse())
+	}
+	if req.CardID != nil {
+		addDelta(deltas, *req.CardID, newDelta)
+	}
+
+	query := `UPDATE transactions
+		 SET type = $1, amount_cents = $2, category = $3, description = $4, occurred_on = $5, card_id = $6
+		 WHERE id = $7`
+	args := []any{req.Type, req.AmountCents, req.Category, req.Description, date, req.CardID, id}
+	query, args = scopeToOwner(query, args, role, userID)
+	query += ` RETURNING ` + transactionColumns
+
+	t, err := scanTransaction(tx.QueryRow(query, args...))
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
+		return
+	}
+	if err != nil {
+		log.Printf("finances: update transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if err := applyCardDeltas(tx, deltas); err != nil {
+		log.Printf("finances: update transaction card adjustment failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("finances: update transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, t)
 }
 
-// DeleteTransaction 404s a guest trying to delete a transaction they don't own.
+// DeleteTransaction 404s a guest trying to delete a transaction they don't
+// own. Deleting a tagged transaction gives the card back what the transaction
+// took from it.
 func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -168,11 +357,30 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tx, err := h.db.Begin()
+	if err != nil {
+		log.Printf("finances: delete transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer tx.Rollback()
+
+	old, oldDelta, err := lockTransaction(tx, id, role, userID)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
+		return
+	}
+	if err != nil {
+		log.Printf("finances: delete transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
 	query := `DELETE FROM transactions WHERE id = $1`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 
-	res, err := h.db.Exec(query, args...)
+	res, err := tx.Exec(query, args...)
 	if err != nil {
 		log.Printf("finances: delete transaction failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -180,6 +388,20 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "transaction not found")
+		return
+	}
+
+	if old.CardID != nil {
+		if err := applyCardDeltas(tx, map[int64]cardDelta{*old.CardID: oldDelta.reverse()}); err != nil {
+			log.Printf("finances: delete transaction card adjustment failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("finances: delete transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})

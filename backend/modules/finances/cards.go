@@ -9,10 +9,16 @@ import (
 	"workhub/middleware"
 )
 
+// cardColumns is the select list every card read shares, in the order
+// scanCard expects.
+const cardColumns = `id, name, type, bank, last4, color, icon, balance_cents,
+	initial_balance_cents, credit_limit_cents, used_credit_cents, created_at`
+
 func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 	var c Card
 	var createdAt time.Time
-	err := row.Scan(&c.ID, &c.Name, &c.Type, &c.Bank, &c.Last4, &c.Color, &c.Icon, &c.BalanceCents, &createdAt)
+	err := row.Scan(&c.ID, &c.Name, &c.Type, &c.Bank, &c.Last4, &c.Color, &c.Icon, &c.BalanceCents,
+		&c.InitialBalanceCents, &c.CreditLimitCents, &c.UsedCreditCents, &createdAt)
 	if err != nil {
 		return c, err
 	}
@@ -42,7 +48,7 @@ func (h *handler) ListCards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `SELECT id, name, type, bank, last4, color, icon, balance_cents, created_at
+	query := `SELECT ` + cardColumns + `
 		FROM cards WHERE 1=1`
 	args := []any{}
 	query, args = scopeToOwner(query, args, role, userID)
@@ -69,7 +75,9 @@ func (h *handler) ListCards(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"cards": cards})
 }
 
-// CreateCard always stamps created_by from the authenticated user.
+// CreateCard always stamps created_by from the authenticated user. A card
+// opens at its initial balance; from there only reloads and tagged
+// transactions move it.
 func (h *handler) CreateCard(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -85,11 +93,19 @@ func (h *handler) CreateCard(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
+	var initial, creditLimit int64
+	if req.InitialBalanceCents != nil {
+		initial = *req.InitialBalanceCents
+	}
+	if req.CreditLimitCents != nil {
+		creditLimit = *req.CreditLimitCents
+	}
 	row := h.db.QueryRow(
-		`INSERT INTO cards (name, type, bank, last4, color, icon, balance_cents, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
-		 RETURNING id, name, type, bank, last4, color, icon, balance_cents, created_at`,
-		req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, userID,
+		`INSERT INTO cards (name, type, bank, last4, color, icon, balance_cents,
+		     initial_balance_cents, credit_limit_cents, used_credit_cents, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, 0, $9)
+		 RETURNING `+cardColumns,
+		req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, initial, creditLimit, userID,
 	)
 	c, err := scanCard(row)
 	if err != nil {

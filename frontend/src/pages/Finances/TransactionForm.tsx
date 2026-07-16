@@ -17,6 +17,7 @@ import {
   CATEGORY_LABELS,
   type Transaction,
   type TransactionType,
+  type Card,
 } from '@/types/finance.types'
 
 const schema = z.object({
@@ -25,6 +26,7 @@ const schema = z.object({
   category: z.string().min(1, 'Requerido'),
   date: z.string().min(1, 'Requerido'),
   description: z.string(),
+  cardId: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -44,6 +46,7 @@ function defaults(editing?: Transaction | null): FormValues {
         category: editing.category,
         date: editing.date,
         description: editing.description,
+        cardId: editing.cardId != null ? String(editing.cardId) : undefined,
       }
     : {
         type: 'expense',
@@ -51,12 +54,14 @@ function defaults(editing?: Transaction | null): FormValues {
         category: 'comida',
         date: new Date().toISOString().slice(0, 10),
         description: '',
+        cardId: undefined,
       }
 }
 
 export default function TransactionForm({ open, onClose, onSaved, editing }: Props) {
   const [saving, setSaving] = useState(false)
-  const { createTransaction, updateTransaction } = useFinanceApi()
+  const [cards, setCards] = useState<Card[]>([])
+  const { createTransaction, updateTransaction, listCards } = useFinanceApi()
 
   const {
     register,
@@ -71,11 +76,18 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
   })
 
   useEffect(() => {
+    if (open) {
+      listCards().then(setCards).catch(() => setCards([]))
+    }
+  }, [open, listCards])
+
+  useEffect(() => {
     if (open) reset(defaults(editing))
   }, [open, editing, reset])
 
   const type = watch('type')
   const category = watch('category')
+  const cardId = watch('cardId')
   const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
@@ -87,6 +99,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
         category: values.category,
         description: values.description,
         date: values.date,
+        cardId: values.cardId ? Number(values.cardId) : undefined,
       }
       if (editing) {
         await updateTransaction(editing.id, input)
@@ -161,6 +174,22 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
           <div className="space-y-1">
             <Label>Descripción</Label>
             <Input placeholder="Almuerzo, taxi, etc." {...register('description')} />
+          </div>
+          <div className="space-y-1">
+            <Label>Tarjeta (opcional)</Label>
+            <Select value={cardId ?? ''} onValueChange={(v) => setValue('cardId', v || undefined)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sin tarjeta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Ninguna</SelectItem>
+                {cards.map((card) => (
+                  <SelectItem key={card.id} value={String(card.id)}>
+                    {card.name} ({card.last4})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
