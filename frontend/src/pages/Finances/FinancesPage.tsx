@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
 import MonthPicker from './MonthPicker'
 import ResumenTab from './ResumenTab'
+import { Button } from '@/components/ui/button'
 import MovimientosTab from './MovimientosTab'
 import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
@@ -92,27 +93,44 @@ function TarjetasTabWrapper() {
   const { listCards } = useFinanceApi()
   const [cards, setCards] = useState<Card[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
     let ignore = false
+    setHasError(false)
     listCards()
       .then(data => { if (!ignore) { setCards(data); setIsLoading(false) } })
-      .catch(() => { if (!ignore) setIsLoading(false) })
+      .catch(() => { if (!ignore) { setHasError(true); setIsLoading(false) } })
     return () => { ignore = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRefresh = useCallback(() => {
     setIsLoading(true)
+    setHasError(false)
     listCards()
       .then(data => { setCards(data); setIsLoading(false) })
-      .catch(() => setIsLoading(false))
+      .catch(() => { setHasError(true); setIsLoading(false) })
   }, [listCards])
 
   if (isLoading) {
     return (
       <div className="flex justify-center py-8">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (hasError) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <div className="text-destructive">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <p className="text-sm text-muted-foreground">No se pudieron cargar las tarjetas</p>
+        <Button size="sm" variant="outline" onClick={handleRefresh}>
+          Reintentar
+        </Button>
       </div>
     )
   }
