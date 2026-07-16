@@ -101,6 +101,10 @@ function TarjetasTabWrapper() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleRefresh = useCallback(() => {
+    listCards().then(setCards).catch(() => {})
+  }, [listCards])
+
   if (cards.length === 0) {
     return (
       <div className="flex justify-center py-8">
@@ -108,10 +112,6 @@ function TarjetasTabWrapper() {
       </div>
     )
   }
-
-  const handleRefresh = useCallback(() => {
-    listCards().then(setCards).catch(() => {})
-  }, [listCards])
 
   return <TarjetasTab cards={cards} onRefresh={handleRefresh} />
 }
