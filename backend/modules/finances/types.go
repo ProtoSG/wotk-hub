@@ -255,14 +255,14 @@ type Summary struct {
 }
 
 type SavingsGoal struct {
-	ID             int64  `json:"id"`
-	Name           string `json:"name"`
-	TargetCents    int64  `json:"targetCents"`
-	CurrentCents   int64  `json:"currentCents"`
-	Deadline       string `json:"deadline,omitempty"`
-	Icon           string `json:"icon"`
-	Color          string `json:"color"`
-	DefaultCardID  *int64 `json:"defaultCardId,omitempty"`
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	TargetCents   int64  `json:"targetCents"`
+	CurrentCents  int64  `json:"currentCents"`
+	Deadline      string `json:"deadline,omitempty"`
+	Icon          string `json:"icon"`
+	Color         string `json:"color"`
+	DefaultCardID *int64 `json:"defaultCardId,omitempty"`
 	CreatedBy     int64  `json:"createdBy"`
 	CreatedAt     string `json:"createdAt"`
 }
@@ -278,11 +278,11 @@ type SavingsContribution struct {
 }
 
 type savingsGoalRequest struct {
-	Name         string `json:"name"`
-	TargetCents  int64  `json:"targetCents"`
-	Deadline     string `json:"deadline"`
-	Icon         string `json:"icon"`
-	Color        string `json:"color"`
+	Name          string `json:"name"`
+	TargetCents   int64  `json:"targetCents"`
+	Deadline      string `json:"deadline"`
+	Icon          string `json:"icon"`
+	Color         string `json:"color"`
 	DefaultCardID *int64 `json:"defaultCardId"`
 }
 
