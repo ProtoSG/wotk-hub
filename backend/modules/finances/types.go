@@ -105,10 +105,13 @@ func (r transactionRequest) validate() (time.Time, error) {
 	return d, nil
 }
 
-// CardID is optional — a subscription doesn't have to be tied to a card,
-// same as a regular transaction. When set, processDue tags the generated
-// expense with it so the auto-charge draws down that card's computed
-// balance like any other expense.
+// Subscription.CardID stays *int64 on the READ model so scanSubscription
+// keeps its NullInt64 path (a transfer-shaped read extension won't trip
+// here, but the read shape stays stable across this slice — see
+// scanSubscription). On the WRITE model (subscriptionRequest below),
+// CardID is now int64 and mandatory: processDue always tags the generated
+// expense, and the subscriptions.card_id NOT NULL constraint (slice 1a
+// migration) backs this up at the DB.
 type Subscription struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
@@ -128,7 +131,7 @@ type subscriptionRequest struct {
 	Category      string `json:"category"`
 	NextBillingOn string `json:"nextBillingOn"`
 	Active        *bool  `json:"active"`
-	CardID        *int64 `json:"cardId"`
+	CardID        int64  `json:"cardId"`
 }
 
 func (r subscriptionRequest) validate() (time.Time, error) {
@@ -143,6 +146,14 @@ func (r subscriptionRequest) validate() (time.Time, error) {
 	}
 	if !slices.Contains(expenseCategories, r.Category) {
 		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
+	}
+	// Mandatory-card model: every subscription is tied to a card so
+	// processDue's auto-charge always tags a real card_id. An omitted or
+	// non-positive cardId is rejected before the handler opens a DB
+	// transaction; the subscriptions.card_id NOT NULL constraint (slice
+	// 1a migration) backs this up.
+	if r.CardID <= 0 {
+		return time.Time{}, fmt.Errorf("cardId requerido")
 	}
 	d, err := time.Parse(dateLayout, r.NextBillingOn)
 	if err != nil {
