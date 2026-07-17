@@ -44,12 +44,9 @@ func TestCardBalance_Case(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	bal, used, typ, err := cardBalance(tx, cardX, 0)
+	bal, used, err := cardBalance(tx, cardX, 0)
 	if err != nil {
 		t.Fatalf("cardBalance(X): %v", err)
-	}
-	if typ != "debito" {
-		t.Fatalf("cardType(X) = %q want debito", typ)
 	}
 	// 1000 (seed) +200 (income, NEW) -150 (expense) -100 (transfer out) = 950.
 	const wantX = int64(1000 + 200 - 150 - 100)
@@ -60,12 +57,9 @@ func TestCardBalance_Case(t *testing.T) {
 		t.Fatalf("used_credit(X) = %d want 0", used)
 	}
 
-	balC, usedC, typC, err := cardBalance(tx, cardC, 0)
+	balC, usedC, err := cardBalance(tx, cardC, 0)
 	if err != nil {
 		t.Fatalf("cardBalance(C): %v", err)
-	}
-	if typC != "credito" {
-		t.Fatalf("cardType(C) = %q want credito", typC)
 	}
 	// Credito balance is never credited by income; its only ledger effect
 	// is used_credit from expenses.

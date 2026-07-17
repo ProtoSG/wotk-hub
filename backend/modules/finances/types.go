@@ -1,10 +1,28 @@
 package finances
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 )
+
+// errCreditInflow is returned when an operation would move money into a
+// credito card, which is not allowed (credito cards only spend, never receive).
+var errCreditInflow = errors.New("credito card cannot receive funds")
+
+// cardTypeCredit is the literal stored in the DB for credit cards.
+const cardTypeCredit = "credito"
+
+// rejectCreditCardForInflow returns errCreditInflow if cardType is "credito",
+// as credito cards may not receive funds via income or card-to-card transfer.
+// nil is returned for debito, prepago, or empty (defensive).
+func rejectCreditCardForInflow(cardType string) error {
+	if cardType == "credito" {
+		return errCreditInflow
+	}
+	return nil
+}
 
 var expenseCategories = []string{
 	"comida", "transporte", "vivienda", "servicios", "salud",

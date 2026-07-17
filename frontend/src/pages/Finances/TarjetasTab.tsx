@@ -85,7 +85,6 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
   })
 
   const color = watch('color')
-  const creditLimit = watch('creditLimit')
 
   const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
     setSaving(true)

@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useThemeStore } from '@/store/themeStore'
 import Sidebar from './Sidebar'
@@ -13,7 +13,7 @@ export default function AppLayout() {
 
   // Close nav sheet on route change
   useEffect(() => {
-    setNavOpen(false)
+    setNavOpen(false) // eslint-disable-line react-hooks/set-state-in-effect -- intentionally closing nav sheet on navigation
   }, [location])
 
   useEffect(() => {
