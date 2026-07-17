@@ -60,6 +60,7 @@ export default function SuscripcionesTab() {
         frequency: s.frequency,
         category: s.category,
         nextBillingOn: s.nextBillingOn,
+        cardId: s.cardId ?? 0,
         active,
       })
       load()

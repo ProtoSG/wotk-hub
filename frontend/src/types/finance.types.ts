@@ -93,7 +93,7 @@ export interface SubscriptionInput {
   category: string
   nextBillingOn: string
   active: boolean
-  cardId?: number
+  cardId: number
 }
 
 export interface Budget {

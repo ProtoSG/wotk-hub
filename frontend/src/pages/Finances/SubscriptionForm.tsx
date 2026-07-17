@@ -28,7 +28,7 @@ const schema = z.object({
   category: z.string().min(1, 'Requerido'),
   nextBillingOn: z.string().min(1, 'Requerido'),
   active: z.boolean(),
-  cardId: z.string().optional(),
+  cardId: z.string().min(1, 'Elegí una tarjeta'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -104,7 +104,7 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
         category: values.category,
         nextBillingOn: values.nextBillingOn,
         active: values.active,
-        cardId: values.cardId ? parseInt(values.cardId, 10) : undefined,
+        cardId: Number(values.cardId),
       }
       if (editing) {
         await updateSubscription(editing.id, input)
@@ -181,13 +181,12 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
             )}
           </div>
           <div className="space-y-1">
-            <Label>Tarjeta (opcional)</Label>
-            <Select value={cardId ?? ''} onValueChange={(v) => setValue('cardId', v)}>
+            <Label>Tarjeta</Label>
+            <Select value={cardId} onValueChange={(v) => setValue('cardId', v)}>
               <SelectTrigger>
-                <SelectValue placeholder="Sin tarjeta" />
+                <SelectValue placeholder="Elegí una tarjeta" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin tarjeta</SelectItem>
                 {cards.map((card) => (
                   <SelectItem key={card.id} value={card.id.toString()}>
                     {card.name} ({card.last4})
