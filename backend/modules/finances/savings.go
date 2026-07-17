@@ -2,7 +2,6 @@ package finances
 
 import (
 	"database/sql"
-	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -78,21 +77,10 @@ func (h *handler) ListGoals(w http.ResponseWriter, r *http.Request) {
 }
 
 // defaultCardOwned checks that the goal's default card is owned by the
-// caller and isn't a credito card — a savings goal always draws from a
-// real spendable balance, never a credit line. Returns a user-facing error
-// string when invalid, nil when ok.
+// caller (or the caller is admin) and isn't archived.
 func (h *handler) defaultCardOwned(cardID int64, role string, userID int64) error {
-	cardType, err := h.cardTypeOwned(cardID, role, userID)
-	if err != nil {
-		return err
-	}
-	if cardType == cardTypeCredit {
-		return errCreditDefaultCard
-	}
-	return nil
+	return h.cardOwned(cardID, role, userID)
 }
-
-var errCreditDefaultCard = errors.New("la tarjeta predeterminada no puede ser de crédito")
 
 // CreateGoal creates a new savings goal for the authenticated user.
 func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
@@ -113,9 +101,6 @@ func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.defaultCardOwned(*req.DefaultCardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-		return
-	} else if err == errCreditDefaultCard {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	} else if err != nil {
 		log.Printf("finances: create goal card check failed: %v", err)
@@ -163,9 +148,6 @@ func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.defaultCardOwned(*req.DefaultCardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-		return
-	} else if err == errCreditDefaultCard {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	} else if err != nil {
 		log.Printf("finances: update goal card check failed: %v", err)
@@ -338,7 +320,7 @@ func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balanceCents, _, _, err := cardBalance(tx, defaultCardID, 0)
+	balanceCents, _, err := cardBalance(tx, defaultCardID, 0)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
 			"la tarjeta predeterminada de esta meta fue eliminada — asigná una nueva antes de aportar")

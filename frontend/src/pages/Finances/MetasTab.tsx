@@ -164,7 +164,7 @@ function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormProps) {
               </SelectTrigger>
               <SelectContent>
                 {cards
-                  .filter((card) => card.type !== 'credito')
+                  .filter((card) => card.creditLimitCents === 0)
                   .map((card) => (
                     <SelectItem key={card.id} value={card.id.toString()}>
                       {card.name} ({card.last4})

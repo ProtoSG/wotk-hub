@@ -130,7 +130,7 @@ export default function ResumenTab({ month }: Props) {
               <span>
                 {formatPEN(
                   cards
-                    .filter((c) => c.type === 'debito' || c.type === 'prepago')
+                    .filter((c) => c.creditLimitCents === 0)
                     .reduce((sum, c) => sum + c.balanceCents, 0)
                 )}
               </span>
