@@ -181,6 +181,10 @@ func Migrate(db *sql.DB) error {
 		// migration above; DROP IF EXISTS is kept here as an idempotent
 		// safety net so a partially-migrated DB still converges.
 		`DROP TABLE IF EXISTS card_reloads`,
+		// Cards are now type-agnostic: no more debito/credito/prepago
+		// distinction. Credit tracking is inferred purely from
+		// credit_limit_cents > 0 (see cardBalance in transactions.go).
+		`ALTER TABLE cards DROP COLUMN IF EXISTS type`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

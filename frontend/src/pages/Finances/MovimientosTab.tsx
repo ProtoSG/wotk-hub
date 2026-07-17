@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +47,7 @@ export default function MovimientosTab({ month }: Props) {
   const [cards, setCards] = useState<Card[]>([])
   const [typeFilter, setTypeFilter] = useState<string>(ALL)
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
+  const [cardFilter, setCardFilter] = useState<number | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
@@ -142,6 +143,10 @@ export default function MovimientosTab({ month }: Props) {
 
   const allCategories = [...new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])]
 
+  const filteredTransactions = cardFilter == null
+    ? transactions
+    : transactions.filter((t) => t.cardId === cardFilter)
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -181,6 +186,47 @@ export default function MovimientosTab({ month }: Props) {
         </div>
       </div>
 
+      {/* Horizontal scrollable card filter */}
+      <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-1" style={{ scrollbarWidth: 'none' }}>
+        {/* "Todos" card */}
+        <button
+          onClick={() => setCardFilter(null)}
+          className={cn(
+            'min-w-[180px] h-[100px] rounded-xl shadow-sm p-4 flex flex-col justify-between border-2 transition-all snap-start shrink-0',
+            cardFilter === null
+              ? 'border-primary bg-muted/50'
+              : 'border-dashed border-muted-foreground/30 bg-muted/30 hover:bg-muted/50'
+          )}
+        >
+          <div className="flex justify-between items-start">
+            <span className="text-foreground/90 text-sm font-medium truncate">Todos</span>
+            <SlidersHorizontal className="text-foreground/50" size={14} />
+          </div>
+          <span className="text-foreground/40 text-xs">{transactions.length} movimientos</span>
+        </button>
+
+        {/* Card filters */}
+        {cards.map((card) => (
+          <button
+            key={card.id}
+            onClick={() => setCardFilter(card.id)}
+            className={cn(
+              'min-w-[180px] h-[100px] rounded-xl shadow-md p-4 flex flex-col justify-between transition-all snap-start shrink-0 border-2',
+              cardFilter === card.id
+                ? 'border-white/80 ring-2 ring-primary/50'
+                : 'border-transparent'
+            )}
+            style={{ backgroundColor: card.color }}
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-white/90 text-sm font-medium truncate">{card.name}</span>
+              <span className="text-white/70 text-xs">•••• {card.last4}</span>
+            </div>
+            <span className="text-white/60 text-xs">S/ {(card.balanceCents / 100).toFixed(2)}</span>
+          </button>
+        ))}
+      </div>
+
       <FloatingActionButton
         label="Nuevo movimiento"
         onClick={() => {
@@ -204,14 +250,14 @@ export default function MovimientosTab({ month }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {transactions.length === 0 ? (
+              {filteredTransactions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     Sin movimientos este mes
                   </TableCell>
                 </TableRow>
               ) : (
-                transactions.map((t) => (
+                filteredTransactions.map((t) => (
                   <TableRow key={t.id}>
                     <TableCell className="whitespace-nowrap">{t.date}</TableCell>
                     <TableCell>
@@ -296,12 +342,12 @@ export default function MovimientosTab({ month }: Props) {
 
       <CozyCard className="animate-card-in sm:hidden">
         <CardContent className="p-0">
-          {transactions.length === 0 ? (
+          {filteredTransactions.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
               Sin movimientos este mes
             </div>
           ) : (
-            transactions.map((t) => (
+            filteredTransactions.map((t) => (
               <div key={t.id} className="flex items-center gap-3 border-b p-4 last:border-0">
                 <div
                   className={cn(

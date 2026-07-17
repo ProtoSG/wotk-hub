@@ -17,26 +17,26 @@ import (
 // matches scanCard.
 const cardsBaseQuery = `
 	SELECT
-	  c.id, c.name, c.type, c.bank, c.last4, c.color, c.icon,
+	  c.id, c.name, c.bank, c.last4, c.color, c.icon,
 	  c.credit_limit_cents, c.created_at,
 	  COALESCE((SELECT SUM(CASE
 	    WHEN t.to_card_id = c.id THEN t.amount_cents
 	    WHEN t.from_card_id = c.id THEN -t.amount_cents
-	    WHEN t.card_id = c.id AND t.type = 'income'  AND c.type != 'credito' THEN t.amount_cents
-	    WHEN t.card_id = c.id AND t.type = 'expense' AND c.type != 'credito' THEN -t.amount_cents
+	    WHEN t.card_id = c.id AND t.type = 'income'  THEN t.amount_cents
+	    WHEN t.card_id = c.id AND t.type = 'expense' THEN -t.amount_cents
 	    ELSE 0 END)
 	   FROM transactions t
 	   WHERE t.deleted_at IS NULL
 	     AND (t.to_card_id = c.id OR t.from_card_id = c.id OR t.card_id = c.id)), 0) AS balance_cents,
 	  COALESCE((SELECT SUM(t.amount_cents) FROM transactions t
-	   WHERE t.deleted_at IS NULL AND t.card_id = c.id AND t.type = 'expense' AND c.type = 'credito'), 0) AS used_credit_cents
+	   WHERE t.deleted_at IS NULL AND t.card_id = c.id AND t.type = 'expense' AND c.credit_limit_cents > 0), 0) AS used_credit_cents
 	FROM cards c
 	WHERE c.deleted_at IS NULL`
 
 func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 	var c Card
 	var createdAt time.Time
-	err := row.Scan(&c.ID, &c.Name, &c.Type, &c.Bank, &c.Last4, &c.Color, &c.Icon,
+	err := row.Scan(&c.ID, &c.Name, &c.Bank, &c.Last4, &c.Color, &c.Icon,
 		&c.CreditLimitCents, &createdAt, &c.BalanceCents, &c.UsedCreditCents)
 	if err != nil {
 		return c, err
@@ -46,8 +46,8 @@ func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 }
 
 // getCard fetches one card's computed view, unscoped by owner — callers
-// that need ownership enforced check it separately (cardOwned/
-// cardTypeOwned) before calling this.
+// that need ownership enforced check it separately (cardOwned) before
+// calling this.
 func (h *handler) getCard(id int64) (Card, error) {
 	row := h.db.QueryRow(cardsBaseQuery+" AND c.id = $1", id)
 	return scanCard(row)
@@ -127,11 +127,11 @@ func (h *handler) CreateCard(w http.ResponseWriter, r *http.Request) {
 	var c Card
 	var createdAt time.Time
 	err = tx.QueryRow(
-		`INSERT INTO cards (name, type, bank, last4, color, icon, credit_limit_cents, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		 RETURNING id, name, type, bank, last4, color, icon, credit_limit_cents, created_at`,
-		req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, creditLimit, userID,
-	).Scan(&c.ID, &c.Name, &c.Type, &c.Bank, &c.Last4, &c.Color, &c.Icon, &c.CreditLimitCents, &createdAt)
+		`INSERT INTO cards (name, bank, last4, color, icon, credit_limit_cents, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING id, name, bank, last4, color, icon, credit_limit_cents, created_at`,
+		req.Name, req.Bank, req.Last4, req.Color, req.Icon, creditLimit, userID,
+	).Scan(&c.ID, &c.Name, &c.Bank, &c.Last4, &c.Color, &c.Icon, &c.CreditLimitCents, &createdAt)
 	if err != nil {
 		log.Printf("finances: create card failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -189,10 +189,10 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 	// what's stored" — same convention as the rest of cardRequest's
 	// pointer fields (see its doc comment).
 	query := `UPDATE cards
-		 SET name = $1, type = $2, bank = $3, last4 = $4, color = $5, icon = $6,
-		     credit_limit_cents = COALESCE($7, credit_limit_cents)
-		 WHERE id = $8 AND deleted_at IS NULL`
-	args := []any{req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, req.CreditLimitCents, id}
+		 SET name = $1, bank = $2, last4 = $3, color = $4, icon = $5,
+		     credit_limit_cents = COALESCE($6, credit_limit_cents)
+		 WHERE id = $7 AND deleted_at IS NULL`
+	args := []any{req.Name, req.Bank, req.Last4, req.Color, req.Icon, req.CreditLimitCents, id}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += ` RETURNING id`
 
@@ -289,11 +289,7 @@ func (h *handler) cardOwned(id int64, role string, userID int64) error {
 }
 
 // CreateCardTransfer moves money between two of the caller's own cards in
-// one transaction row (from_card_id and to_card_id both set). Credit cards
-// are excluded on either side — money flowing INTO a credito card has no
-// spendable-balance representation (only used_credit), so both sides are
-// guarded by the shared rejectCreditCardForInflow helper, the same one
-// CreateTransaction uses for income-tagging.
+// one transaction row (from_card_id and to_card_id both set).
 func (h *handler) CreateCardTransfer(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -311,8 +307,7 @@ func (h *handler) CreateCardTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fromType, err := h.cardTypeOwned(req.FromCardID, role, userID)
-	if err == sql.ErrNoRows {
+	if err := h.cardOwned(req.FromCardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	} else if err != nil {
@@ -320,24 +315,12 @@ func (h *handler) CreateCardTransfer(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
-	toType, err := h.cardTypeOwned(req.ToCardID, role, userID)
-	if err == sql.ErrNoRows {
+	if err := h.cardOwned(req.ToCardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	} else if err != nil {
 		log.Printf("finances: create card transfer failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-		return
-	}
-	// Both sides are inflow-equivalent (a transfer credits one card), so
-	// the shared credito-inflow guard applies symmetrically: reject if
-	// either the source or the destination is a credito card.
-	if err := rejectCreditCardForInflow(fromType); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-		return
-	}
-	if err := rejectCreditCardForInflow(toType); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
@@ -361,7 +344,7 @@ func (h *handler) CreateCardTransfer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	balanceCents, _, _, err := cardBalance(tx, req.FromCardID, 0)
+	balanceCents, _, err := cardBalance(tx, req.FromCardID, 0)
 	if err != nil {
 		log.Printf("finances: create card transfer balance check failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")

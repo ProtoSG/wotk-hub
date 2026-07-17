@@ -37,18 +37,22 @@ func scanTransaction(row interface{ Scan(...any) error }) (Transaction, error) {
 
 // cardBalance locks the card row (a pure mutex — balance isn't stored on it
 // anymore, see Card in types.go) and returns its live-computed balance and
-// used-credit, excluding excludeTxID if given (0 = exclude nothing).
-// Excluding the transaction being edited is what makes UpdateTransaction's
-// balance check correct: without it, a transaction's own prior amount would
-// be double-counted against itself. Returns sql.ErrNoRows if the card
-// doesn't exist or is archived.
-func cardBalance(tx *sql.Tx, cardID int64, excludeTxID int64) (balanceCents, usedCreditCents int64, cardType string, err error) {
+// used-credit, excluding excludeTxID if given (0 = exclude nothing). Every
+// expense deducts from balance; when the card carries a credit limit
+// (credit_limit_cents > 0), the same expense also accrues used_credit —
+// credit tracking is now inferred purely from credit_limit_cents, not from
+// a card type. Excluding the transaction being edited is what makes
+// UpdateTransaction's balance check correct: without it, a transaction's
+// own prior amount would be double-counted against itself. Returns
+// sql.ErrNoRows if the card doesn't exist or is archived.
+func cardBalance(tx *sql.Tx, cardID int64, excludeTxID int64) (balanceCents, usedCreditCents int64, err error) {
+	var creditLimitCents int64
 	err = tx.QueryRow(
-		`SELECT type FROM cards WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		`SELECT credit_limit_cents FROM cards WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
 		cardID,
-	).Scan(&cardType)
+	).Scan(&creditLimitCents)
 	if err != nil {
-		return 0, 0, "", err
+		return 0, 0, err
 	}
 
 	err = tx.QueryRow(
@@ -56,32 +60,20 @@ func cardBalance(tx *sql.Tx, cardID int64, excludeTxID int64) (balanceCents, use
 		   COALESCE(SUM(CASE
 		     WHEN to_card_id = $1 THEN amount_cents
 		     WHEN from_card_id = $1 THEN -amount_cents
-		     WHEN card_id = $1 AND type = 'income'  AND $2 != 'credito' THEN amount_cents
-		     WHEN card_id = $1 AND type = 'expense' AND $2 != 'credito' THEN -amount_cents
+		     WHEN card_id = $1 AND type = 'income'  THEN amount_cents
+		     WHEN card_id = $1 AND type = 'expense' THEN -amount_cents
 		     ELSE 0
 		   END), 0),
 		   COALESCE(SUM(CASE
-		     WHEN card_id = $1 AND type = 'expense' AND $2 = 'credito' THEN amount_cents
+		     WHEN card_id = $1 AND type = 'expense' AND $2 > 0 THEN amount_cents
 		     ELSE 0
 		   END), 0)
 		 FROM transactions
 		 WHERE deleted_at IS NULL AND id != $3
 		   AND (to_card_id = $1 OR from_card_id = $1 OR card_id = $1)`,
-		cardID, cardType, excludeTxID,
+		cardID, creditLimitCents, excludeTxID,
 	).Scan(&balanceCents, &usedCreditCents)
-	return balanceCents, usedCreditCents, cardType, err
-}
-
-// cardTypeOwned resolves the type of a card the caller is tagging a
-// transaction to. It is scoped: tagging a card you don't own, or one that's
-// been archived, must not work, and must not reveal that the card exists.
-func (h *handler) cardTypeOwned(cardID int64, role string, userID int64) (string, error) {
-	query := `SELECT type FROM cards WHERE id = $1 AND deleted_at IS NULL`
-	args := []any{cardID}
-	query, args = scopeToOwner(query, args, role, userID)
-	var t string
-	err := h.db.QueryRow(query, args...).Scan(&t)
-	return t, err
+	return balanceCents, usedCreditCents, err
 }
 
 // lockTransaction reads the row a write is about to change and holds it
@@ -179,23 +171,15 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// cardId is mandatory (see validate); always resolve the card so the
-	// credito inflow guard runs on the real type and a wrong-owner card
-	// surfaces as a clean 404 before the write opens.
-	cardType, err := h.cardTypeOwned(req.CardID, role, userID)
-	if err == sql.ErrNoRows {
+	// cardId is mandatory (see validate); always resolve ownership first so
+	// a wrong-owner card surfaces as a clean 404 before the write opens.
+	if err := h.cardOwned(req.CardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	} else if err != nil {
 		log.Printf("finances: create transaction failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
-	}
-	if req.Type == "income" {
-		if err := rejectCreditCardForInflow(cardType); err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-			return
-		}
 	}
 
 	tx, err := h.db.Begin()
@@ -207,13 +191,13 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	if req.Type == "expense" {
-		balanceCents, _, cardType, err := cardBalance(tx, req.CardID, 0)
+		balanceCents, _, err := cardBalance(tx, req.CardID, 0)
 		if err != nil {
 			log.Printf("finances: create transaction balance check failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
-		if cardType != cardTypeCredit && balanceCents < req.AmountCents {
+		if balanceCents < req.AmountCents {
 			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "saldo insuficiente en tarjeta")
 			return
 		}
@@ -268,22 +252,14 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	// The new card is resolved before opening the write so an unowned cardId
 	// is a clean 404 rather than a rolled-back write. validate already
-	// required cardId, so this always runs — and the credito inflow guard
-	// applies on income edits the same way create does.
-	cardType, err := h.cardTypeOwned(req.CardID, role, userID)
-	if err == sql.ErrNoRows {
+	// required cardId, so this always runs.
+	if err := h.cardOwned(req.CardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	} else if err != nil {
 		log.Printf("finances: update transaction failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
-	}
-	if req.Type == "income" {
-		if err := rejectCreditCardForInflow(cardType); err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-			return
-		}
 	}
 
 	tx, err := h.db.Begin()
@@ -310,13 +286,13 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Type == "expense" {
-		balanceCents, _, cardType, err := cardBalance(tx, req.CardID, id)
+		balanceCents, _, err := cardBalance(tx, req.CardID, id)
 		if err != nil {
 			log.Printf("finances: update transaction balance check failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
-		if cardType != cardTypeCredit && balanceCents < req.AmountCents {
+		if balanceCents < req.AmountCents {
 			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "saldo insuficiente en tarjeta")
 			return
 		}
@@ -454,11 +430,11 @@ func (h *handler) RefundTransaction(w http.ResponseWriter, r *http.Request) {
 	refundDesc := "Reembolso: " + old.Description
 	refundDate := time.Now().Format(dateLayout)
 
-	// The compensating income row is tagged to old.CardID, so under the
-	// mandatory-card model the cardBalance income branch (non-credito)
-	// repone the card's saldo automatically. Refund of a credito expense
-	// does not reduce used_credit_cents — a known edge deferred to the
-	// credit_lines split. See SPEC.md decision log (mandatory-card entry).
+	// The compensating income row is tagged to old.CardID, so cardBalance's
+	// income branch repone the card's saldo automatically. Refund of an
+	// expense on a card with a credit limit does not reduce
+	// used_credit_cents — a known edge deferred to the credit_lines split.
+	// See SPEC.md decision log (mandatory-card entry).
 	row := tx.QueryRow(
 		`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by, card_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)

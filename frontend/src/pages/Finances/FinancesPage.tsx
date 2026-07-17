@@ -26,10 +26,11 @@ const TABS = [
 ]
 
 // Page-level onboarding gate (spec finance-onboarding / design #40). Blocks
-// ALL Finances tabs until the owner has ≥1 non-credito active card. Credito
-// alone does not clear the gate (type !== 'credito' filter). Reuses the
-// existing listCards result + the CardFormFields body so the user creates
-// their first card inline without ever seeing the tabbed content.
+// ALL Finances tabs until the owner has ≥1 card with no credit limit
+// (creditLimitCents === 0). A card that has a credit limit alone does not
+// clear the gate (has-balance filter). Reuses the existing listCards result
+// + the CardFormFields body so the user creates their first card inline
+// without ever seeing the tabbed content.
 function OnboardingGate({ onSaved }: { onSaved: () => void }) {
   return (
     <CozyCard className="animate-card-in mx-auto mt-12 max-w-md">
@@ -38,13 +39,11 @@ function OnboardingGate({ onSaved }: { onSaved: () => void }) {
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">Para iniciar con tus finanzas</h2>
           <p className="text-sm text-muted-foreground">
-            Agregá una tarjeta de débito o prepago para empezar a registrar tus movimientos.
+            Agregá una tarjeta para empezar a registrar tus movimientos.
           </p>
         </div>
-        {/* blockCredit: a crédito card alone does NOT clear the gate, so we
-            don't offer it here — the user can add créditos later from Tarjetas. */}
         <div className="w-full text-left">
-          <CardFormFields onSaved={onSaved} blockCredit />
+          <CardFormFields onSaved={onSaved} />
         </div>
       </CardContent>
     </CozyCard>
@@ -80,7 +79,7 @@ export default function FinancesPage() {
   }, [loadCards])
 
   const nonCreditCardCount =
-    cards?.filter((c) => c.type !== 'credito').length ?? 0
+    cards?.filter((c) => c.creditLimitCents === 0).length ?? 0
   const gateActive = cards !== null && nonCreditCardCount === 0
 
   if (gateActive) {

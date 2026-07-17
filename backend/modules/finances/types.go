@@ -7,20 +7,18 @@ import (
 	"time"
 )
 
-// errCreditInflow is the shared sentinel rejecting income/transfer-inflow
-// targeting a credito card. A credito card has no spendable balance (only
-// used_credit), so tagging inflow to it is a domain error, not a silent
-// no-op. See rejectCreditCardForInflow.
-var errCreditInflow = errors.New("no se puede taggear ingresos a una tarjeta de crédito")
+// errCreditInflow is returned when an operation would move money into a
+// credito card, which is not allowed (credito cards only spend, never receive).
+var errCreditInflow = errors.New("credito card cannot receive funds")
 
-// rejectCreditCardForInflow is the ONE inflow guard shared by every handler
-// that accepts money flowing INTO a card: CreateTransaction (income) here,
-// CreateCardTransfer (both sides) in slice 1b. RefundTransaction is exempt
-// — it's an internal compensating ledger entry, not a user income-tag, and
-// the cardBalance CASE's credito predicate makes refund a no-op on credito
-// balance by construction. Returns nil for any non-credito card type.
+// cardTypeCredit is the literal stored in the DB for credit cards.
+const cardTypeCredit = "credito"
+
+// rejectCreditCardForInflow returns errCreditInflow if cardType is "credito",
+// as credito cards may not receive funds via income or card-to-card transfer.
+// nil is returned for debito, prepago, or empty (defensive).
 func rejectCreditCardForInflow(cardType string) error {
-	if cardType == cardTypeCredit {
+	if cardType == "credito" {
 		return errCreditInflow
 	}
 	return nil
@@ -198,7 +196,6 @@ func (r budgetRequest) validate(category string) error {
 type Card struct {
 	ID               int64  `json:"id"`
 	Name             string `json:"name"`
-	Type             string `json:"type"`
 	Bank             string `json:"bank"`
 	Last4            string `json:"last4"`
 	Color            string `json:"color"`
@@ -209,16 +206,11 @@ type Card struct {
 	CreatedAt        string `json:"createdAt"`
 }
 
-const cardTypeCredit = "credito"
-
-var cardTypes = []string{"debito", cardTypeCredit, "prepago"}
-
 // cardRequest leaves the balance fields as pointers so an omitted field means
 // "keep what's stored" rather than "set to zero" — the pre-existing card form
 // doesn't send them at all.
 type cardRequest struct {
 	Name                string `json:"name"`
-	Type                string `json:"type"`
 	Bank                string `json:"bank"`
 	Last4               string `json:"last4"`
 	Color               string `json:"color"`
@@ -230,9 +222,6 @@ type cardRequest struct {
 func (r cardRequest) validate() error {
 	if r.Name == "" {
 		return fmt.Errorf("name is required")
-	}
-	if !slices.Contains(cardTypes, r.Type) {
-		return fmt.Errorf("invalid type: %s", r.Type)
 	}
 	if r.InitialBalanceCents != nil && *r.InitialBalanceCents < 0 {
 		return fmt.Errorf("initialBalanceCents must not be negative")
@@ -318,8 +307,8 @@ type SavingsContribution struct {
 // DefaultCardID is required (not optional like Deadline) — a goal without a
 // card is pure bookkeeping with no ledger effect, and every goal is now a
 // real transfer target. validate() only checks it's present; confirming the
-// card is owned and non-credito needs a DB lookup, done in the handler
-// (same pattern as cardTypeOwned in transactions.go).
+// card is owned needs a DB lookup, done in the handler (see defaultCardOwned
+// in savings.go).
 type savingsGoalRequest struct {
 	Name          string  `json:"name"`
 	TargetCents   int64   `json:"targetCents"`

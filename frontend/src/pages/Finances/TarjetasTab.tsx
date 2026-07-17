@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
-import type { Card, CardType } from '@/types/finance.types'
+import type { Card } from '@/types/finance.types'
 import FloatingActionButton from './FloatingActionButton'
 
 const UNDO_WINDOW_MS = 4500
@@ -35,21 +35,8 @@ const CARD_COLORS = [
   '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6',
 ]
 
-const CARD_TYPES = [
-  { value: 'debito', label: 'Débito' },
-  { value: 'credito', label: 'Crédito' },
-  { value: 'prepago', label: 'Prepago' },
-]
-
-const TYPE_LABELS: Record<string, string> = {
-  debito: 'Débito',
-  credito: 'Crédito',
-  prepago: 'Prepago',
-}
-
 const cardSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
-  type: z.enum(['debito', 'credito', 'prepago']),
   bank: z.string(),
   last4: z.string().length(4, 'Debe tener 4 dígitos'),
   color: z.string(),
@@ -63,7 +50,6 @@ type CardFormValues = z.infer<typeof cardSchema>
 function cardDefaults(editCard?: Card): CardFormValues {
   return {
     name: editCard?.name ?? '',
-    type: editCard?.type ?? 'debito',
     bank: editCard?.bank ?? '',
     last4: editCard?.last4 ?? '',
     color: editCard?.color ?? CARD_COLORS[0],
@@ -77,17 +63,13 @@ interface CardFormFieldsProps {
   editCard?: Card
   onSaved: () => void
   onClose?: () => void
-  // When true, only débito/prepago are offered. Used by the onboarding gate
-  // (a crédito card alone does not clear the gate, so we prevent the user
-  // from locking themselves out by creating a crédito as their first card).
-  blockCredit?: boolean
 }
 
 // Reusable card form body. Rendered inside the CardForm Dialog (TarjetasTab)
 // and inline in the FinancesPage onboarding gate. Each open is a fresh mount
 // (see `key` in the Dialog wrapper) so defaultValues apply cleanly and no
 // manual reset effect is needed.
-export function CardFormFields({ editCard, onSaved, onClose, blockCredit }: CardFormFieldsProps) {
+export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsProps) {
   const { createCard, updateCard } = useFinanceApi()
   const [saving, setSaving] = useState(false)
 
@@ -103,17 +85,12 @@ export function CardFormFields({ editCard, onSaved, onClose, blockCredit }: Card
   })
 
   const color = watch('color')
-  const type = watch('type')
-  const availableTypes = blockCredit
-    ? CARD_TYPES.filter((t) => t.value !== 'credito')
-    : CARD_TYPES
 
   const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
     setSaving(true)
     try {
       const input = {
         name: values.name,
-        type: values.type,
         bank: values.bank,
         last4: values.last4,
         color: values.color,
@@ -149,22 +126,6 @@ export function CardFormFields({ editCard, onSaved, onClose, blockCredit }: Card
         {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
       </div>
       <div className="space-y-1">
-        <Label>Tipo</Label>
-        <Select value={type} onValueChange={(v) => setValue('type', v as CardType)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {availableTypes.map((t) => (
-              <SelectItem key={t.value} value={t.value}>
-                {t.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
-      </div>
-      <div className="space-y-1">
         <Label>Banco</Label>
         <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
       </div>
@@ -188,21 +149,19 @@ export function CardFormFields({ editCard, onSaved, onClose, blockCredit }: Card
           )}
         </div>
       )}
-      {type === 'credito' && (
-        <div className="space-y-1">
-          <Label>Límite de crédito</Label>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            {...register('creditLimit', { valueAsNumber: true })}
-            placeholder="0.00"
-          />
-          {errors.creditLimit && (
-            <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
-          )}
-        </div>
-      )}
+      <div className="space-y-1">
+        <Label>Límite de crédito (opcional)</Label>
+        <Input
+          type="number"
+          step="0.01"
+          min="0"
+          {...register('creditLimit', { valueAsNumber: true })}
+          placeholder="0.00"
+        />
+        {errors.creditLimit && (
+          <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
+        )}
+      </div>
       <div className="space-y-1">
         <Label>Color</Label>
         <div className="mt-1 flex flex-wrap gap-2">
@@ -285,8 +244,8 @@ interface TransferFormProps {
   cards: Card[]
 }
 
-// Only débito/prepago cards are valid on either side — matches the backend
-// restriction (a credit card has no spendable balance to move).
+// A card with a credit limit is a credit account with no spendable balance
+// to move — filter it from the transfer destinations list.
 function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormProps) {
   const { createCardTransfer } = useFinanceApi()
   const [saving, setSaving] = useState(false)
@@ -307,7 +266,7 @@ function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormP
     if (open) reset(transferDefaults())
   }, [open, reset])
 
-  const destinations = cards.filter((c) => c.id !== fromCard.id && c.type !== 'credito')
+  const destinations = cards.filter((c) => c.id !== fromCard.id && c.creditLimitCents === 0)
 
   const onSubmit: SubmitHandler<TransferFormValues> = async (values) => {
     setSaving(true)
@@ -486,9 +445,9 @@ export default function TarjetasTab() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card, i) => {
-            const isCredit = card.type === 'credito'
+            const hasCreditLimit = card.creditLimitCents > 0
             const utilization =
-              isCredit && card.creditLimitCents > 0
+              hasCreditLimit && card.creditLimitCents > 0
                 ? card.usedCreditCents / card.creditLimitCents
                 : 0
             const utilizationColor =
@@ -508,9 +467,9 @@ export default function TarjetasTab() {
                   <div>
                     <CardTitle className="text-sm font-medium">{card.name}</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      {TYPE_LABELS[card.type] ?? card.type}
-                      {card.bank ? ` · ${card.bank}` : ''}
-                      {card.last4 ? ` · ${card.last4}` : ''}
+                      {card.bank ? `${card.bank}` : ''}
+                      {card.bank && card.last4 ? ` · ` : ''}
+                      {card.last4 ? `${card.last4}` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -545,7 +504,7 @@ export default function TarjetasTab() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-end justify-between">
-                    {isCredit ? (
+                    {hasCreditLimit ? (
                       <div className="flex flex-col gap-1">
                         <p className="text-sm text-muted-foreground">
                           Usado:{' '}
@@ -564,7 +523,7 @@ export default function TarjetasTab() {
                       <p className="text-2xl font-bold">{formatPEN(card.balanceCents)}</p>
                     )}
                     <div className="flex gap-1">
-                      {!isCredit && (
+                      {!hasCreditLimit && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -580,7 +539,7 @@ export default function TarjetasTab() {
                       )}
                     </div>
                   </div>
-                  {isCredit && card.creditLimitCents > 0 && (
+                  {hasCreditLimit && card.creditLimitCents > 0 && (
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Límite: {formatPEN(card.creditLimitCents)}</span>

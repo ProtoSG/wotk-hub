@@ -122,20 +122,11 @@ export interface FinanceSummary {
   categoryBreakdown: CategoryAmount[]
 }
 
-export type CardType = 'debito' | 'credito' | 'prepago'
-
-export const CARD_TYPE_LABELS: Record<CardType, string> = {
-  debito: 'Débito',
-  credito: 'Crédito',
-  prepago: 'Prepago',
-}
-
 // balanceCents/usedCreditCents are computed by the backend from the
 // transaction ledger, not stored — same shape as before, different source.
 export interface Card {
   id: number
   name: string
-  type: CardType
   bank: string
   last4: string
   color: string
@@ -148,7 +139,6 @@ export interface Card {
 
 export interface CardInput {
   name: string
-  type: CardType
   bank: string
   last4: string
   color: string
