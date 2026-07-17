@@ -88,8 +88,10 @@ function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormProps) {
   const color = watch('color')
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
     listCards().then(setCards).catch(() => setCards([]))
-  }, [listCards])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (open) reset(defaults(editGoal))
@@ -362,7 +364,9 @@ export default function MetasTab() {
 
   const load = useCallback(async () => {
     try {
-      setGoals(await listGoals())
+      const [goalsData, cardsData] = await Promise.all([listGoals(), listCards()])
+      setGoals(goalsData)
+      setCards(cardsData)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las metas')
     }
@@ -372,8 +376,7 @@ export default function MetasTab() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
     load()
-    listCards().then(setCards).catch(() => setCards([]))
-  }, [load, listCards])
+  }, [load])
 
   const openDeleteDialog = (goal: SavingsGoal) => {
     setGoalToDelete(goal)

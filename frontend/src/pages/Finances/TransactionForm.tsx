@@ -79,7 +79,8 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
     if (open) {
       listCards().then(setCards).catch(() => setCards([]))
     }
-  }, [open, listCards])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   useEffect(() => {
     if (open) reset(defaults(editing))
