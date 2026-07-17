@@ -1,6 +1,7 @@
 package finances
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"workhub/httpx"
@@ -61,6 +62,14 @@ func (h *handler) UpsertBudget(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := req.validate(category); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.categoryExists(category, "expense"); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+category)
+		return
+	} else if err != nil {
+		log.Printf("finances: upsert budget category check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	var b Budget

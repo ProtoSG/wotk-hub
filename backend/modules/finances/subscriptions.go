@@ -181,6 +181,14 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
+	if err := h.categoryExists(req.Category, "expense"); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+req.Category)
+		return
+	} else if err != nil {
+		log.Printf("finances: create subscription category check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
 	// CardId is mandatory (see validate); always confirm the card exists
 	// and isn't archived before opening the write. A bogus or unowned card
 	// surfaces as a clean 404, not a FK violation 500.
@@ -221,6 +229,14 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	next, err := req.validate()
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.categoryExists(req.Category, "expense"); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+req.Category)
+		return
+	} else if err != nil {
+		log.Printf("finances: update subscription category check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {

@@ -3,7 +3,7 @@ package finances
 import (
 	"errors"
 	"fmt"
-	"slices"
+	"regexp"
 	"time"
 )
 
@@ -22,15 +22,6 @@ func rejectCreditCardForInflow(cardType string) error {
 		return errCreditInflow
 	}
 	return nil
-}
-
-var expenseCategories = []string{
-	"comida", "transporte", "vivienda", "servicios", "salud",
-	"educacion", "entretenimiento", "ropa", "suscripciones", "otros",
-}
-
-var incomeCategories = []string{
-	"sueldo", "freelance", "inversiones", "regalo", "otros",
 }
 
 const dateLayout = "2006-01-02"
@@ -77,6 +68,9 @@ type transactionRequest struct {
 // created through this request shape (the only transfer writers are
 // CreateCard's seed, CreateContribution, and CreateCardTransfer; the reload
 // writer was removed by the mandatory-card model — see SPEC.md decision log).
+// Category is checked for non-emptiness only — whether it actually exists
+// (and matches r.Type's kind) is a DB lookup, done by the handler via
+// categoryExists (see categories.go), since categories are now a real table.
 func (r transactionRequest) validate() (time.Time, error) {
 	if r.Type != "income" && r.Type != "expense" {
 		return time.Time{}, fmt.Errorf("invalid type: %s", r.Type)
@@ -84,12 +78,8 @@ func (r transactionRequest) validate() (time.Time, error) {
 	if r.AmountCents <= 0 {
 		return time.Time{}, fmt.Errorf("amountCents must be positive")
 	}
-	cats := expenseCategories
-	if r.Type == "income" {
-		cats = incomeCategories
-	}
-	if !slices.Contains(cats, r.Category) {
-		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
+	if r.Category == "" {
+		return time.Time{}, fmt.Errorf("category is required")
 	}
 	// Mandatory-card model: every income/expense must be tagged to a
 	// card. An omitted or non-positive cardId is rejected before the
@@ -143,8 +133,8 @@ func (r subscriptionRequest) validate() (time.Time, error) {
 	if r.Frequency != "weekly" && r.Frequency != "monthly" && r.Frequency != "yearly" {
 		return time.Time{}, fmt.Errorf("invalid frequency: %s", r.Frequency)
 	}
-	if !slices.Contains(expenseCategories, r.Category) {
-		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
+	if r.Category == "" {
+		return time.Time{}, fmt.Errorf("category is required")
 	}
 	// Mandatory-card model: every subscription is tied to a card so
 	// processDue's auto-charge always tags a real card_id. An omitted or
@@ -179,9 +169,12 @@ type budgetRequest struct {
 	MonthlyLimitCents int64 `json:"monthlyLimitCents"`
 }
 
+// validate checks the request shape only — whether category actually exists
+// as an expense category is a DB lookup, done by the handler via
+// categoryExists (see categories.go).
 func (r budgetRequest) validate(category string) error {
-	if !slices.Contains(expenseCategories, category) {
-		return fmt.Errorf("invalid category: %s", category)
+	if category == "" {
+		return fmt.Errorf("category is required")
 	}
 	if r.MonthlyLimitCents <= 0 {
 		return fmt.Errorf("monthlyLimitCents must be positive")
@@ -362,12 +355,49 @@ func (r savingsContributionRequest) validate() (time.Time, error) {
 	return d, nil
 }
 
+// Category is the single source of truth transactions/subscriptions/budgets
+// validate their category field against (see categoryExists in
+// categories.go). name is a slug, unique per kind — "otros" legitimately
+// exists as both an expense and an income category.
+type Category struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Label     string `json:"label"`
+	CreatedAt string `json:"createdAt"`
+}
+
+var categoryNameRe = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+type categoryRequest struct {
+	Name  string `json:"name"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+}
+
+func (r categoryRequest) validate() error {
+	if !categoryNameRe.MatchString(r.Name) {
+		return fmt.Errorf("name must be lowercase letters, numbers, or underscores")
+	}
+	if r.Kind != "income" && r.Kind != "expense" {
+		return fmt.Errorf("invalid kind: %s", r.Kind)
+	}
+	if r.Label == "" {
+		return fmt.Errorf("label is required")
+	}
+	return nil
+}
+
 // List response envelopes — one per endpoint, in place of an untyped
 // map[string]any so the JSON shape is declared once and checked at compile
 // time instead of by string key.
 
 type listTransactionsResponse struct {
 	Transactions []Transaction `json:"transactions"`
+}
+
+type listCategoriesResponse struct {
+	Categories []Category `json:"categories"`
 }
 
 type listSubscriptionsResponse struct {
