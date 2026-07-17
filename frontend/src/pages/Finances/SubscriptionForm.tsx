@@ -18,6 +18,7 @@ import {
   FREQUENCY_LABELS,
   type Subscription,
   type Frequency,
+  type Card,
 } from '@/types/finance.types'
 
 const schema = z.object({
@@ -27,6 +28,7 @@ const schema = z.object({
   category: z.string().min(1, 'Requerido'),
   nextBillingOn: z.string().min(1, 'Requerido'),
   active: z.boolean(),
+  cardId: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -47,6 +49,7 @@ function defaults(editing?: Subscription | null): FormValues {
         category: editing.category,
         nextBillingOn: editing.nextBillingOn,
         active: editing.active,
+        cardId: editing.cardId != null ? String(editing.cardId) : '',
       }
     : {
         name: '',
@@ -55,12 +58,14 @@ function defaults(editing?: Subscription | null): FormValues {
         category: 'suscripciones',
         nextBillingOn: new Date().toISOString().slice(0, 10),
         active: true,
+        cardId: '',
       }
 }
 
 export default function SubscriptionForm({ open, onClose, onSaved, editing }: Props) {
   const [saving, setSaving] = useState(false)
-  const { createSubscription, updateSubscription } = useFinanceApi()
+  const [cards, setCards] = useState<Card[]>([])
+  const { createSubscription, updateSubscription, listCards } = useFinanceApi()
 
   const {
     register,
@@ -75,12 +80,19 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
   })
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
+    listCards().then(setCards).catch(() => setCards([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     if (open) reset(defaults(editing))
   }, [open, editing, reset])
 
   const frequency = watch('frequency')
   const category = watch('category')
   const active = watch('active')
+  const cardId = watch('cardId')
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     setSaving(true)
@@ -92,6 +104,7 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
         category: values.category,
         nextBillingOn: values.nextBillingOn,
         active: values.active,
+        cardId: values.cardId ? parseInt(values.cardId, 10) : undefined,
       }
       if (editing) {
         await updateSubscription(editing.id, input)
@@ -166,6 +179,25 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
             {errors.nextBillingOn && (
               <p className="text-xs text-destructive">{errors.nextBillingOn.message}</p>
             )}
+          </div>
+          <div className="space-y-1">
+            <Label>Tarjeta (opcional)</Label>
+            <Select value={cardId ?? ''} onValueChange={(v) => setValue('cardId', v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sin tarjeta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Sin tarjeta</SelectItem>
+                {cards.map((card) => (
+                  <SelectItem key={card.id} value={card.id.toString()}>
+                    {card.name} ({card.last4})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Los cobros automáticos descontarán de esta tarjeta
+            </p>
           </div>
           <div className="flex items-center justify-between">
             <Label>Activa</Label>

@@ -80,6 +80,7 @@ export interface Subscription {
   category: string
   nextBillingOn: string // YYYY-MM-DD
   active: boolean
+  cardId?: number
   createdAt: string
 }
 
@@ -90,6 +91,7 @@ export interface SubscriptionInput {
   category: string
   nextBillingOn: string
   active: boolean
+  cardId?: number
 }
 
 export interface Budget {

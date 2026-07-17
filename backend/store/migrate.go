@@ -158,6 +158,11 @@ func Migrate(db *sql.DB) error {
 		// it, so the card used is known permanently even if the goal's
 		// default card changes later.
 		`ALTER TABLE savings_contributions ADD COLUMN IF NOT EXISTS transaction_id BIGINT REFERENCES transactions(id)`,
+		// Optional — a subscription's auto-charge tags the generated
+		// expense to this card (see processDue in subscriptions.go).
+		// Nullable: subscriptions with no card just generate an untagged
+		// expense, same as today.
+		`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS card_id BIGINT REFERENCES cards(id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
