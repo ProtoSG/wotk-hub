@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -291,6 +292,68 @@ export function ContributionForm({ open, onClose, onSuccess, goal }: Contributio
   )
 }
 
+interface DeleteGoalDialogProps {
+  open: boolean
+  onClose: () => void
+  onConfirm: () => void
+  goal: SavingsGoal | null
+}
+
+function DeleteGoalDialog({ open, onClose, onConfirm, goal }: DeleteGoalDialogProps) {
+  const [loading, setLoading] = useState(false)
+
+  const handleConfirm = async () => {
+    setLoading(true)
+    try {
+      await onConfirm()
+    } finally {
+      setLoading(false)
+      onClose()
+    }
+  }
+
+  const showWarning = goal != null && goal.currentCents > 0 && goal.defaultCardId != null
+
+  const formatPEN = (cents: number) =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(cents / 100)
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Eliminar meta</DialogTitle>
+          <DialogDescription>
+            Esta acción no se puede deshacer.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            ¿Estás seguro de que quieres eliminar la meta{' '}
+            <span className="font-medium text-foreground">{goal?.name}</span>?
+          </p>
+          {showWarning && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+              <span className="text-base">⚠️</span>
+              <span>
+                Esta meta tiene <strong>{formatPEN(goal!.currentCents)}</strong> acumulados.
+                Si la eliminas, <strong>NO</strong> se reintegrará a la tarjeta.
+              </span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="button" variant="destructive" onClick={handleConfirm} disabled={loading}>
+            {loading ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 interface MetasTabProps {
   goals: SavingsGoal[]
   onRefresh: () => void
@@ -303,6 +366,8 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null)
   const [editGoal, setEditGoal] = useState<SavingsGoal | undefined>()
   const [cards, setCards] = useState<Card[]>([])
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [goalToDelete, setGoalToDelete] = useState<SavingsGoal | null>(null)
 
   useEffect(() => {
     listCards().then(setCards).catch(() => {})
@@ -312,10 +377,15 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
   const formatPEN = (cents: number) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(cents / 100)
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar esta meta?')) return
+  const openDeleteDialog = (goal: SavingsGoal) => {
+    setGoalToDelete(goal)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!goalToDelete) return
     try {
-      await deleteGoal(id)
+      await deleteGoal(goalToDelete.id)
       toast.success('Meta eliminada')
       onRefresh()
     } catch {
@@ -410,7 +480,7 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
                     <Pencil className="w-3 h-3 text-muted-foreground" />
                   </button>
                   <button
-                    onClick={() => handleDelete(goal.id)}
+                    onClick={() => openDeleteDialog(goal)}
                     className="p-1 hover:bg-accent rounded"
                   >
                     <Trash2 className="w-3 h-3 text-destructive" />
@@ -500,6 +570,13 @@ export function MetasTab({ goals, onRefresh }: MetasTabProps) {
           goal={selectedGoal}
         />
       )}
+
+      <DeleteGoalDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleConfirmDelete}
+        goal={goalToDelete}
+      />
     </div>
   )
 }
