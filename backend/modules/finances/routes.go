@@ -19,6 +19,7 @@ func Routes(db *sql.DB) http.Handler {
 	r.Post("/transactions", h.CreateTransaction)
 	r.Put("/transactions/{id}", h.UpdateTransaction)
 	r.Delete("/transactions/{id}", h.DeleteTransaction)
+	r.Post("/transactions/{id}/refund", h.RefundTransaction)
 
 	r.Get("/subscriptions", h.ListSubscriptions)
 	r.Post("/subscriptions", h.CreateSubscription)

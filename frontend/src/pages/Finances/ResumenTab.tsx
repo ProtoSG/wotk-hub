@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Wallet, TrendingUp, TrendingDown, Repeat } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Repeat, CreditCard } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { useCountUp } from '@/hooks/useCountUp'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
-import type { FinanceSummary } from '@/types/finance.types'
+import type { FinanceSummary, Card } from '@/types/finance.types'
 import TrendChart from './TrendChart'
 import CategoryChart from './CategoryChart'
 
@@ -30,13 +30,15 @@ function AnimatedPEN({ cents }: { cents: number }) {
 export default function ResumenTab({ month }: Props) {
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [committed, setCommitted] = useState(0)
-  const { getSummary, listSubscriptions } = useFinanceApi()
+  const [cards, setCards] = useState<Card[]>([])
+  const { getSummary, listSubscriptions, listCards } = useFinanceApi()
 
   const load = useCallback(async () => {
     try {
-      const [s, subs] = await Promise.all([getSummary(month), listSubscriptions()])
+      const [s, subs, cardsData] = await Promise.all([getSummary(month), listSubscriptions(), listCards()])
       setSummary(s)
       setCommitted(subs.monthlyCommittedCents)
+      setCards(cardsData)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo cargar el resumen')
     }
@@ -92,6 +94,57 @@ export default function ResumenTab({ month }: Props) {
           </CozyCard>
         ))}
       </div>
+      {/* Saldos en tarjetas */}
+      {cards.length > 0 && (
+        <CozyCard className="animate-card-in" style={{ animationDelay: '200ms' }}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Saldos en tarjetas</CardTitle>
+            <CreditCard size={16} className="text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {cards.map((card) => (
+              <div key={card.id} className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {card.name} •• ••{card.last4}
+                </span>
+                <span className="font-medium">{formatPEN(card.balanceCents)}</span>
+              </div>
+            ))}
+            <div className="border-t pt-2 mt-2 flex justify-between font-semibold">
+              <span>Total en tarjetas</span>
+              <span>
+                {formatPEN(
+                  cards
+                    .filter((c) => c.type === 'debito' || c.type === 'prepago')
+                    .reduce((sum, c) => sum + c.balanceCents, 0)
+                )}
+              </span>
+            </div>
+            {summary && (
+              <div className="flex justify-between text-xs text-muted-foreground pt-1">
+                <span>Balance total:</span>
+                <span>{formatPEN(summary.balanceCents)}</span>
+              </div>
+            )}
+            {summary &&
+              (() => {
+                const debitTotal = cards
+                  .filter((c) => c.type === 'debito' || c.type === 'prepago')
+                  .reduce((sum, c) => sum + c.balanceCents, 0)
+                const diff = summary.balanceCents - debitTotal
+                if (diff !== 0) {
+                  return (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Sin asignar:</span>
+                      <span>{formatPEN(diff)}</span>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+          </CardContent>
+        </CozyCard>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
         <TrendChart data={summary?.monthlyTrend ?? []} />
         <CategoryChart data={summary?.categoryBreakdown ?? []} />
