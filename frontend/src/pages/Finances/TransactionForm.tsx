@@ -84,6 +84,8 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
   }, [open, editing, reset])
 
   const type = watch('type')
+  const category = watch('category')
+  const cardId = watch('cardId')
   const categories = type === 'income' ? categoriesByKind.income : categoriesByKind.expense
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
