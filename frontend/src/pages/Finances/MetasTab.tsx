@@ -272,6 +272,11 @@ export function ContributionForm({ open, onClose, onSuccess, goal }: Contributio
             <label className="text-sm font-medium">Fecha</label>
             <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
+          {!goal.defaultCardId && (
+            <div className="flex items-start gap-2 rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
+              ⚠️ Esta aportación no se descontará de ninguna tarjeta. Para descontar automáticamente, asigna una tarjeta predeterminada a esta meta.
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
