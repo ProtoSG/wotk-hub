@@ -37,8 +37,8 @@ export default function PresupuestosTab({ month }: Props) {
         setSearchParams({}, { replace: true })
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to handle ?new=1
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
+  }, [searchParams])
 
   const load = useCallback(async () => {
     try {
