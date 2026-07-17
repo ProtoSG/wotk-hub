@@ -3,7 +3,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, CreditCard, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, CreditCard, RefreshCw, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
@@ -278,11 +278,133 @@ function ReloadForm({ open, onClose, onSaved, card }: ReloadFormProps) {
   )
 }
 
+const transferSchema = z.object({
+  toCardId: z.string().min(1, 'Elegí una tarjeta destino'),
+  amount: z.number().positive('Debe ser mayor a 0'),
+  date: z.string().min(1, 'Requerido'),
+})
+
+type TransferFormValues = z.infer<typeof transferSchema>
+
+function transferDefaults(): TransferFormValues {
+  return {
+    toCardId: '',
+    amount: 0,
+    date: new Date().toISOString().split('T')[0],
+  }
+}
+
+interface TransferFormProps {
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+  fromCard: Card
+  cards: Card[]
+}
+
+// Only débito/prepago cards are valid on either side — matches the backend
+// restriction (a credit card has no spendable balance to move).
+function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormProps) {
+  const { createCardTransfer } = useFinanceApi()
+  const [saving, setSaving] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<TransferFormValues>({
+    resolver: zodResolver(transferSchema),
+    defaultValues: transferDefaults(),
+  })
+
+  useEffect(() => {
+    if (open) reset(transferDefaults())
+  }, [open, reset])
+
+  const destinations = cards.filter((c) => c.id !== fromCard.id && c.type !== 'credito')
+
+  const onSubmit: SubmitHandler<TransferFormValues> = async (values) => {
+    setSaving(true)
+    try {
+      await createCardTransfer({
+        fromCardId: fromCard.id,
+        toCardId: Number(values.toCardId),
+        amountCents: Math.round(values.amount * 100),
+        date: values.date,
+        note: '',
+      })
+      toast.success('Transferencia registrada')
+      onSaved()
+      onClose()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al transferir')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Transferir desde {fromCard.name}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1">
+            <Label>Tarjeta destino</Label>
+            <Select value={watch('toCardId')} onValueChange={(v) => setValue('toCardId', v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Elegí una tarjeta" />
+              </SelectTrigger>
+              <SelectContent>
+                {destinations.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name} ({c.last4})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.toCardId && <p className="text-xs text-destructive">{errors.toCardId.message}</p>}
+          </div>
+          <div className="space-y-1">
+            <Label>Monto (PEN)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              {...register('amount', { valueAsNumber: true })}
+              placeholder="0.00"
+            />
+            {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
+          </div>
+          <div className="space-y-1">
+            <Label>Fecha</Label>
+            <Input type="date" {...register('date')} />
+            {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Transfiriendo...' : 'Transferir'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function TarjetasTab() {
   const [cards, setCards] = useState<Card[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editCard, setEditCard] = useState<Card | undefined>()
   const [reloadOpen, setReloadOpen] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const { listCards, deleteCard } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
@@ -447,18 +569,34 @@ export default function TarjetasTab() {
                     ) : (
                       <p className="text-2xl font-bold">{formatPEN(card.balanceCents)}</p>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-xs"
-                      onClick={() => {
-                        setSelectedCard(card)
-                        setReloadOpen(true)
-                      }}
-                    >
-                      <RefreshCw className="mr-1 h-3 w-3" />
-                      Recargar
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs"
+                        onClick={() => {
+                          setSelectedCard(card)
+                          setReloadOpen(true)
+                        }}
+                      >
+                        <RefreshCw className="mr-1 h-3 w-3" />
+                        Recargar
+                      </Button>
+                      {!isCredit && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs"
+                          onClick={() => {
+                            setSelectedCard(card)
+                            setTransferOpen(true)
+                          }}
+                        >
+                          <ArrowLeftRight className="mr-1 h-3 w-3" />
+                          Transferir
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {isCredit && card.creditLimitCents > 0 && (
                     <div className="space-y-1">
@@ -488,6 +626,15 @@ export default function TarjetasTab() {
           onClose={() => setReloadOpen(false)}
           onSaved={load}
           card={selectedCard}
+        />
+      )}
+      {selectedCard && (
+        <TransferForm
+          open={transferOpen}
+          onClose={() => setTransferOpen(false)}
+          onSaved={load}
+          fromCard={selectedCard}
+          cards={cards}
         />
       )}
     </div>

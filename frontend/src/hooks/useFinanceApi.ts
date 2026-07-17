@@ -11,6 +11,7 @@ import type {
   CardInput,
   CardReload,
   CardReloadInput,
+  CardTransferInput,
   SavingsGoal,
   SavingsGoalInput,
   SavingsContribution,
@@ -120,6 +121,11 @@ export function useFinanceApi() {
     return res.data
   }
 
+  async function createCardTransfer(input: CardTransferInput): Promise<Transaction> {
+    const res = await api.post<Transaction>('/api/finances/cards/transfers', input)
+    return res.data
+  }
+
   async function listGoals(): Promise<SavingsGoal[]> {
     const res = await api.get<{ goals: SavingsGoal[] }>('/api/finances/savings-goals')
     return res.data.goals
@@ -174,6 +180,7 @@ export function useFinanceApi() {
     deleteCard,
     listReloads,
     createReload,
+    createCardTransfer,
     listGoals,
     createGoal,
     updateGoal,

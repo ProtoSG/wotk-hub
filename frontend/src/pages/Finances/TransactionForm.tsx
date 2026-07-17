@@ -41,7 +41,9 @@ interface Props {
 function defaults(editing?: Transaction | null): FormValues {
   return editing
     ? {
-        type: editing.type,
+        // editing always comes from Movimientos, which never lists transfer
+        // rows — this narrows TransactionKind back to the form's type.
+        type: editing.type === 'income' ? 'income' : 'expense',
         amount: centsToSoles(editing.amountCents),
         category: editing.category,
         date: editing.date,

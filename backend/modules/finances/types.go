@@ -17,6 +17,17 @@ var incomeCategories = []string{
 
 const dateLayout = "2006-01-02"
 
+// transactionTypeTransfer marks a row created by the reload, goal-
+// contribution, or card-to-card transfer flows — never user-selectable via
+// the generic transaction endpoints, see transactionRequest.validate.
+const transactionTypeTransfer = "transfer"
+
+// transferCategory is the single fixed category every transfer row gets.
+// Not user-chosen and not a per-flow taxonomy — the description field
+// carries the human-readable distinction ("Recarga: ...", "Aporte a
+// meta: ...", "Transferencia: ... → ...").
+const transferCategory = "transferencia"
+
 type Transaction struct {
 	ID          int64  `json:"id"`
 	Type        string `json:"type"`
@@ -25,6 +36,8 @@ type Transaction struct {
 	Description string `json:"description"`
 	Date        string `json:"date"`
 	CardID      *int64 `json:"cardId,omitempty"`
+	FromCardID  *int64 `json:"fromCardId,omitempty"`
+	ToCardID    *int64 `json:"toCardId,omitempty"`
 	CreatedAt   string `json:"createdAt"`
 }
 
@@ -37,6 +50,9 @@ type transactionRequest struct {
 	CardID      *int64 `json:"cardId"`
 }
 
+// validate only ever accepts income/expense — transfer rows are never
+// created through this request shape (see CreateReload, CreateContribution,
+// CreateCardTransfer, the only three places a transfer is written).
 func (r transactionRequest) validate() (time.Time, error) {
 	if r.Type != "income" && r.Type != "expense" {
 		return time.Time{}, fmt.Errorf("invalid type: %s", r.Type)
@@ -129,19 +145,22 @@ func (r budgetRequest) validate(category string) error {
 	return nil
 }
 
+// Card.BalanceCents/UsedCreditCents are computed live from transactions
+// (see cardBalance in transactions.go) — not stored columns. There is no
+// InitialBalanceCents anymore; a starting balance becomes a seed transfer
+// at creation time (see CreateCard).
 type Card struct {
-	ID                  int64  `json:"id"`
-	Name                string `json:"name"`
-	Type                string `json:"type"`
-	Bank                string `json:"bank"`
-	Last4               string `json:"last4"`
-	Color               string `json:"color"`
-	Icon                string `json:"icon"`
-	BalanceCents        int64  `json:"balanceCents"`
-	InitialBalanceCents int64  `json:"initialBalanceCents"`
-	CreditLimitCents    int64  `json:"creditLimitCents"`
-	UsedCreditCents     int64  `json:"usedCreditCents"`
-	CreatedAt           string `json:"createdAt"`
+	ID               int64  `json:"id"`
+	Name             string `json:"name"`
+	Type             string `json:"type"`
+	Bank             string `json:"bank"`
+	Last4            string `json:"last4"`
+	Color            string `json:"color"`
+	Icon             string `json:"icon"`
+	BalanceCents     int64  `json:"balanceCents"`
+	CreditLimitCents int64  `json:"creditLimitCents"`
+	UsedCreditCents  int64  `json:"usedCreditCents"`
+	CreatedAt        string `json:"createdAt"`
 }
 
 const cardTypeCredit = "credito"
@@ -178,37 +197,6 @@ func (r cardRequest) validate() error {
 	return nil
 }
 
-// cardDelta is a pending adjustment to one card's counters, accumulated before
-// being written so that reversing and re-applying the same card collapses into
-// a single UPDATE.
-type cardDelta struct {
-	balanceCents    int64
-	usedCreditCents int64
-}
-
-// cardAdjustment reports how a transaction moves the counters of the card it
-// is tagged to. Only expenses move a card: an income is not a reload, so
-// tagging one to a card records where the money landed without topping it up.
-// A credit card's expense draws down its limit instead of its balance.
-func cardAdjustment(cardType, txType string, amountCents int64) cardDelta {
-	if txType != "expense" {
-		return cardDelta{}
-	}
-	if cardType == cardTypeCredit {
-		return cardDelta{usedCreditCents: amountCents}
-	}
-	return cardDelta{balanceCents: -amountCents}
-}
-
-// reverse returns the adjustment that undoes d.
-func (d cardDelta) reverse() cardDelta {
-	return cardDelta{balanceCents: -d.balanceCents, usedCreditCents: -d.usedCreditCents}
-}
-
-func (d cardDelta) isZero() bool {
-	return d.balanceCents == 0 && d.usedCreditCents == 0
-}
-
 type CardReload struct {
 	ID          int64  `json:"id"`
 	CardID      int64  `json:"cardId"`
@@ -225,6 +213,31 @@ type cardReloadRequest struct {
 }
 
 func (r cardReloadRequest) validate() (time.Time, error) {
+	if r.AmountCents <= 0 {
+		return time.Time{}, fmt.Errorf("amountCents must be positive")
+	}
+	d, err := time.Parse(dateLayout, r.Date)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date: %s", r.Date)
+	}
+	return d, nil
+}
+
+type cardTransferRequest struct {
+	FromCardID  int64  `json:"fromCardId"`
+	ToCardID    int64  `json:"toCardId"`
+	AmountCents int64  `json:"amountCents"`
+	Date        string `json:"date"`
+	Note        string `json:"note"`
+}
+
+func (r cardTransferRequest) validate() (time.Time, error) {
+	if r.FromCardID <= 0 || r.ToCardID <= 0 {
+		return time.Time{}, fmt.Errorf("fromCardId and toCardId are required")
+	}
+	if r.FromCardID == r.ToCardID {
+		return time.Time{}, fmt.Errorf("no podés transferir a la misma tarjeta")
+	}
 	if r.AmountCents <= 0 {
 		return time.Time{}, fmt.Errorf("amountCents must be positive")
 	}
@@ -262,24 +275,31 @@ type SavingsGoal struct {
 	Deadline      string `json:"deadline,omitempty"`
 	Icon          string `json:"icon"`
 	Color         string `json:"color"`
-	DefaultCardID *int64 `json:"defaultCardId,omitempty"`
+	DefaultCardID int64  `json:"defaultCardId"`
 	CreatedBy     int64  `json:"createdBy"`
 	CreatedAt     string `json:"createdAt"`
 }
 
 type SavingsContribution struct {
-	ID          int64  `json:"id"`
-	GoalID      int64  `json:"goalId"`
-	AmountCents int64  `json:"amountCents"`
-	Date        string `json:"date"`
-	Note        string `json:"note,omitempty"`
-	CreatedBy   int64  `json:"createdBy"`
-	CreatedAt   string `json:"createdAt"`
+	ID            int64  `json:"id"`
+	GoalID        int64  `json:"goalId"`
+	AmountCents   int64  `json:"amountCents"`
+	Date          string `json:"date"`
+	Note          string `json:"note,omitempty"`
+	TransactionID *int64 `json:"transactionId,omitempty"`
+	CreatedBy     int64  `json:"createdBy"`
+	CreatedAt     string `json:"createdAt"`
 }
 
 // Deadline is a pointer so an omitted or empty field means "no deadline"
 // (SQL NULL) rather than the empty string, which Postgres rejects as a date
 // — see cardRequest's balance fields for the same pattern.
+//
+// DefaultCardID is required (not optional like Deadline) — a goal without a
+// card is pure bookkeeping with no ledger effect, and every goal is now a
+// real transfer target. validate() only checks it's present; confirming the
+// card is owned and non-credito needs a DB lookup, done in the handler
+// (same pattern as cardTypeOwned in transactions.go).
 type savingsGoalRequest struct {
 	Name          string  `json:"name"`
 	TargetCents   int64   `json:"targetCents"`
@@ -295,6 +315,9 @@ func (r savingsGoalRequest) validate() error {
 	}
 	if r.TargetCents <= 0 {
 		return fmt.Errorf("targetCents must be positive")
+	}
+	if r.DefaultCardID == nil || *r.DefaultCardID <= 0 {
+		return fmt.Errorf("defaultCardId is required")
 	}
 	if r.Deadline != nil && *r.Deadline != "" {
 		if _, err := time.Parse(dateLayout, *r.Deadline); err != nil {

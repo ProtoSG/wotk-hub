@@ -36,7 +36,7 @@ const schema = z.object({
   deadline: z.string().optional(),
   icon: z.string(),
   color: z.string(),
-  defaultCardId: z.string().optional(),
+  defaultCardId: z.string().min(1, 'Elegí una tarjeta'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -48,7 +48,7 @@ function defaults(editGoal?: SavingsGoal): FormValues {
     deadline: editGoal?.deadline ?? '',
     icon: editGoal?.icon ?? 'piggy-bank',
     color: editGoal?.color ?? GOAL_COLORS[0],
-    defaultCardId: editGoal?.defaultCardId?.toString() ?? '',
+    defaultCardId: editGoal ? String(editGoal.defaultCardId) : '',
   }
 }
 
@@ -104,7 +104,7 @@ function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormProps) {
       deadline: values.deadline || undefined,
       icon: values.icon,
       color: values.color,
-      defaultCardId: values.defaultCardId ? parseInt(values.defaultCardId, 10) : undefined,
+      defaultCardId: parseInt(values.defaultCardId, 10),
     }
     setSaving(true)
     try {
@@ -154,23 +154,27 @@ function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormProps) {
             <Input type="date" {...register('deadline')} />
           </div>
           <div className="space-y-1">
-            <Label>Tarjeta predeterminada (opcional)</Label>
+            <Label>Tarjeta predeterminada</Label>
             <Select
-              value={watch('defaultCardId') ?? ''}
-              onValueChange={(v) => setValue('defaultCardId', v || undefined)}
+              value={watch('defaultCardId')}
+              onValueChange={(v) => setValue('defaultCardId', v)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Sin tarjeta predeterminada" />
+                <SelectValue placeholder="Elegí una tarjeta" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin tarjeta predeterminada</SelectItem>
-                {cards.map((card) => (
-                  <SelectItem key={card.id} value={card.id.toString()}>
-                    {card.name} ({card.last4})
-                  </SelectItem>
-                ))}
+                {cards
+                  .filter((card) => card.type !== 'credito')
+                  .map((card) => (
+                    <SelectItem key={card.id} value={card.id.toString()}>
+                      {card.name} ({card.last4})
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+            {errors.defaultCardId && (
+              <p className="text-xs text-destructive">{errors.defaultCardId.message}</p>
+            )}
             <p className="mt-1 text-xs text-muted-foreground">
               Las aportaciones descontarán de esta tarjeta automáticamente
             </p>
@@ -274,12 +278,6 @@ function ContributionForm({ open, onClose, onSaved, goal }: ContributionFormProp
             <Label>Fecha</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
-          {!goal.defaultCardId && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-              ⚠️ Esta aportación no se descontará de ninguna tarjeta. Para descontar
-              automáticamente, asigna una tarjeta predeterminada a esta meta.
-            </div>
-          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
@@ -457,9 +455,10 @@ export default function MetasTab() {
             {goals.map((goal, i) => {
               const progress = Math.min((goal.currentCents / goal.targetCents) * 100, 100)
               const remaining = goal.targetCents - goal.currentCents
-              const card = goal.defaultCardId != null
-                ? cards.find((c) => c.id === goal.defaultCardId)
-                : undefined
+              // Every goal has a defaultCardId now — if it's missing from
+              // cards, the card was archived after being assigned (Tarjetas
+              // list only returns active cards), not that the goal has none.
+              const card = cards.find((c) => c.id === goal.defaultCardId)
 
               return (
                 <CozyCard
@@ -531,7 +530,7 @@ export default function MetasTab() {
                     ) : (
                       <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
                         <CreditCard className="h-3 w-3" />
-                        <span>Sin tarjeta — se descontará saldo general</span>
+                        <span>Tarjeta predeterminada eliminada — asigná una nueva</span>
                       </div>
                     )}
 

@@ -26,10 +26,13 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 
 	var s Summary
 
-	// All-time balance
+	// All-time balance. type != 'transfer' matters: a reload, goal
+	// contribution, or card-to-card transfer moves where money sits, not
+	// net worth — without this filter the ELSE branch below would wrongly
+	// subtract every transfer as if it were an expense.
 	balanceQuery, balanceArgs := scopeToOwner(
 		`SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount_cents ELSE -amount_cents END), 0)
-		 FROM transactions WHERE deleted_at IS NULL`, []any{}, role, userID)
+		 FROM transactions WHERE deleted_at IS NULL AND type != 'transfer'`, []any{}, role, userID)
 	err = h.db.QueryRow(balanceQuery, balanceArgs...).Scan(&s.BalanceCents)
 	if err != nil {
 		log.Printf("finances: summary balance query failed: %v", err)
@@ -60,9 +63,12 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 		s.MonthlyTrend[i] = TrendPoint{Month: m}
 		buckets[m] = &s.MonthlyTrend[i]
 	}
+	// type != 'transfer' here too — the Go loop below buckets anything
+	// that isn't "income" into ExpenseCents, so a transfer row would
+	// otherwise pollute the expense line of the chart.
 	trendQuery, trendArgs := scopeToOwner(
 		`SELECT to_char(date_trunc('month', occurred_on), 'YYYY-MM') AS m, type, SUM(amount_cents)
-		 FROM transactions WHERE deleted_at IS NULL AND occurred_on >= $1 AND occurred_on < $2`,
+		 FROM transactions WHERE deleted_at IS NULL AND type != 'transfer' AND occurred_on >= $1 AND occurred_on < $2`,
 		[]any{trendStart, end}, role, userID)
 	rows, err := h.db.Query(trendQuery+" GROUP BY m, type", trendArgs...)
 	if err != nil {

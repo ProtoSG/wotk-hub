@@ -32,6 +32,7 @@ func Routes(db *sql.DB) http.Handler {
 	r.Delete("/cards/{id}", h.DeleteCard)
 	r.Get("/cards/{id}/reloads", h.ListReloads)
 	r.Post("/cards/{id}/reloads", h.CreateReload)
+	r.Post("/cards/transfers", h.CreateCardTransfer)
 
 	r.Get("/savings-goals", h.ListGoals)
 	r.Post("/savings-goals", h.CreateGoal)

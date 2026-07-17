@@ -131,6 +131,33 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
 		`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+		// Unified transfer ledger: card reload, goal contribution, and
+		// card-to-card transfer all become type='transfer' transactions
+		// instead of three separate hand-mutated code paths. See SPEC.md.
+		`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check`,
+		`ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('income','expense','transfer'))`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS from_card_id BIGINT REFERENCES cards(id)`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS to_card_id BIGINT REFERENCES cards(id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_from_card_id ON transactions (from_card_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_to_card_id ON transactions (to_card_id)`,
+		// Card balance/used-credit stop being stored — computed live from
+		// transactions (see cardBalance in transactions.go).
+		// initial_balance_cents is replaced by a seed transfer at
+		// card-creation time.
+		`ALTER TABLE cards DROP COLUMN IF EXISTS balance_cents`,
+		`ALTER TABLE cards DROP COLUMN IF EXISTS initial_balance_cents`,
+		`ALTER TABLE cards DROP COLUMN IF EXISTS used_credit_cents`,
+		// card_reloads is replaced by transactions WHERE type='transfer'
+		// AND from_card_id IS NULL.
+		`DROP TABLE IF EXISTS card_reloads`,
+		// A goal without a card was pure bookkeeping with no ledger effect
+		// — every goal is now a real transfer target. Requires clean data
+		// (no existing NULL default_card_id rows).
+		`ALTER TABLE savings_goals ALTER COLUMN default_card_id SET NOT NULL`,
+		// Links each contribution to the transfer transaction that backed
+		// it, so the card used is known permanently even if the goal's
+		// default card changes later.
+		`ALTER TABLE savings_contributions ADD COLUMN IF NOT EXISTS transaction_id BIGINT REFERENCES transactions(id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
