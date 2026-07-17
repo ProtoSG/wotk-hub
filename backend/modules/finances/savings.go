@@ -73,7 +73,7 @@ func (h *handler) ListGoals(w http.ResponseWriter, r *http.Request) {
 		}
 		goals = append(goals, g)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"goals": goals})
+	httpx.WriteJSON(w, http.StatusOK, listGoalsResponse{Goals: goals})
 }
 
 // CreateGoal creates a new savings goal for the authenticated user.
@@ -183,7 +183,7 @@ func (h *handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "goal not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }
 
 // goalOwned checks that the goal exists, isn't archived, and is owned by the
@@ -240,7 +240,7 @@ func (h *handler) ListContributions(w http.ResponseWriter, r *http.Request) {
 		}
 		contributions = append(contributions, c)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"contributions": contributions})
+	httpx.WriteJSON(w, http.StatusOK, listContributionsResponse{Contributions: contributions})
 }
 
 // CreateContribution atomically inserts a contribution and updates the goal's current_cents.

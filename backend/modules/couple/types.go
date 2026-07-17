@@ -29,6 +29,10 @@ type Date struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
+type listDatesResponse struct {
+	Dates []Date `json:"dates"`
+}
+
 type dateRequest struct {
 	OccurredOn string `json:"occurredOn"`
 	Place      string `json:"place"`

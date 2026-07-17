@@ -165,7 +165,7 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 		transactions = append(transactions, t)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"transactions": transactions})
+	httpx.WriteJSON(w, http.StatusOK, listTransactionsResponse{Transactions: transactions})
 }
 
 // CreateTransaction always stamps created_by from the authenticated user —
@@ -421,7 +421,7 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }
 
 // RefundTransaction creates a new income transaction that reimburses an expense.

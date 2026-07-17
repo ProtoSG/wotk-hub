@@ -49,7 +49,7 @@ func (h *handler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 		}
 		budgets = append(budgets, b)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"budgets": budgets})
+	httpx.WriteJSON(w, http.StatusOK, listBudgetsResponse{Budgets: budgets})
 }
 
 func (h *handler) UpsertBudget(w http.ResponseWriter, r *http.Request) {
@@ -91,5 +91,5 @@ func (h *handler) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "budget not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }

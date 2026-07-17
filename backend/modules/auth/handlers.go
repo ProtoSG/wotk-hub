@@ -213,7 +213,7 @@ func (h *handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }
 
 func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +247,7 @@ func (h *handler) Logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	clearAuthCookies(w, h.secure)
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }
 
 func (h *handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +264,7 @@ func (h *handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clearAuthCookies(w, h.secure)
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }
 
 func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
@@ -287,7 +287,7 @@ func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	httpx.WriteJSON(w, http.StatusOK, deleteUserResponse{Deleted: true})
 }
 
 func (h *handler) ListUsers(w http.ResponseWriter, r *http.Request) {
@@ -299,21 +299,15 @@ func (h *handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var users []map[string]interface{}
+	users := []adminUserView{}
 	for rows.Next() {
-		var id int64
-		var name, email, role string
+		var u adminUserView
 		var createdAt []byte
-		if err := rows.Scan(&id, &name, &email, &role, &createdAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &createdAt); err != nil {
 			continue
 		}
-		users = append(users, map[string]interface{}{
-			"id":         id,
-			"name":       name,
-			"email":      email,
-			"role":       role,
-			"created_at": string(createdAt),
-		})
+		u.CreatedAt = string(createdAt)
+		users = append(users, u)
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, users)

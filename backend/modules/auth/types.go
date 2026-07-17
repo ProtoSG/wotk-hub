@@ -10,6 +10,20 @@ type User struct {
 	Role  string `json:"role"`
 }
 
+// adminUserView is the row shape ListUsers returns — includes created_at,
+// which the auth-safe User (used everywhere else) intentionally omits.
+type adminUserView struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at"`
+}
+
+type deleteUserResponse struct {
+	Deleted bool `json:"deleted"`
+}
+
 type registerRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`

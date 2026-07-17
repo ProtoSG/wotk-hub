@@ -52,7 +52,7 @@ func Connect(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, err.Error())
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Connection successful"})
+	httpx.WriteJSON(w, http.StatusOK, testConnectionResponse{Success: true, Message: "Connection successful"})
 }
 
 func Tables(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +76,7 @@ func Tables(w http.ResponseWriter, r *http.Request) {
 	if tables == nil {
 		tables = []string{}
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"tables": tables})
+	httpx.WriteJSON(w, http.StatusOK, listTablesResponse{Tables: tables})
 }
 
 func Schema(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +101,7 @@ func Schema(w http.ResponseWriter, r *http.Request) {
 	if cols == nil {
 		cols = []db.ColumnInfo{}
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"table": table, "columns": cols})
+	httpx.WriteJSON(w, http.StatusOK, tableSchemaResponse{Table: table, Columns: cols})
 }
 
 func Query(w http.ResponseWriter, r *http.Request) {
@@ -157,5 +157,5 @@ func Relationships(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, err.Error())
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"relationships": fks})
+	httpx.WriteJSON(w, http.StatusOK, listRelationshipsResponse{Relationships: fks})
 }

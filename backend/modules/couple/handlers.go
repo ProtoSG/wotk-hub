@@ -50,7 +50,7 @@ func (h *handler) ListDates(w http.ResponseWriter, r *http.Request) {
 		}
 		dates = append(dates, d)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"dates": dates})
+	httpx.WriteJSON(w, http.StatusOK, listDatesResponse{Dates: dates})
 }
 
 // CreateDate stamps created_by for provenance only (who logged it) — Citas
@@ -141,5 +141,5 @@ func (h *handler) DeleteDate(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "date not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }

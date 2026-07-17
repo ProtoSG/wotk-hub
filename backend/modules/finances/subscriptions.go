@@ -139,9 +139,9 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		}
 		subscriptions = append(subscriptions, s)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"subscriptions":         subscriptions,
-		"monthlyCommittedCents": committed,
+	httpx.WriteJSON(w, http.StatusOK, listSubscriptionsResponse{
+		Subscriptions:         subscriptions,
+		MonthlyCommittedCents: committed,
 	})
 }
 
@@ -247,5 +247,5 @@ func (h *handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }

@@ -72,7 +72,7 @@ func (h *handler) ListCards(w http.ResponseWriter, r *http.Request) {
 		}
 		cards = append(cards, c)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"cards": cards})
+	httpx.WriteJSON(w, http.StatusOK, listCardsResponse{Cards: cards})
 }
 
 // CreateCard always stamps created_by from the authenticated user. A card
@@ -192,7 +192,7 @@ func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }
 
 // cardOwned checks that the card exists, isn't archived, and is owned by the
@@ -249,7 +249,7 @@ func (h *handler) ListReloads(w http.ResponseWriter, r *http.Request) {
 		}
 		reloads = append(reloads, cr)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"reloads": reloads})
+	httpx.WriteJSON(w, http.StatusOK, listReloadsResponse{Reloads: reloads})
 }
 
 // CreateReload 404s if the card isn't owned by the caller, then atomically

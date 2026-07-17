@@ -329,3 +329,36 @@ func (r savingsContributionRequest) validate() (time.Time, error) {
 	}
 	return d, nil
 }
+
+// List response envelopes — one per endpoint, in place of an untyped
+// map[string]any so the JSON shape is declared once and checked at compile
+// time instead of by string key.
+
+type listTransactionsResponse struct {
+	Transactions []Transaction `json:"transactions"`
+}
+
+type listSubscriptionsResponse struct {
+	Subscriptions         []Subscription `json:"subscriptions"`
+	MonthlyCommittedCents int64          `json:"monthlyCommittedCents"`
+}
+
+type listBudgetsResponse struct {
+	Budgets []Budget `json:"budgets"`
+}
+
+type listCardsResponse struct {
+	Cards []Card `json:"cards"`
+}
+
+type listReloadsResponse struct {
+	Reloads []CardReload `json:"reloads"`
+}
+
+type listGoalsResponse struct {
+	Goals []SavingsGoal `json:"goals"`
+}
+
+type listContributionsResponse struct {
+	Contributions []SavingsContribution `json:"contributions"`
+}
