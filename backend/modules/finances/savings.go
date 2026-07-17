@@ -50,7 +50,7 @@ func (h *handler) ListGoals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at
-		FROM savings_goals WHERE 1=1`
+		FROM savings_goals WHERE deleted_at IS NULL`
 	args := []any{}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += " ORDER BY id DESC"
@@ -135,7 +135,7 @@ func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 
 	query := `UPDATE savings_goals
 		SET name = $1, target_cents = $2, deadline = $3, icon = $4, color = $5, default_card_id = $6
-		WHERE id = $7`
+		WHERE id = $7 AND deleted_at IS NULL`
 	args := []any{req.Name, req.TargetCents, req.normalizedDeadline(), req.Icon, req.Color, req.DefaultCardID, id}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += ` RETURNING id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at`
@@ -154,7 +154,8 @@ func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, g)
 }
 
-// DeleteGoal deletes a savings goal and its contributions.
+// DeleteGoal soft-deletes a savings goal — its contributions stay in place
+// for history, and default_card_id references keep resolving.
 func (h *handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -168,7 +169,7 @@ func (h *handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `DELETE FROM savings_goals WHERE id = $1`
+	query := `UPDATE savings_goals SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 
@@ -185,9 +186,10 @@ func (h *handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
-// goalOwned checks that the goal exists and is owned by the caller.
+// goalOwned checks that the goal exists, isn't archived, and is owned by the
+// caller.
 func (h *handler) goalOwned(id int64, role string, userID int64) error {
-	query := `SELECT id FROM savings_goals WHERE id = $1`
+	query := `SELECT id FROM savings_goals WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 	var got int64

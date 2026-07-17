@@ -29,7 +29,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	// All-time balance
 	balanceQuery, balanceArgs := scopeToOwner(
 		`SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount_cents ELSE -amount_cents END), 0)
-		 FROM transactions WHERE 1=1`, []any{}, role, userID)
+		 FROM transactions WHERE deleted_at IS NULL`, []any{}, role, userID)
 	err = h.db.QueryRow(balanceQuery, balanceArgs...).Scan(&s.BalanceCents)
 	if err != nil {
 		log.Printf("finances: summary balance query failed: %v", err)
@@ -42,7 +42,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 		`SELECT
 		   COALESCE(SUM(amount_cents) FILTER (WHERE type = 'income'), 0),
 		   COALESCE(SUM(amount_cents) FILTER (WHERE type = 'expense'), 0)
-		 FROM transactions WHERE occurred_on >= $1 AND occurred_on < $2`,
+		 FROM transactions WHERE deleted_at IS NULL AND occurred_on >= $1 AND occurred_on < $2`,
 		[]any{start, end}, role, userID)
 	err = h.db.QueryRow(monthQuery, monthArgs...).Scan(&s.MonthIncomeCents, &s.MonthExpenseCents)
 	if err != nil {
@@ -62,7 +62,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	}
 	trendQuery, trendArgs := scopeToOwner(
 		`SELECT to_char(date_trunc('month', occurred_on), 'YYYY-MM') AS m, type, SUM(amount_cents)
-		 FROM transactions WHERE occurred_on >= $1 AND occurred_on < $2`,
+		 FROM transactions WHERE deleted_at IS NULL AND occurred_on >= $1 AND occurred_on < $2`,
 		[]any{trendStart, end}, role, userID)
 	rows, err := h.db.Query(trendQuery+" GROUP BY m, type", trendArgs...)
 	if err != nil {
@@ -92,7 +92,7 @@ func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	catQuery, catArgs := scopeToOwner(
 		`SELECT category, SUM(amount_cents)
 		 FROM transactions
-		 WHERE type = 'expense' AND occurred_on >= $1 AND occurred_on < $2`,
+		 WHERE deleted_at IS NULL AND type = 'expense' AND occurred_on >= $1 AND occurred_on < $2`,
 		[]any{start, end}, role, userID)
 	catRows, err := h.db.Query(catQuery+" GROUP BY category ORDER BY 2 DESC", catArgs...)
 	if err != nil {

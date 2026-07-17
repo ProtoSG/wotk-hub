@@ -28,7 +28,7 @@ func (h *handler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 		`SELECT b.id, b.category, b.monthly_limit_cents, COALESCE(SUM(t.amount_cents), 0) AS spent
 		 FROM budgets b
 		 LEFT JOIN transactions t
-		   ON t.category = b.category AND t.type = 'expense'
+		   ON t.category = b.category AND t.type = 'expense' AND t.deleted_at IS NULL
 		  AND t.occurred_on >= $1 AND t.occurred_on < $2`,
 		[]any{start, end}, role, userID)
 	rows, err := h.db.Query(query+" GROUP BY b.id ORDER BY b.category", args...)

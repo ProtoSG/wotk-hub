@@ -62,10 +62,10 @@ func addDelta(deltas map[int64]cardDelta, cardID int64, d cardDelta) {
 }
 
 // cardTypeOwned resolves the type of a card the caller is tagging a
-// transaction to. It is scoped: tagging a card you don't own must not work,
-// and must not reveal that the card exists.
+// transaction to. It is scoped: tagging a card you don't own, or one that's
+// been archived, must not work, and must not reveal that the card exists.
 func (h *handler) cardTypeOwned(cardID int64, role string, userID int64) (string, error) {
-	query := `SELECT type FROM cards WHERE id = $1`
+	query := `SELECT type FROM cards WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{cardID}
 	query, args = scopeToOwner(query, args, role, userID)
 	var t string
@@ -87,7 +87,7 @@ func cardTypeByID(tx *sql.Tx, cardID int64) (string, error) {
 // commit, so a concurrent edit can't compute its card delta from stale
 // amounts. Returns the delta the stored row currently contributes to its card.
 func lockTransaction(tx *sql.Tx, id int64, role string, userID int64) (old Transaction, oldDelta cardDelta, err error) {
-	query := `SELECT ` + transactionColumns + ` FROM transactions WHERE id = $1`
+	query := `SELECT ` + transactionColumns + ` FROM transactions WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += ` FOR UPDATE`
@@ -124,7 +124,7 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	query := `SELECT ` + transactionColumns + `
-		FROM transactions WHERE 1=1`
+		FROM transactions WHERE deleted_at IS NULL`
 	args := []any{}
 
 	query, args = scopeToOwner(query, args, role, userID)
@@ -239,7 +239,11 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := applyCardDeltas(tx, map[int64]cardDelta{*req.CardID: delta}); err != nil {
+	deltas := map[int64]cardDelta{}
+	if req.CardID != nil {
+		deltas[*req.CardID] = delta
+	}
+	if err := applyCardDeltas(tx, deltas); err != nil {
 		log.Printf("finances: create transaction card adjustment failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
@@ -356,8 +360,8 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteTransaction 404s a guest trying to delete a transaction they don't
-// own. Deleting a tagged transaction gives the card back what the transaction
-// took from it.
+// own. Soft delete: the row stays for history, deleting a tagged transaction
+// still gives the card back what the transaction took from it.
 func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -389,7 +393,7 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `DELETE FROM transactions WHERE id = $1`
+	query := `UPDATE transactions SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 

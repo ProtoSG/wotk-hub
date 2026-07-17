@@ -122,6 +122,15 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE savings_contributions DROP CONSTRAINT IF EXISTS savings_contributions_goal_id_fkey`,
 		`ALTER TABLE savings_contributions ADD CONSTRAINT savings_contributions_goal_id_fkey
 			FOREIGN KEY (goal_id) REFERENCES savings_goals(id) ON DELETE CASCADE`,
+		// Soft delete for cards, savings_goals, and transactions: each is
+		// either referenced by other tables (cards, savings_goals) or is the
+		// financial ledger itself (transactions), so a hard delete either
+		// fights FK constraints or destroys audit history. Nullable
+		// timestamp, same pattern as refresh_tokens.revoked_at — NULL means
+		// active, non-null means deleted (and when).
+		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+		`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

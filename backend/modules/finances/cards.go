@@ -7,14 +7,7 @@ import (
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
-
-	"github.com/lib/pq"
 )
-
-// postgresForeignKeyViolation is the SQLSTATE code Postgres returns when a
-// delete is blocked by a referencing row (reloads, transactions, or a goal's
-// default card) — see DeleteCard.
-const postgresForeignKeyViolation = "23503"
 
 // cardColumns is the select list every card read shares, in the order
 // scanCard expects.
@@ -56,7 +49,7 @@ func (h *handler) ListCards(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT ` + cardColumns + `
-		FROM cards WHERE 1=1`
+		FROM cards WHERE deleted_at IS NULL`
 	args := []any{}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += " ORDER BY id DESC"
@@ -149,7 +142,7 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 
 	query := `UPDATE cards
 		 SET name = $1, type = $2, bank = $3, last4 = $4, color = $5, icon = $6
-		 WHERE id = $7`
+		 WHERE id = $7 AND deleted_at IS NULL`
 	args := []any{req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, id}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += ` RETURNING id, name, type, bank, last4, color, icon, balance_cents, initial_balance_cents, credit_limit_cents, used_credit_cents, created_at`
@@ -168,10 +161,11 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, c)
 }
 
-// DeleteCard 404s a guest trying to delete a card they don't own. Unlike
-// savings goals, a card's reloads and transactions are financial history
-// worth keeping — the delete is blocked (not cascaded) while anything still
-// references the card, with a clear 409 instead of a raw constraint error.
+// DeleteCard 404s a guest trying to delete a card they don't own. Soft
+// delete: a card's reloads and transactions are financial history worth
+// keeping, and other rows (transactions.card_id, savings_goals.default_card_id)
+// keep referencing it, so the row is archived (deleted_at set) instead of
+// removed.
 func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -184,16 +178,11 @@ func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `DELETE FROM cards WHERE id = $1`
+	query := `UPDATE cards SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 
 	res, err := h.db.Exec(query, args...)
-	if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == postgresForeignKeyViolation {
-		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
-			"no se puede eliminar: la tarjeta tiene movimientos, recargas o metas de ahorro asociadas")
-		return
-	}
 	if err != nil {
 		log.Printf("finances: delete card failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -206,10 +195,11 @@ func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
-// cardOwned checks that the card exists and is owned by the caller
-// (or the caller is admin), 404ing otherwise without revealing existence.
+// cardOwned checks that the card exists, isn't archived, and is owned by the
+// caller (or the caller is admin), 404ing otherwise without revealing
+// existence.
 func (h *handler) cardOwned(id int64, role string, userID int64) error {
-	query := `SELECT id FROM cards WHERE id = $1`
+	query := `SELECT id FROM cards WHERE id = $1 AND deleted_at IS NULL`
 	args := []any{id}
 	query, args = scopeToOwner(query, args, role, userID)
 	var got int64
