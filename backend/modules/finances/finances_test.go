@@ -174,6 +174,30 @@ func cardBalanceJSON(t *testing.T, db *sql.DB, cardID int64) int64 {
 	return 0
 }
 
+// cardStateJSON fetches one card's computed BalanceCents AND
+// UsedCreditCents via the live list endpoint (cardsBaseQuery CASE — the
+// mirrored read shape of cardBalance). Used by tests that need to assert
+// both fields at once (e.g. the credito refund edge: balance AND used
+// credit must stay unchanged).
+func cardStateJSON(t *testing.T, db *sql.DB, cardID int64) (balance, usedCredit int64) {
+	t.Helper()
+	w := do(t, db, http.MethodGet, "/cards", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /cards: %d %s", w.Code, w.Body.String())
+	}
+	var resp listCardsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode cards: %v", err)
+	}
+	for _, c := range resp.Cards {
+		if c.ID == cardID {
+			return c.BalanceCents, c.UsedCreditCents
+		}
+	}
+	t.Fatalf("card %d not found in list", cardID)
+	return 0, 0
+}
+
 // errBody extracts the APIError message from a response body (best effort).
 func errBody(w *httptest.ResponseRecorder) string {
 	var e struct {

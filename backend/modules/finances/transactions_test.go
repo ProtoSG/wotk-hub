@@ -167,6 +167,83 @@ func TestCreateTransaction_NonOwnedCardRejected(t *testing.T) {
 	}
 }
 
+// TestRefundTransaction_CreditoExpenseBalanceUnchanged locks the documented
+// ACCEPTED edge (design #40 / SPEC decision log): refunding an expense
+// originally tagged to a credito card INSERTs a new income row tagged to
+// that same credito card_id, but the cardBalance CASE's income branch is
+// guarded by `card_type != 'credito'`, so the credito card's computed
+// balance (and used_credit) stays UNCHANGED before vs after the refund.
+// The real fix (reducing used_credit on a credito-expense refund) is
+// deferred to the future credit_lines split; this test keeps the current
+// behavior pinned so a future change to the CASE trips it intentionally
+// rather than silently.
+func TestRefundTransaction_CreditoExpenseBalanceUnchanged(t *testing.T) {
+	db := setupTestDB(t)
+	resetFinanceTables(t, db)
+	cred := insertCard(t, db, "credito")
+
+	// Credito accepts an expense (no inflow guard on expense). Its balance
+	// stays 0 (credito has no spendable balance — only used_credit moves).
+	w := do(t, db, http.MethodPost, "/transactions", map[string]any{
+		"type": "expense", "amountCents": 300, "category": "comida",
+		"description": "cena credito", "date": "2026-07-17", "cardId": cred,
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create credito expense status = %d want 201 (body %s)", w.Code, w.Body.String())
+	}
+	var created struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode expense: %v", err)
+	}
+
+	// Baseline: balance 0, used_credit 300.
+	balanceBefore, usedBefore := cardStateJSON(t, db, cred)
+	if balanceBefore != 0 {
+		t.Fatalf("credito balance after expense = %d want 0 (credito has no spendable balance)", balanceBefore)
+	}
+	if usedBefore != 300 {
+		t.Fatalf("credito used_credit after expense = %d want 300", usedBefore)
+	}
+
+	// Refund the credito expense. Expects 201 (RefundTransaction only
+	// rejects non-expense rows; credito cards are not gated here — the
+	// inflow helper is NOT applied to refunds per design #40).
+	w = do(t, db, http.MethodPost, "/transactions/"+itoa(int(created.ID))+"/refund", nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("refund credito expense status = %d want 201 (body %s)", w.Code, w.Body.String())
+	}
+
+	// (a) The refund INSERTed a new income row tagged to the credito card.
+	var refundCardID int64
+	err := db.QueryRow(
+		`SELECT card_id FROM transactions
+		 WHERE deleted_at IS NULL AND type='income'
+		   AND card_id=$1 AND description LIKE 'Reembolso: %'
+		 ORDER BY id DESC LIMIT 1`,
+		cred,
+	).Scan(&refundCardID)
+	if err != nil {
+		t.Fatalf("querying refund income row tagged to credito card: %v (a refund income row tagged to the credito card must exist)", err)
+	}
+	if refundCardID != cred {
+		t.Fatalf("refund income row card_id=%d, want %d (must be tagged to the credito card)", refundCardID, cred)
+	}
+
+	// (b) Credito card's computed balance is UNCHANGED before vs after the
+	// refund — the income branch correctly skips credito. used_credit is
+	// also unchanged because the refund row is type='income', not 'expense'
+	// (the used-credit SUM only credits credito expenses).
+	balanceAfter, usedAfter := cardStateJSON(t, db, cred)
+	if balanceAfter != balanceBefore {
+		t.Fatalf("credito balance changed after refund: before=%d after=%d — income branch must skip credito", balanceBefore, balanceAfter)
+	}
+	if usedAfter != usedBefore {
+		t.Fatalf("credito used_credit changed after refund: before=%d after=%d — refund is income, not expense; used_credit must not reduce", usedBefore, usedAfter)
+	}
+}
+
 // --- DB-level CHECK constraint (independent of routing) ---
 
 // The CHECK on transactions.card_id is the DB backstop behind validate: it
