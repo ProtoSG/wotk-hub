@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
-import { CATEGORY_LABELS, type Budget } from '@/types/finance.types'
+import { type Budget } from '@/types/finance.types'
 import BudgetForm from './BudgetForm'
 
 interface Props {
@@ -154,7 +154,7 @@ export default function PresupuestosTab({ month }: Props) {
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">
-                    {CATEGORY_LABELS[b.category] ?? b.category}
+                    {b.category}
                   </CardTitle>
                   <div className="flex items-center gap-1">
                     {over && (
@@ -166,7 +166,7 @@ export default function PresupuestosTab({ month }: Props) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={`Editar presupuesto de ${CATEGORY_LABELS[b.category] ?? b.category}`}
+                      aria-label={`Editar presupuesto de ${b.category}`}
                       onClick={() => {
                         setEditing(b)
                         setFormOpen(true)
@@ -177,7 +177,7 @@ export default function PresupuestosTab({ month }: Props) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={`Eliminar presupuesto de ${CATEGORY_LABELS[b.category] ?? b.category}`}
+                      aria-label={`Eliminar presupuesto de ${b.category}`}
                       onClick={() => handleDelete(b)}
                     >
                       <Trash2 size={14} />

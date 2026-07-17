@@ -1,3 +1,4 @@
+import React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
@@ -26,12 +27,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { useCategories } from '@/hooks/useCategories'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
 import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  CATEGORY_LABELS,
   type Transaction,
   type TransactionType,
   type Card,
@@ -56,7 +55,17 @@ export default function MovimientosTab({ month }: Props) {
   const [isLoading, setIsLoading] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
   const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
+  const { data: categoriesByKind } = useCategories()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  // Build a name→label map from categories for display
+  const categoryLabelMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const c of [...(categoriesByKind?.expense ?? []), ...(categoriesByKind?.income ?? [])]) {
+      map[c.name] = c.label
+    }
+    return map
+  }, [categoriesByKind])
 
   // Open form when navigated with ?new=1
   useEffect(() => {
@@ -168,7 +177,12 @@ export default function MovimientosTab({ month }: Props) {
     }
   }
 
-  const allCategories = [...new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])]
+  const allCategoryOptions = [
+    ...(categoriesByKind?.expense ?? []),
+    ...(categoriesByKind?.income ?? []),
+  ]
+
+  const allCategories = allCategoryOptions.map((c) => c.name)
 
   const filteredTransactions = cardFilter == null
     ? transactions
@@ -193,9 +207,9 @@ export default function MovimientosTab({ month }: Props) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todas las categorías</SelectItem>
-            {allCategories.map((c) => (
-              <SelectItem key={c} value={c}>
-                {CATEGORY_LABELS[c] ?? c}
+            {allCategoryOptions.map((c) => (
+              <SelectItem key={c.name} value={c.name}>
+                {c.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -309,7 +323,7 @@ export default function MovimientosTab({ month }: Props) {
                         {t.type === 'income' ? 'Ingreso' : 'Gasto'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{CATEGORY_LABELS[t.category] ?? t.category}</TableCell>
+                    <TableCell>{categoryLabelMap[t.category] ?? t.category}</TableCell>
                     <TableCell className="max-w-64 truncate text-muted-foreground">
                       {t.description || '—'}
                     </TableCell>
@@ -431,7 +445,7 @@ export default function MovimientosTab({ month }: Props) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">
-                    {CATEGORY_LABELS[t.category] ?? t.category}
+                    {categoryLabelMap[t.category] ?? t.category}
                   </div>
                   <div className="truncate text-xs text-muted-foreground">
                     {t.description ? `${t.description} · ${t.date}` : t.date}

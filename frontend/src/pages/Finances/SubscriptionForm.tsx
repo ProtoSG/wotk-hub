@@ -11,10 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { useCategories } from '@/hooks/useCategories'
 import { solesToCents, centsToSoles } from '@/lib/currency'
 import {
-  EXPENSE_CATEGORIES,
-  CATEGORY_LABELS,
   FREQUENCY_LABELS,
   type Subscription,
   type Frequency,
@@ -66,6 +65,7 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
   const [saving, setSaving] = useState(false)
   const [cards, setCards] = useState<Card[]>([])
   const { createSubscription, updateSubscription, listCards } = useFinanceApi()
+  const { data: categoriesByKind, isLoading: categoriesLoading } = useCategories()
 
   const {
     register,
@@ -156,14 +156,14 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
           </div>
           <div className="space-y-1">
             <Label>Categoría</Label>
-            <Select value={category} onValueChange={(v) => setValue('category', v)}>
+            <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
               </SelectTrigger>
               <SelectContent>
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {CATEGORY_LABELS[c] ?? c}
+                {categoriesByKind.expense.map((c) => (
+                  <SelectItem key={c.id} value={c.name}>
+                    {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
