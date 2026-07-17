@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { useCategories } from '@/hooks/useCategories'
 import { solesToCents, centsToSoles } from '@/lib/currency'
-import { EXPENSE_CATEGORIES, CATEGORY_LABELS, type Budget } from '@/types/finance.types'
+import type { Budget } from '@/types/finance.types'
 
 const schema = z.object({
   category: z.string().min(1, 'Requerido'),
@@ -31,10 +32,11 @@ interface Props {
 export default function BudgetForm({ open, onClose, onSaved, editing, usedCategories }: Props) {
   const [saving, setSaving] = useState(false)
   const { upsertBudget } = useFinanceApi()
+  const { data: categoriesByKind, isLoading: categoriesLoading } = useCategories()
 
   const available = editing
-    ? [editing.category]
-    : EXPENSE_CATEGORIES.filter((c) => !usedCategories.includes(c))
+    ? categoriesByKind.expense.filter((c) => c.name === editing.category)
+    : categoriesByKind.expense.filter((c) => !usedCategories.includes(c.name))
 
   const {
     handleSubmit,
@@ -46,7 +48,7 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      category: editing?.category ?? available[0] ?? '',
+      category: editing?.category ?? available[0]?.name ?? '',
       limit: editing ? centsToSoles(editing.monthlyLimitCents) : 0,
     },
   })
@@ -54,7 +56,7 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
   useEffect(() => {
     if (open) {
       reset({
-        category: editing?.category ?? available[0] ?? '',
+        category: editing?.category ?? available[0]?.name ?? '',
         limit: editing ? centsToSoles(editing.monthlyLimitCents) : 0,
       })
     }
@@ -87,14 +89,18 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1">
             <Label>Categoría</Label>
-            <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={!!editing}>
+            <Select
+              value={category}
+              onValueChange={(v) => setValue('category', v)}
+              disabled={!!editing || categoriesLoading}
+            >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
               </SelectTrigger>
               <SelectContent>
                 {available.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {CATEGORY_LABELS[c] ?? c}
+                  <SelectItem key={c.id} value={c.name}>
+                    {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>

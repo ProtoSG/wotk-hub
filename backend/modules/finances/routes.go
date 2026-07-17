@@ -43,6 +43,11 @@ func Routes(db *sql.DB) http.Handler {
 	r.Put("/budgets/{category}", h.UpsertBudget)
 	r.Delete("/budgets/{category}", h.DeleteBudget)
 
+	r.Get("/categories", h.ListCategories)
+	r.Post("/categories", h.CreateCategory)
+	r.Put("/categories/{id}", h.UpdateCategory)
+	r.Delete("/categories/{id}", h.DeleteCategory)
+
 	r.Get("/summary", h.Summary)
 
 	return r

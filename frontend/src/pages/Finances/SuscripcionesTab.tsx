@@ -25,7 +25,7 @@ import {
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
-import { CATEGORY_LABELS, FREQUENCY_LABELS, type Subscription } from '@/types/finance.types'
+import { FREQUENCY_LABELS, type Subscription } from '@/types/finance.types'
 import SubscriptionForm from './SubscriptionForm'
 
 const UNDO_WINDOW_MS = 4500
@@ -195,7 +195,7 @@ export default function SuscripcionesTab() {
                 subscriptions.map((s) => (
                   <TableRow key={s.id} className={s.active ? '' : 'opacity-50'}>
                     <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell>{CATEGORY_LABELS[s.category] ?? s.category}</TableCell>
+                    <TableCell>{s.category}</TableCell>
                     <TableCell>{FREQUENCY_LABELS[s.frequency]}</TableCell>
                     <TableCell className="whitespace-nowrap">{s.nextBillingOn}</TableCell>
                     <TableCell className="text-right font-medium">{formatPEN(s.amountCents)}</TableCell>
@@ -263,7 +263,7 @@ export default function SuscripcionesTab() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{s.name}</div>
                   <div className="truncate text-xs text-muted-foreground">
-                    {CATEGORY_LABELS[s.category] ?? s.category} · {FREQUENCY_LABELS[s.frequency]}
+                    {s.category} · {FREQUENCY_LABELS[s.frequency]}
                   </div>
                   <div className="truncate text-xs text-muted-foreground">
                     Próximo cobro: {s.nextBillingOn}

@@ -10,15 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { useCategories } from '@/hooks/useCategories'
 import { solesToCents, centsToSoles } from '@/lib/currency'
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  CATEGORY_LABELS,
-  type Transaction,
-  type TransactionType,
-  type Card,
-} from '@/types/finance.types'
+import type { Transaction, TransactionType, Card } from '@/types/finance.types'
 
 const schema = z.object({
   type: z.enum(['income', 'expense']),
@@ -64,6 +58,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
   const [saving, setSaving] = useState(false)
   const [cards, setCards] = useState<Card[]>([])
   const { createTransaction, updateTransaction, listCards } = useFinanceApi()
+  const { data: categoriesByKind, isLoading: categoriesLoading } = useCategories()
 
   const {
     register,
@@ -91,7 +86,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
   const type = watch('type')
   const category = watch('category')
   const cardId = watch('cardId')
-  const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const categories = type === 'income' ? categoriesByKind.income : categoriesByKind.expense
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     setSaving(true)
@@ -154,14 +149,14 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
           </div>
           <div className="space-y-1">
             <Label>Categoría</Label>
-            <Select value={category} onValueChange={(v) => setValue('category', v)}>
+            <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {CATEGORY_LABELS[c] ?? c}
+                  <SelectItem key={c.id} value={c.name}>
+                    {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>

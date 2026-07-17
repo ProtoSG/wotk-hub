@@ -171,6 +171,15 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.categoryExists(req.Category, req.Type); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+req.Category)
+		return
+	} else if err != nil {
+		log.Printf("finances: create transaction category check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
 	// cardId is mandatory (see validate); always resolve ownership first so
 	// a wrong-owner card surfaces as a clean 404 before the write opens.
 	if err := h.cardOwned(req.CardID, role, userID); err == sql.ErrNoRows {
@@ -247,6 +256,15 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	date, err := req.validate()
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	if err := h.categoryExists(req.Category, req.Type); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+req.Category)
+		return
+	} else if err != nil {
+		log.Printf("finances: update transaction category check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 

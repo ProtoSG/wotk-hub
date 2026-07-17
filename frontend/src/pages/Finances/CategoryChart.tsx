@@ -3,7 +3,8 @@ import type { PieLabelRenderProps } from 'recharts'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { formatPEN } from '@/lib/currency'
-import { CATEGORY_LABELS, type CategoryAmount } from '@/types/finance.types'
+import type { CategoryAmount } from '@/types/finance.types'
+import { useCategories } from '@/hooks/useCategories'
 
 // Categorical chart palette — 8 slots, fixed order, never cycled. Two
 // adjacent pairs sit in the validator's WARN band, which is only legal
@@ -82,8 +83,15 @@ interface Props {
 }
 
 export default function CategoryChart({ data }: Props) {
+  const { data: categoriesByKind } = useCategories()
+
+  const categoryLabelMap: Record<string, string> = {}
+  for (const c of [...(categoriesByKind?.expense ?? []), ...(categoriesByKind?.income ?? [])]) {
+    categoryLabelMap[c.name] = c.label
+  }
+
   const chartData = foldIntoOtros(data).map((c) => ({
-    name: CATEGORY_LABELS[c.category] ?? c.category,
+    name: categoryLabelMap[c.category] ?? c.category,
     value: c.amountCents,
   }))
 

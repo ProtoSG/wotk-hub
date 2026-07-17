@@ -185,6 +185,39 @@ func Migrate(db *sql.DB) error {
 		// distinction. Credit tracking is inferred purely from
 		// credit_limit_cents > 0 (see cardBalance in transactions.go).
 		`ALTER TABLE cards DROP COLUMN IF EXISTS type`,
+		// Categories move from hardcoded Go slices to a real table so
+		// they're user-manageable (CRUD via UI, see
+		// modules/finances/categories.go). name is only unique per kind,
+		// not globally — "otros" legitimately exists as both an expense
+		// and an income category, same as the hardcoded lists it
+		// replaces. transactions/subscriptions/budgets.category stay
+		// plain TEXT (no FK): validated against this table at write
+		// time instead, same tradeoff already made for those columns.
+		`CREATE TABLE IF NOT EXISTS categories (
+			id         BIGSERIAL PRIMARY KEY,
+			name       TEXT NOT NULL,
+			kind       TEXT NOT NULL CHECK (kind IN ('income','expense')),
+			label      TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (name, kind)
+		)`,
+		`INSERT INTO categories (name, kind, label) VALUES
+			('comida', 'expense', 'Comida'),
+			('transporte', 'expense', 'Transporte'),
+			('vivienda', 'expense', 'Vivienda'),
+			('servicios', 'expense', 'Servicios'),
+			('salud', 'expense', 'Salud'),
+			('educacion', 'expense', 'Educación'),
+			('entretenimiento', 'expense', 'Entretenimiento'),
+			('ropa', 'expense', 'Ropa'),
+			('suscripciones', 'expense', 'Suscripciones'),
+			('otros', 'expense', 'Otros'),
+			('sueldo', 'income', 'Sueldo'),
+			('freelance', 'income', 'Freelance'),
+			('inversiones', 'income', 'Inversiones'),
+			('regalo', 'income', 'Regalo'),
+			('otros', 'income', 'Otros')
+			ON CONFLICT (name, kind) DO NOTHING`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
