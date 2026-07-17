@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CardContent } from '@/components/ui/card'
@@ -48,7 +49,7 @@ export default function MovimientosTab({ month }: Props) {
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const { listTransactions, deleteTransaction, listCards } = useFinanceApi()
+  const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
 
   const load = useCallback(async () => {
@@ -112,6 +113,31 @@ export default function MovimientosTab({ month }: Props) {
         },
       },
     })
+  }
+
+  const [refundTarget, setRefundTarget] = useState<Transaction | null>(null)
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false)
+  const [refunding, setRefunding] = useState(false)
+
+  function handleRefund(t: Transaction) {
+    setRefundTarget(t)
+    setRefundDialogOpen(true)
+  }
+
+  async function confirmRefund() {
+    if (!refundTarget) return
+    setRefunding(true)
+    try {
+      await refundTransaction(refundTarget.id)
+      toast.success('Gasto marcado como reembolsado')
+      setRefundDialogOpen(false)
+      setRefundTarget(null)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo marcar como reembolsado')
+    } finally {
+      setRefunding(false)
+    }
   }
 
   const allCategories = [...new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])]
@@ -248,6 +274,16 @@ export default function MovimientosTab({ month }: Props) {
                         >
                           <Trash2 size={14} />
                         </Button>
+                        {t.type === 'expense' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Marcar como reembolsado"
+                            onClick={() => handleRefund(t)}
+                          >
+                            <RotateCcw size={14} />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -321,6 +357,12 @@ export default function MovimientosTab({ month }: Props) {
                       <Trash2 className="h-4 w-4" />
                       Eliminar
                     </DropdownMenuItem>
+                    {t.type === 'expense' && (
+                      <DropdownMenuItem onClick={() => handleRefund(t)}>
+                        <RotateCcw className="h-4 w-4" />
+                        Marcar como reembolsado
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -335,6 +377,30 @@ export default function MovimientosTab({ month }: Props) {
         onSaved={load}
         editing={editing}
       />
+
+      <Dialog open={refundDialogOpen} onOpenChange={(v) => !v && setRefundDialogOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Marcar como reembolsado</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            ¿Marcar este gasto como reembolsado? Se creará una transacción de ingreso por{' '}
+            <strong>{refundTarget ? formatPEN(refundTarget.amountCents) : ''}</strong> en la misma
+            tarjeta.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            El reembolso agregará al balance total, pero no repondrá el saldo de la tarjeta.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRefundDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmRefund} disabled={refunding}>
+              {refunding ? 'Reembolsando…' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
