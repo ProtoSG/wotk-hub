@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CardContent } from '@/components/ui/card'
+import { CozyCard } from '@/components/ui/cozy-card'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
+import { useFinanceApi } from '@/hooks/useFinanceApi'
+import type { Card } from '@/types/finance.types'
 import MonthPicker from './MonthPicker'
 import ResumenTab from './ResumenTab'
 import MovimientosTab from './MovimientosTab'
 import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
-import TarjetasTab from './TarjetasTab'
+import TarjetasTab, { CardFormFields } from './TarjetasTab'
 import MetasTab from './MetasTab'
 
 const TABS = [
@@ -21,11 +25,72 @@ const TABS = [
   { value: 'metas', label: 'Metas', icon: PiggyBank },
 ]
 
+// Page-level onboarding gate (spec finance-onboarding / design #40). Blocks
+// ALL Finances tabs until the owner has ≥1 non-credito active card. Credito
+// alone does not clear the gate (type !== 'credito' filter). Reuses the
+// existing listCards result + the CardFormFields body so the user creates
+// their first card inline without ever seeing the tabbed content.
+function OnboardingGate({ onSaved }: { onSaved: () => void }) {
+  return (
+    <CozyCard className="animate-card-in mx-auto mt-12 max-w-md">
+      <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+        <CreditCard className="h-12 w-12 opacity-30" />
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Para iniciar con tus finanzas</h2>
+          <p className="text-sm text-muted-foreground">
+            Agregá una tarjeta de débito o prepago para empezar a registrar tus movimientos.
+          </p>
+        </div>
+        {/* blockCredit: a crédito card alone does NOT clear the gate, so we
+            don't offer it here — the user can add créditos later from Tarjetas. */}
+        <div className="w-full text-left">
+          <CardFormFields onSaved={onSaved} blockCredit />
+        </div>
+      </CardContent>
+    </CozyCard>
+  )
+}
+
 export default function FinancesPage() {
   const [month, setMonth] = useState(currentMonth())
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab') ?? ''
   const tab = TABS.some((t) => t.value === param) ? param : 'resumen'
+
+  // Gate state: null while cards are still loading so we don't flash the gate
+  // before the first listCards resolves.
+  const [cards, setCards] = useState<Card[] | null>(null)
+  const { listCards } = useFinanceApi()
+
+  const loadCards = useCallback(async () => {
+    try {
+      setCards(await listCards())
+    } catch (err) {
+      // Surface but lift the gate so the user isn't hard-blocked on a transient
+      // fetch failure (the backend deletes-last-card guard still protects).
+      setCards([])
+      console.error('listCards failed in FinancesPage gate:', err)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
+    loadCards()
+  }, [loadCards])
+
+  const nonCreditCardCount =
+    cards?.filter((c) => c.type !== 'credito').length ?? 0
+  const gateActive = cards !== null && nonCreditCardCount === 0
+
+  if (gateActive) {
+    return (
+      <div className="space-y-6 pb-24 sm:pb-0">
+        <h1 className="text-2xl font-bold">Finanzas</h1>
+        <OnboardingGate onSaved={loadCards} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 pb-24 sm:pb-0">

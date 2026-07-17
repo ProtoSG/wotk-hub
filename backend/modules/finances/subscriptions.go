@@ -76,7 +76,7 @@ func (h *handler) processDue() error {
 		frequency   string
 		category    string
 		next        time.Time
-		cardID      sql.NullInt64
+		cardID      int64 // NOT NULL in the DB since slice 1a — no Null path here
 	}
 	var dues []due
 	for rows.Next() {
@@ -95,6 +95,10 @@ func (h *handler) processDue() error {
 	// account goes negative. Blocking it here would silently skip a
 	// commitment that already happened while still advancing
 	// next_billing_on, which is worse than a card balance going negative.
+	//
+	// card_id is always bound: subscriptions.card_id is NOT NULL (slice 1a
+	// migration) and Create/Update enforce a valid cardId, so every due
+	// charge tags a real card — "no untagged money" holds for this path.
 	for _, d := range dues {
 		next := d.next
 		for !next.After(today) {
@@ -177,15 +181,16 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
-	if req.CardID != nil {
-		if err := h.subscriptionCardExists(*req.CardID); err == sql.ErrNoRows {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-			return
-		} else if err != nil {
-			log.Printf("finances: create subscription card check failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-			return
-		}
+	// CardId is mandatory (see validate); always confirm the card exists
+	// and isn't archived before opening the write. A bogus or unowned card
+	// surfaces as a clean 404, not a FK violation 500.
+	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: create subscription card check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
 	}
 	row := h.db.QueryRow(
 		`INSERT INTO subscriptions (name, amount_cents, frequency, category, next_billing_on, active, card_id)
@@ -218,15 +223,13 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
-	if req.CardID != nil {
-		if err := h.subscriptionCardExists(*req.CardID); err == sql.ErrNoRows {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-			return
-		} else if err != nil {
-			log.Printf("finances: update subscription card check failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-			return
-		}
+	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: update subscription card check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
 	}
 
 	var wasActive bool

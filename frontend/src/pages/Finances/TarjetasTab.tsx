@@ -3,7 +3,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, CreditCard, RefreshCw, ArrowLeftRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
@@ -60,13 +60,6 @@ const cardSchema = z.object({
 
 type CardFormValues = z.infer<typeof cardSchema>
 
-interface CardFormProps {
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
-  editCard?: Card
-}
-
 function cardDefaults(editCard?: Card): CardFormValues {
   return {
     name: editCard?.name ?? '',
@@ -80,14 +73,27 @@ function cardDefaults(editCard?: Card): CardFormValues {
   }
 }
 
-function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
+interface CardFormFieldsProps {
+  editCard?: Card
+  onSaved: () => void
+  onClose?: () => void
+  // When true, only débito/prepago are offered. Used by the onboarding gate
+  // (a crédito card alone does not clear the gate, so we prevent the user
+  // from locking themselves out by creating a crédito as their first card).
+  blockCredit?: boolean
+}
+
+// Reusable card form body. Rendered inside the CardForm Dialog (TarjetasTab)
+// and inline in the FinancesPage onboarding gate. Each open is a fresh mount
+// (see `key` in the Dialog wrapper) so defaultValues apply cleanly and no
+// manual reset effect is needed.
+export function CardFormFields({ editCard, onSaved, onClose, blockCredit }: CardFormFieldsProps) {
   const { createCard, updateCard } = useFinanceApi()
   const [saving, setSaving] = useState(false)
 
   const {
     register,
     handleSubmit,
-    reset,
     setValue,
     watch,
     formState: { errors },
@@ -98,10 +104,9 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
 
   const color = watch('color')
   const type = watch('type')
-
-  useEffect(() => {
-    if (open) reset(cardDefaults(editCard))
-  }, [open, editCard, reset])
+  const availableTypes = blockCredit
+    ? CARD_TYPES.filter((t) => t.value !== 'credito')
+    : CARD_TYPES
 
   const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
     setSaving(true)
@@ -117,7 +122,7 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
       }
       if (editCard) {
         // Balance isn't editable here — it's derived from transactions
-        // (recargas/gastos/transferencias), not a field you overwrite.
+        // (gastos/transferencias), not a field you overwrite.
         await updateCard(editCard.id, input)
         toast.success('Tarjeta actualizada')
       } else {
@@ -128,7 +133,7 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
         toast.success('Tarjeta creada')
       }
       onSaved()
-      onClose()
+      onClose?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
@@ -137,190 +142,120 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
   }
 
   return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <div className="space-y-1">
+        <Label>Nombre</Label>
+        <Input {...register('name')} placeholder="Ej: STM Lima, BCP Débito" />
+        {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+      </div>
+      <div className="space-y-1">
+        <Label>Tipo</Label>
+        <Select value={type} onValueChange={(v) => setValue('type', v as CardType)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {availableTypes.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
+      </div>
+      <div className="space-y-1">
+        <Label>Banco</Label>
+        <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
+      </div>
+      <div className="space-y-1">
+        <Label>Últimos 4 dígitos</Label>
+        <Input {...register('last4')} placeholder="1234" maxLength={4} />
+        {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
+      </div>
+      {!editCard && (
+        <div className="space-y-1">
+          <Label>Saldo inicial (opcional)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            {...register('initialBalance', { valueAsNumber: true })}
+            placeholder="0.00"
+          />
+          {errors.initialBalance && (
+            <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
+          )}
+        </div>
+      )}
+      {type === 'credito' && (
+        <div className="space-y-1">
+          <Label>Límite de crédito</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            {...register('creditLimit', { valueAsNumber: true })}
+            placeholder="0.00"
+          />
+          {errors.creditLimit && (
+            <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
+          )}
+        </div>
+      )}
+      <div className="space-y-1">
+        <Label>Color</Label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {CARD_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setValue('color', c)}
+              className="h-8 w-8 rounded-full border-2 transition-transform hover:scale-110"
+              style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
+            />
+          ))}
+        </div>
+        {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
+      </div>
+      <DialogFooter>
+        {onClose && (
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+        )}
+        <Button type="submit" disabled={saving}>
+          {saving ? 'Guardando...' : editCard ? 'Actualizar' : 'Crear'}
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+interface CardFormProps {
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+  editCard?: Card
+}
+
+function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
+  return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editCard ? 'Editar tarjeta' : 'Nueva tarjeta'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1">
-            <Label>Nombre</Label>
-            <Input {...register('name')} placeholder="Ej: STM Lima, BCP Débito" />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Tipo</Label>
-            <Select value={type} onValueChange={(v) => setValue('type', v as CardType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CARD_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Banco</Label>
-            <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
-          </div>
-          <div className="space-y-1">
-            <Label>Últimos 4 dígitos</Label>
-            <Input {...register('last4')} placeholder="1234" maxLength={4} />
-            {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
-          </div>
-          {!editCard && (
-            <div className="space-y-1">
-              <Label>Saldo inicial (opcional)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                {...register('initialBalance', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-              {errors.initialBalance && (
-                <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
-              )}
-            </div>
-          )}
-          {type === 'credito' && (
-            <div className="space-y-1">
-              <Label>Límite de crédito</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                {...register('creditLimit', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-              {errors.creditLimit && (
-                <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
-              )}
-            </div>
-          )}
-          <div className="space-y-1">
-            <Label>Color</Label>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {CARD_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setValue('color', c)}
-                  className="h-8 w-8 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
-                />
-              ))}
-            </div>
-            {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Guardando...' : editCard ? 'Actualizar' : 'Crear'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-const reloadSchema = z.object({
-  amount: z.number().positive('Debe ser mayor a 0'),
-  date: z.string().min(1, 'Requerido'),
-})
-
-type ReloadFormValues = z.infer<typeof reloadSchema>
-
-function reloadDefaults(): ReloadFormValues {
-  return {
-    amount: 0,
-    date: new Date().toISOString().split('T')[0],
-  }
-}
-
-interface ReloadFormProps {
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
-  card: Card
-}
-
-function ReloadForm({ open, onClose, onSaved, card }: ReloadFormProps) {
-  const { createReload } = useFinanceApi()
-  const [saving, setSaving] = useState(false)
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<ReloadFormValues>({
-    resolver: zodResolver(reloadSchema),
-    defaultValues: reloadDefaults(),
-  })
-
-  useEffect(() => {
-    if (open) reset(reloadDefaults())
-  }, [open, reset])
-
-  const onSubmit: SubmitHandler<ReloadFormValues> = async (values) => {
-    setSaving(true)
-    try {
-      await createReload(card.id, {
-        amountCents: Math.round(values.amount * 100),
-        date: values.date,
-        note: '',
-      })
-      toast.success('Recarga registrada')
-      onSaved()
-      onClose()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al recargar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Recargar {card.name}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1">
-            <Label>Monto (PEN)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0.01"
-              {...register('amount', { valueAsNumber: true })}
-              placeholder="0.00"
-            />
-            {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Fecha</Label>
-            <Input type="date" {...register('date')} />
-            {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Registrando...' : 'Recargar'}
-            </Button>
-          </DialogFooter>
-        </form>
+        {/* key forces a fresh mount every time the dialog opens, so useForm
+            defaultValues apply cleanly without a manual reset-on-open effect. */}
+        {open && (
+          <CardFormFields
+            key="open"
+            editCard={editCard}
+            onSaved={onSaved}
+            onClose={onClose}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -451,7 +386,6 @@ export default function TarjetasTab() {
   const [cards, setCards] = useState<Card[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editCard, setEditCard] = useState<Card | undefined>()
-  const [reloadOpen, setReloadOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const { listCards, deleteCard } = useFinanceApi()
@@ -559,6 +493,10 @@ export default function TarjetasTab() {
                 : 0
             const utilizationColor =
               utilization > 0.8 ? 'bg-destructive' : utilization > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+            // The backend rejects archiving your last active card with 409
+            // (cards.go DeleteCard). Disable the affordance here too so the
+            // user doesn't trip the failure — the helpful title explains why.
+            const isLastCard = cards.length === 1
 
             return (
               <CozyCard
@@ -590,8 +528,16 @@ export default function TarjetasTab() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={`Eliminar tarjeta ${card.name}`}
-                      onClick={() => handleDelete(card)}
+                      disabled={isLastCard}
+                      aria-label={
+                        isLastCard
+                          ? `No podés archivar tu última tarjeta activa`
+                          : `Eliminar tarjeta ${card.name}`
+                      }
+                      title={
+                        isLastCard ? 'No podés archivar tu última tarjeta activa' : undefined
+                      }
+                      onClick={() => !isLastCard && handleDelete(card)}
                     >
                       <Trash2 size={14} />
                     </Button>
@@ -618,18 +564,6 @@ export default function TarjetasTab() {
                       <p className="text-2xl font-bold">{formatPEN(card.balanceCents)}</p>
                     )}
                     <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs"
-                        onClick={() => {
-                          setSelectedCard(card)
-                          setReloadOpen(true)
-                        }}
-                      >
-                        <RefreshCw className="mr-1 h-3 w-3" />
-                        Recargar
-                      </Button>
                       {!isCredit && (
                         <Button
                           size="sm"
@@ -668,14 +602,6 @@ export default function TarjetasTab() {
       )}
 
       <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editCard={editCard} />
-      {selectedCard && (
-        <ReloadForm
-          open={reloadOpen}
-          onClose={() => setReloadOpen(false)}
-          onSaved={load}
-          card={selectedCard}
-        />
-      )}
       {selectedCard && (
         <TransferForm
           open={transferOpen}

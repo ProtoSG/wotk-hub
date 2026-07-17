@@ -56,6 +56,7 @@ func cardBalance(tx *sql.Tx, cardID int64, excludeTxID int64) (balanceCents, use
 		   COALESCE(SUM(CASE
 		     WHEN to_card_id = $1 THEN amount_cents
 		     WHEN from_card_id = $1 THEN -amount_cents
+		     WHEN card_id = $1 AND type = 'income'  AND $2 != 'credito' THEN amount_cents
 		     WHEN card_id = $1 AND type = 'expense' AND $2 != 'credito' THEN -amount_cents
 		     ELSE 0
 		   END), 0),
@@ -158,7 +159,9 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 // CreateTransaction always stamps created_by from the authenticated user —
 // provenance for admin, the ownership boundary guests are scoped by.
 // type='transfer' is rejected here: a transfer is only ever created as a
-// side effect of CreateReload, CreateContribution, or CreateCardTransfer.
+// side effect of CreateCard (seed), CreateContribution, or CreateCardTransfer —
+// the reload flow that used to write one was removed by the mandatory-card
+// model (see SPEC.md decision log).
 func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -176,13 +179,21 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.CardID != nil {
-		if _, err := h.cardTypeOwned(*req.CardID, role, userID); err == sql.ErrNoRows {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-			return
-		} else if err != nil {
-			log.Printf("finances: create transaction failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+	// cardId is mandatory (see validate); always resolve the card so the
+	// credito inflow guard runs on the real type and a wrong-owner card
+	// surfaces as a clean 404 before the write opens.
+	cardType, err := h.cardTypeOwned(req.CardID, role, userID)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: create transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if req.Type == "income" {
+		if err := rejectCreditCardForInflow(cardType); err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 			return
 		}
 	}
@@ -195,8 +206,8 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	if req.Type == "expense" && req.CardID != nil {
-		balanceCents, _, cardType, err := cardBalance(tx, *req.CardID, 0)
+	if req.Type == "expense" {
+		balanceCents, _, cardType, err := cardBalance(tx, req.CardID, 0)
 		if err != nil {
 			log.Printf("finances: create transaction balance check failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -256,14 +267,21 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The new card is resolved before opening the write so an unowned cardId
-	// is a clean 404 rather than a rolled-back write.
-	if req.CardID != nil {
-		if _, err := h.cardTypeOwned(*req.CardID, role, userID); err == sql.ErrNoRows {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-			return
-		} else if err != nil {
-			log.Printf("finances: update transaction failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+	// is a clean 404 rather than a rolled-back write. validate already
+	// required cardId, so this always runs — and the credito inflow guard
+	// applies on income edits the same way create does.
+	cardType, err := h.cardTypeOwned(req.CardID, role, userID)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: update transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if req.Type == "income" {
+		if err := rejectCreditCardForInflow(cardType); err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 			return
 		}
 	}
@@ -291,8 +309,8 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Type == "expense" && req.CardID != nil {
-		balanceCents, _, cardType, err := cardBalance(tx, *req.CardID, id)
+	if req.Type == "expense" {
+		balanceCents, _, cardType, err := cardBalance(tx, req.CardID, id)
 		if err != nil {
 			log.Printf("finances: update transaction balance check failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -436,10 +454,11 @@ func (h *handler) RefundTransaction(w http.ResponseWriter, r *http.Request) {
 	refundDesc := "Reembolso: " + old.Description
 	refundDate := time.Now().Format(dateLayout)
 
-	// Note: incomes with a cardId do not move the card's computed balance
-	// (only expenses and transfers do — see cardBalance). This is the
-	// documented limitation — the refund restores the ledger balance
-	// but does not reload the card.
+	// The compensating income row is tagged to old.CardID, so under the
+	// mandatory-card model the cardBalance income branch (non-credito)
+	// repone the card's saldo automatically. Refund of a credito expense
+	// does not reduce used_credit_cents — a known edge deferred to the
+	// credit_lines split. See SPEC.md decision log (mandatory-card entry).
 	row := tx.QueryRow(
 		`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by, card_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)

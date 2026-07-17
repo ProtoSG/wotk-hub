@@ -163,6 +163,24 @@ func Migrate(db *sql.DB) error {
 		// Nullable: subscriptions with no card just generate an untagged
 		// expense, same as today.
 		`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS card_id BIGINT REFERENCES cards(id)`,
+		// Mandatory card account model: income/expense transactions must
+		// be tagged to a card (card_id NOT NULL), while transfer rows
+		// (reload, goal contribution, card-to-card) legitimately leave
+		// card_id NULL — from_card_id/to_card_id carry the pair instead.
+		// A column-wide NOT NULL would break every transfer, so a CHECK
+		// encodes the real invariant. Subscriptions have no transfer path
+		// → straight NOT NULL. Truncate-first / no-backfill: finance
+		// tables are truncated before deploy so both constraints apply on
+		// clean data (any legacy NULL card_id rows are LOST, by
+		// convention).
+		`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_card_id_required_for_income_expense`,
+		`ALTER TABLE transactions ADD CONSTRAINT transactions_card_id_required_for_income_expense
+			CHECK (type = 'transfer' OR card_id IS NOT NULL)`,
+		`ALTER TABLE subscriptions ALTER COLUMN card_id SET NOT NULL`,
+		// card_reloads was already dropped at the unified-transfer-ledger
+		// migration above; DROP IF EXISTS is kept here as an idempotent
+		// safety net so a partially-migrated DB still converges.
+		`DROP TABLE IF EXISTS card_reloads`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

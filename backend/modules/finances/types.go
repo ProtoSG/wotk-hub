@@ -1,10 +1,30 @@
 package finances
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 )
+
+// errCreditInflow is the shared sentinel rejecting income/transfer-inflow
+// targeting a credito card. A credito card has no spendable balance (only
+// used_credit), so tagging inflow to it is a domain error, not a silent
+// no-op. See rejectCreditCardForInflow.
+var errCreditInflow = errors.New("no se puede taggear ingresos a una tarjeta de crédito")
+
+// rejectCreditCardForInflow is the ONE inflow guard shared by every handler
+// that accepts money flowing INTO a card: CreateTransaction (income) here,
+// CreateCardTransfer (both sides) in slice 1b. RefundTransaction is exempt
+// — it's an internal compensating ledger entry, not a user income-tag, and
+// the cardBalance CASE's credito predicate makes refund a no-op on credito
+// balance by construction. Returns nil for any non-credito card type.
+func rejectCreditCardForInflow(cardType string) error {
+	if cardType == cardTypeCredit {
+		return errCreditInflow
+	}
+	return nil
+}
 
 var expenseCategories = []string{
 	"comida", "transporte", "vivienda", "servicios", "salud",
@@ -41,18 +61,24 @@ type Transaction struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
+// transactionRequest is the write model: cardId is now MANDATORY for every
+// income/expense (validated here, enforced at the DB by a CHECK). Transfer
+// rows never go through this shape — the three transfer writers (reload,
+// contribution, card-to-card) insert directly with from_/to_card_id and a
+// NULL card_id, which the CHECK allows.
 type transactionRequest struct {
 	Type        string `json:"type"`
 	AmountCents int64  `json:"amountCents"`
 	Category    string `json:"category"`
 	Description string `json:"description"`
 	Date        string `json:"date"`
-	CardID      *int64 `json:"cardId"`
+	CardID      int64  `json:"cardId"`
 }
 
 // validate only ever accepts income/expense — transfer rows are never
-// created through this request shape (see CreateReload, CreateContribution,
-// CreateCardTransfer, the only three places a transfer is written).
+// created through this request shape (the only transfer writers are
+// CreateCard's seed, CreateContribution, and CreateCardTransfer; the reload
+// writer was removed by the mandatory-card model — see SPEC.md decision log).
 func (r transactionRequest) validate() (time.Time, error) {
 	if r.Type != "income" && r.Type != "expense" {
 		return time.Time{}, fmt.Errorf("invalid type: %s", r.Type)
@@ -67,8 +93,11 @@ func (r transactionRequest) validate() (time.Time, error) {
 	if !slices.Contains(cats, r.Category) {
 		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
 	}
-	if r.CardID != nil && *r.CardID <= 0 {
-		return time.Time{}, fmt.Errorf("invalid cardId")
+	// Mandatory-card model: every income/expense must be tagged to a
+	// card. An omitted or non-positive cardId is rejected before the
+	// handler opens a transaction. The DB CHECK backs this up.
+	if r.CardID <= 0 {
+		return time.Time{}, fmt.Errorf("cardId requerido")
 	}
 	d, err := time.Parse(dateLayout, r.Date)
 	if err != nil {
@@ -77,10 +106,13 @@ func (r transactionRequest) validate() (time.Time, error) {
 	return d, nil
 }
 
-// CardID is optional — a subscription doesn't have to be tied to a card,
-// same as a regular transaction. When set, processDue tags the generated
-// expense with it so the auto-charge draws down that card's computed
-// balance like any other expense.
+// Subscription.CardID stays *int64 on the READ model so scanSubscription
+// keeps its NullInt64 path (a transfer-shaped read extension won't trip
+// here, but the read shape stays stable across this slice — see
+// scanSubscription). On the WRITE model (subscriptionRequest below),
+// CardID is now int64 and mandatory: processDue always tags the generated
+// expense, and the subscriptions.card_id NOT NULL constraint (slice 1a
+// migration) backs this up at the DB.
 type Subscription struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
@@ -100,7 +132,7 @@ type subscriptionRequest struct {
 	Category      string `json:"category"`
 	NextBillingOn string `json:"nextBillingOn"`
 	Active        *bool  `json:"active"`
-	CardID        *int64 `json:"cardId"`
+	CardID        int64  `json:"cardId"`
 }
 
 func (r subscriptionRequest) validate() (time.Time, error) {
@@ -115,6 +147,14 @@ func (r subscriptionRequest) validate() (time.Time, error) {
 	}
 	if !slices.Contains(expenseCategories, r.Category) {
 		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
+	}
+	// Mandatory-card model: every subscription is tied to a card so
+	// processDue's auto-charge always tags a real card_id. An omitted or
+	// non-positive cardId is rejected before the handler opens a DB
+	// transaction; the subscriptions.card_id NOT NULL constraint (slice
+	// 1a migration) backs this up.
+	if r.CardID <= 0 {
+		return time.Time{}, fmt.Errorf("cardId requerido")
 	}
 	d, err := time.Parse(dateLayout, r.NextBillingOn)
 	if err != nil {
@@ -201,32 +241,6 @@ func (r cardRequest) validate() error {
 		return fmt.Errorf("creditLimitCents must not be negative")
 	}
 	return nil
-}
-
-type CardReload struct {
-	ID          int64  `json:"id"`
-	CardID      int64  `json:"cardId"`
-	AmountCents int64  `json:"amountCents"`
-	Date        string `json:"date"`
-	Note        string `json:"note"`
-	CreatedAt   string `json:"createdAt"`
-}
-
-type cardReloadRequest struct {
-	AmountCents int64  `json:"amountCents"`
-	Date        string `json:"date"`
-	Note        string `json:"note"`
-}
-
-func (r cardReloadRequest) validate() (time.Time, error) {
-	if r.AmountCents <= 0 {
-		return time.Time{}, fmt.Errorf("amountCents must be positive")
-	}
-	d, err := time.Parse(dateLayout, r.Date)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date: %s", r.Date)
-	}
-	return d, nil
 }
 
 type cardTransferRequest struct {
@@ -378,10 +392,6 @@ type listBudgetsResponse struct {
 
 type listCardsResponse struct {
 	Cards []Card `json:"cards"`
-}
-
-type listReloadsResponse struct {
-	Reloads []CardReload `json:"reloads"`
 }
 
 type listGoalsResponse struct {

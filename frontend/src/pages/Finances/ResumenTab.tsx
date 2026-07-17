@@ -57,12 +57,20 @@ export default function ResumenTab({ month }: Props) {
     load()
   }, [load])
 
+  // "Disponible" = netWorth (summary.balanceCents — transfer-agnostic, already
+// filters type != 'transfer') MINUS what's already committed to savings goals.
+// Computed frontend-side; no new backend endpoint (design #40 "Disponible").
+// Goal contributions visibly reduce this number because their `currentCents`
+// is subtracted from the spendable pool.
+  const goalsCommittedToCents = goals.reduce((sum, g) => sum + g.currentCents, 0)
+  const disponibleCents = summary ? summary.balanceCents - goalsCommittedToCents : 0
+
   const tiles: Tile[] = [
     {
-      label: 'Balance total',
-      cents: summary?.balanceCents ?? 0,
+      label: 'Disponible',
+      cents: disponibleCents,
       icon: Wallet,
-      color: summary ? (summary.balanceCents >= 0 ? 'text-income' : 'text-expense') : undefined,
+      color: disponibleCents >= 0 ? 'text-income' : 'text-expense',
       primary: true,
     },
     {
@@ -129,34 +137,19 @@ export default function ResumenTab({ month }: Props) {
             </div>
             {summary && (
               <div className="flex justify-between text-xs text-muted-foreground pt-1">
-                <span>Balance total:</span>
+                <span>Neto:</span>
                 <span>{formatPEN(summary.balanceCents)}</span>
               </div>
             )}
             {summary &&
-              (() => {
-                const debitTotal = cards
-                  .filter((c) => c.type === 'debito' || c.type === 'prepago')
-                  .reduce((sum, c) => sum + c.balanceCents, 0)
-                const savingsTotal = goals.reduce((sum, g) => sum + g.currentCents, 0)
-                const diff = summary.balanceCents - debitTotal - savingsTotal
-                return (
-                  <>
-                    {savingsTotal !== 0 && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>En metas de ahorro:</span>
-                        <span>{formatPEN(savingsTotal)}</span>
-                      </div>
-                    )}
-                    {diff !== 0 && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Sin asignar:</span>
-                        <span>{formatPEN(diff)}</span>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
+              // "Sin asignar" reconciliation removed (structurally impossible
+              // once every tx is tagged to a card; design #40 / explore R5).
+              goalsCommittedToCents !== 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>En metas de ahorro:</span>
+                  <span>{formatPEN(goalsCommittedToCents)}</span>
+                </div>
+              )}
           </CardContent>
         </CozyCard>
       )}

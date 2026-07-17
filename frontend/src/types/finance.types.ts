@@ -69,7 +69,9 @@ export interface TransactionInput {
   category: string
   description: string
   date: string
-  cardId?: number
+  // cardId is required: under the mandatory-card model every income/expense
+  // is tagged to a card. The backend rejects empty/<=0 with "cardId requerido".
+  cardId: number
 }
 
 export interface Subscription {
@@ -91,7 +93,7 @@ export interface SubscriptionInput {
   category: string
   nextBillingOn: string
   active: boolean
-  cardId?: number
+  cardId: number
 }
 
 export interface Budget {
@@ -153,21 +155,6 @@ export interface CardInput {
   icon: string
   initialBalanceCents?: number
   creditLimitCents?: number
-}
-
-export interface CardReload {
-  id: number
-  cardId: number
-  amountCents: number
-  date: string
-  note: string
-  createdAt: string
-}
-
-export interface CardReloadInput {
-  amountCents: number
-  date: string
-  note: string
 }
 
 export interface CardTransferInput {
