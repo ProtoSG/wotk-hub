@@ -69,7 +69,9 @@ export interface TransactionInput {
   category: string
   description: string
   date: string
-  cardId?: number
+  // cardId is required: under the mandatory-card model every income/expense
+  // is tagged to a card. The backend rejects empty/<=0 with "cardId requerido".
+  cardId: number
 }
 
 export interface Subscription {

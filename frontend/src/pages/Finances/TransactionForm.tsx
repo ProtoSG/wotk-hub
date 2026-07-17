@@ -26,7 +26,7 @@ const schema = z.object({
   category: z.string().min(1, 'Requerido'),
   date: z.string().min(1, 'Requerido'),
   description: z.string(),
-  cardId: z.string().optional(),
+  cardId: z.string().min(1, 'Elegí una tarjeta'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -48,7 +48,7 @@ function defaults(editing?: Transaction | null): FormValues {
         category: editing.category,
         date: editing.date,
         description: editing.description,
-        cardId: editing.cardId != null ? String(editing.cardId) : undefined,
+        cardId: editing.cardId != null ? String(editing.cardId) : '',
       }
     : {
         type: 'expense',
@@ -56,7 +56,7 @@ function defaults(editing?: Transaction | null): FormValues {
         category: 'comida',
         date: new Date().toISOString().slice(0, 10),
         description: '',
-        cardId: undefined,
+        cardId: '',
       }
 }
 
@@ -102,7 +102,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
         category: values.category,
         description: values.description,
         date: values.date,
-        cardId: values.cardId ? Number(values.cardId) : undefined,
+        cardId: Number(values.cardId),
       }
       if (editing) {
         await updateTransaction(editing.id, input)
@@ -179,13 +179,12 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
             <Input placeholder="Almuerzo, taxi, etc." {...register('description')} />
           </div>
           <div className="space-y-1">
-            <Label>Tarjeta (opcional)</Label>
-            <Select value={cardId ?? ''} onValueChange={(v) => setValue('cardId', v || undefined)}>
+            <Label>Tarjeta</Label>
+            <Select value={cardId} onValueChange={(v) => setValue('cardId', v)}>
               <SelectTrigger>
-                <SelectValue placeholder="Sin tarjeta" />
+                <SelectValue placeholder="Elegí una tarjeta" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Ninguna</SelectItem>
                 {cards.map((card) => (
                   <SelectItem key={card.id} value={String(card.id)}>
                     {card.name} ({card.last4})
@@ -193,6 +192,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
                 ))}
               </SelectContent>
             </Select>
+            {errors.cardId && <p className="text-xs text-destructive">{errors.cardId.message}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
