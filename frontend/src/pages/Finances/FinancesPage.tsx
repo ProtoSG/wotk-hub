@@ -140,8 +140,7 @@ export default function FinancesPage() {
           type="button"
           aria-label={FAB_LABELS[tab]}
           onClick={() => setSearchParams({ tab, new: '1' }, { replace: true })}
-          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 active:scale-95 sm:hidden"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+          className="fixed right-4 bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 active:scale-95 sm:hidden"
         >
           <Plus className="h-6 w-6" />
         </button>
