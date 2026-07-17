@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -287,68 +286,6 @@ export function ContributionForm({ open, onClose, onSuccess, goal }: Contributio
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-interface DeleteGoalDialogProps {
-  open: boolean
-  onClose: () => void
-  onConfirm: () => void
-  goal: SavingsGoal | null
-}
-
-function DeleteGoalDialog({ open, onClose, onConfirm, goal }: DeleteGoalDialogProps) {
-  const [loading, setLoading] = useState(false)
-
-  const handleConfirm = async () => {
-    setLoading(true)
-    try {
-      await onConfirm()
-    } finally {
-      setLoading(false)
-      onClose()
-    }
-  }
-
-  const showWarning = goal != null && goal.currentCents > 0 && goal.defaultCardId != null
-
-  const formatPEN = (cents: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(cents / 100)
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Eliminar meta</DialogTitle>
-          <DialogDescription>
-            Esta acción no se puede deshacer.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            ¿Estás seguro de que quieres eliminar la meta{' '}
-            <span className="font-medium text-foreground">{goal?.name}</span>?
-          </p>
-          {showWarning && (
-            <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-              <span className="text-base">⚠️</span>
-              <span>
-                Esta meta tiene <strong>{formatPEN(goal!.currentCents)}</strong> acumulados.
-                Si la eliminas, <strong>NO</strong> se reintegrará a la tarjeta.
-              </span>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="button" variant="destructive" onClick={handleConfirm} disabled={loading}>
-            {loading ? 'Eliminando...' : 'Eliminar'}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
