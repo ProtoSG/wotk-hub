@@ -36,11 +36,9 @@ const TABS = [
 ]
 
 // Page-level onboarding gate (spec finance-onboarding / design #40). Blocks
-// ALL Finances tabs until the owner has ≥1 card with no credit limit
-// (creditLimitCents === 0). A card that has a credit limit alone does not
-// clear the gate (has-balance filter). Reuses the existing listCards result
-// + the CardFormFields body so the user creates their first card inline
-// without ever seeing the tabbed content.
+// ALL Finances tabs until the owner has ≥1 card, regardless of card type.
+// Reuses the existing listCards result + the CardFormFields body so the
+// user creates their first card inline without ever seeing the tabbed content.
 function OnboardingGate({ onSaved }: { onSaved: () => void }) {
   return (
     <CozyCard className="animate-card-in mx-auto mt-12 max-w-md">
@@ -88,9 +86,7 @@ export default function FinancesPage() {
     loadCards()
   }, [loadCards])
 
-  const nonCreditCardCount =
-    cards?.filter((c) => c.creditLimitCents === 0).length ?? 0
-  const gateActive = cards !== null && nonCreditCardCount === 0
+  const gateActive = cards === null || cards.length === 0
 
   if (gateActive) {
     return (
