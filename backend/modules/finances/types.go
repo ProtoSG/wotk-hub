@@ -231,32 +231,6 @@ func (r cardRequest) validate() error {
 	return nil
 }
 
-type CardReload struct {
-	ID          int64  `json:"id"`
-	CardID      int64  `json:"cardId"`
-	AmountCents int64  `json:"amountCents"`
-	Date        string `json:"date"`
-	Note        string `json:"note"`
-	CreatedAt   string `json:"createdAt"`
-}
-
-type cardReloadRequest struct {
-	AmountCents int64  `json:"amountCents"`
-	Date        string `json:"date"`
-	Note        string `json:"note"`
-}
-
-func (r cardReloadRequest) validate() (time.Time, error) {
-	if r.AmountCents <= 0 {
-		return time.Time{}, fmt.Errorf("amountCents must be positive")
-	}
-	d, err := time.Parse(dateLayout, r.Date)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date: %s", r.Date)
-	}
-	return d, nil
-}
-
 type cardTransferRequest struct {
 	FromCardID  int64  `json:"fromCardId"`
 	ToCardID    int64  `json:"toCardId"`
@@ -406,10 +380,6 @@ type listBudgetsResponse struct {
 
 type listCardsResponse struct {
 	Cards []Card `json:"cards"`
-}
-
-type listReloadsResponse struct {
-	Reloads []CardReload `json:"reloads"`
 }
 
 type listGoalsResponse struct {
