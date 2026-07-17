@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -88,9 +89,7 @@ function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormProps) {
   const color = watch('color')
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
     listCards().then(setCards).catch(() => setCards([]))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -388,11 +387,13 @@ export default function MetasTab() {
   // Open form when navigated with ?new=1
   useEffect(() => {
     if (searchParams.get('new') === '1') {
-      setEditGoal(undefined)
-      setFormOpen(true)
-      setSearchParams({}, { replace: true })
+      flushSync(() => {
+        setEditGoal(undefined)
+        setFormOpen(true)
+        setSearchParams({}, { replace: true })
+      })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to handle ?new=1
   }, [])
 
   const load = useCallback(async () => {

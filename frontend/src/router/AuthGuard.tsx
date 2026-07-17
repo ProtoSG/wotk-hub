@@ -35,7 +35,6 @@ export default function AuthGuard({ children }: Props) {
 
   useEffect(() => {
     if (hasHydrated) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- session check runs once on app load, gated by hasHydrated
     checkSession()
   }, [hasHydrated, checkSession])
 

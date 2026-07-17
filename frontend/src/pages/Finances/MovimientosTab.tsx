@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal, ArrowLeftRight } from 'lucide-react'
@@ -60,11 +61,13 @@ export default function MovimientosTab({ month }: Props) {
   // Open form when navigated with ?new=1
   useEffect(() => {
     if (searchParams.get('new') === '1') {
-      setEditing(null)
-      setFormOpen(true)
-      setSearchParams({}, { replace: true })
+      flushSync(() => {
+        setEditing(null)
+        setFormOpen(true)
+        setSearchParams({}, { replace: true })
+      })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to handle ?new=1
   }, [])
 
   const load = useCallback(async () => {

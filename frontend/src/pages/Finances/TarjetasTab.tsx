@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -355,11 +356,13 @@ export default function TarjetasTab() {
   // Open form when navigated with ?new=1
   useEffect(() => {
     if (searchParams.get('new') === '1') {
-      setEditCard(undefined)
-      setFormOpen(true)
-      setSearchParams({}, { replace: true })
+      flushSync(() => {
+        setEditCard(undefined)
+        setFormOpen(true)
+        setSearchParams({}, { replace: true })
+      })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to handle ?new=1
   }, [])
 
   const load = useCallback(async () => {
