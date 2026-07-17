@@ -116,6 +116,12 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_savings_contributions_goal_id ON savings_contributions (goal_id)`,
 		`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS default_card_id BIGINT REFERENCES cards(id)`,
+		// Deleting a goal is meant to delete its contributions with it (see
+		// DeleteGoal) — the original FK had no ON DELETE action, so it just
+		// blocked the delete instead.
+		`ALTER TABLE savings_contributions DROP CONSTRAINT IF EXISTS savings_contributions_goal_id_fkey`,
+		`ALTER TABLE savings_contributions ADD CONSTRAINT savings_contributions_goal_id_fkey
+			FOREIGN KEY (goal_id) REFERENCES savings_goals(id) ON DELETE CASCADE`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

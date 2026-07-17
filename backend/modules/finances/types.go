@@ -277,13 +277,16 @@ type SavingsContribution struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
+// Deadline is a pointer so an omitted or empty field means "no deadline"
+// (SQL NULL) rather than the empty string, which Postgres rejects as a date
+// — see cardRequest's balance fields for the same pattern.
 type savingsGoalRequest struct {
-	Name          string `json:"name"`
-	TargetCents   int64  `json:"targetCents"`
-	Deadline      string `json:"deadline"`
-	Icon          string `json:"icon"`
-	Color         string `json:"color"`
-	DefaultCardID *int64 `json:"defaultCardId"`
+	Name          string  `json:"name"`
+	TargetCents   int64   `json:"targetCents"`
+	Deadline      *string `json:"deadline"`
+	Icon          string  `json:"icon"`
+	Color         string  `json:"color"`
+	DefaultCardID *int64  `json:"defaultCardId"`
 }
 
 func (r savingsGoalRequest) validate() error {
@@ -293,12 +296,21 @@ func (r savingsGoalRequest) validate() error {
 	if r.TargetCents <= 0 {
 		return fmt.Errorf("targetCents must be positive")
 	}
-	if r.Deadline != "" {
-		if _, err := time.Parse(dateLayout, r.Deadline); err != nil {
+	if r.Deadline != nil && *r.Deadline != "" {
+		if _, err := time.Parse(dateLayout, *r.Deadline); err != nil {
 			return fmt.Errorf("invalid deadline date")
 		}
 	}
 	return nil
+}
+
+// normalizedDeadline collapses an empty (but non-nil) deadline to nil, so it
+// binds as SQL NULL instead of the invalid empty string.
+func (r savingsGoalRequest) normalizedDeadline() *string {
+	if r.Deadline == nil || *r.Deadline == "" {
+		return nil
+	}
+	return r.Deadline
 }
 
 type savingsContributionRequest struct {

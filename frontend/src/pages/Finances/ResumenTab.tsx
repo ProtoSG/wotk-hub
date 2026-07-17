@@ -6,7 +6,7 @@ import { CozyCard } from '@/components/ui/cozy-card'
 import { useCountUp } from '@/hooks/useCountUp'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
-import type { FinanceSummary, Card } from '@/types/finance.types'
+import type { FinanceSummary, Card, SavingsGoal } from '@/types/finance.types'
 import TrendChart from './TrendChart'
 import CategoryChart from './CategoryChart'
 
@@ -31,14 +31,21 @@ export default function ResumenTab({ month }: Props) {
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [committed, setCommitted] = useState(0)
   const [cards, setCards] = useState<Card[]>([])
-  const { getSummary, listSubscriptions, listCards } = useFinanceApi()
+  const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const { getSummary, listSubscriptions, listCards, listGoals } = useFinanceApi()
 
   const load = useCallback(async () => {
     try {
-      const [s, subs, cardsData] = await Promise.all([getSummary(month), listSubscriptions(), listCards()])
+      const [s, subs, cardsData, goalsData] = await Promise.all([
+        getSummary(month),
+        listSubscriptions(),
+        listCards(),
+        listGoals(),
+      ])
       setSummary(s)
       setCommitted(subs.monthlyCommittedCents)
       setCards(cardsData)
+      setGoals(goalsData)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo cargar el resumen')
     }
@@ -131,16 +138,24 @@ export default function ResumenTab({ month }: Props) {
                 const debitTotal = cards
                   .filter((c) => c.type === 'debito' || c.type === 'prepago')
                   .reduce((sum, c) => sum + c.balanceCents, 0)
-                const diff = summary.balanceCents - debitTotal
-                if (diff !== 0) {
-                  return (
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Sin asignar:</span>
-                      <span>{formatPEN(diff)}</span>
-                    </div>
-                  )
-                }
-                return null
+                const savingsTotal = goals.reduce((sum, g) => sum + g.currentCents, 0)
+                const diff = summary.balanceCents - debitTotal - savingsTotal
+                return (
+                  <>
+                    {savingsTotal !== 0 && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>En metas de ahorro:</span>
+                        <span>{formatPEN(savingsTotal)}</span>
+                      </div>
+                    )}
+                    {diff !== 0 && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Sin asignar:</span>
+                        <span>{formatPEN(diff)}</span>
+                      </div>
+                    )}
+                  </>
+                )
               })()}
           </CardContent>
         </CozyCard>

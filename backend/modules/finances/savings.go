@@ -98,7 +98,7 @@ func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO savings_goals (name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by)
 		 VALUES ($1, $2, 0, $3, $4, $5, $6, $7)
 		 RETURNING id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at`,
-		req.Name, req.TargetCents, req.Deadline, req.Icon, req.Color, req.DefaultCardID, userID,
+		req.Name, req.TargetCents, req.normalizedDeadline(), req.Icon, req.Color, req.DefaultCardID, userID,
 	)
 	g, err := scanGoal(row)
 	if err != nil {
@@ -136,7 +136,7 @@ func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 	query := `UPDATE savings_goals
 		SET name = $1, target_cents = $2, deadline = $3, icon = $4, color = $5, default_card_id = $6
 		WHERE id = $7`
-	args := []any{req.Name, req.TargetCents, req.Deadline, req.Icon, req.Color, req.DefaultCardID, id}
+	args := []any{req.Name, req.TargetCents, req.normalizedDeadline(), req.Icon, req.Color, req.DefaultCardID, id}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += ` RETURNING id, name, target_cents, current_cents, deadline, icon, color, default_card_id, created_by, created_at`
 

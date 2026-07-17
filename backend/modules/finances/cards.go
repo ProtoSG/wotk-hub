@@ -7,7 +7,14 @@ import (
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
+
+	"github.com/lib/pq"
 )
+
+// postgresForeignKeyViolation is the SQLSTATE code Postgres returns when a
+// delete is blocked by a referencing row (reloads, transactions, or a goal's
+// default card) — see DeleteCard.
+const postgresForeignKeyViolation = "23503"
 
 // cardColumns is the select list every card read shares, in the order
 // scanCard expects.
@@ -161,7 +168,10 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, c)
 }
 
-// DeleteCard 404s a guest trying to delete a card they don't own.
+// DeleteCard 404s a guest trying to delete a card they don't own. Unlike
+// savings goals, a card's reloads and transactions are financial history
+// worth keeping — the delete is blocked (not cascaded) while anything still
+// references the card, with a clear 409 instead of a raw constraint error.
 func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -179,6 +189,11 @@ func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	query, args = scopeToOwner(query, args, role, userID)
 
 	res, err := h.db.Exec(query, args...)
+	if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == postgresForeignKeyViolation {
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
+			"no se puede eliminar: la tarjeta tiene movimientos, recargas o metas de ahorro asociadas")
+		return
+	}
 	if err != nil {
 		log.Printf("finances: delete card failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
