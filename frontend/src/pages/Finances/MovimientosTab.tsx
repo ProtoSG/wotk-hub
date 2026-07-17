@@ -182,8 +182,6 @@ export default function MovimientosTab({ month }: Props) {
     ...(categoriesByKind?.income ?? []),
   ]
 
-  const allCategories = allCategoryOptions.map((c) => c.name)
-
   const filteredTransactions = cardFilter == null
     ? transactions
     : transactions.filter((t) => t.cardId === cardFilter)
