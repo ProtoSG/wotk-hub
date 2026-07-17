@@ -136,7 +136,7 @@ func TestProcessDue_AlwaysTaggedCardID(t *testing.T) {
 	}
 	defer rows.Close()
 
-for rows.Next() {
+	for rows.Next() {
 		var cardID int64
 		var typ string
 		if err := rows.Scan(&cardID, &typ); err != nil {
