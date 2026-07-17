@@ -155,21 +155,6 @@ export interface CardInput {
   creditLimitCents?: number
 }
 
-export interface CardReload {
-  id: number
-  cardId: number
-  amountCents: number
-  date: string
-  note: string
-  createdAt: string
-}
-
-export interface CardReloadInput {
-  amountCents: number
-  date: string
-  note: string
-}
-
 export interface CardTransferInput {
   fromCardId: number
   toCardId: number
