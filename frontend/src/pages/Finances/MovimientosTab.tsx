@@ -274,6 +274,16 @@ export default function MovimientosTab({ month }: Props) {
                         >
                           <Trash2 size={14} />
                         </Button>
+                        {t.type === 'expense' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Marcar como reembolsado"
+                            onClick={() => handleRefund(t)}
+                          >
+                            <RotateCcw size={14} />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -347,6 +357,12 @@ export default function MovimientosTab({ month }: Props) {
                       <Trash2 className="h-4 w-4" />
                       Eliminar
                     </DropdownMenuItem>
+                    {t.type === 'expense' && (
+                      <DropdownMenuItem onClick={() => handleRefund(t)}>
+                        <RotateCcw className="h-4 w-4" />
+                        Marcar como reembolsado
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -361,6 +377,30 @@ export default function MovimientosTab({ month }: Props) {
         onSaved={load}
         editing={editing}
       />
+
+      <Dialog open={refundDialogOpen} onOpenChange={(v) => !v && setRefundDialogOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Marcar como reembolsado</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            ¿Marcar este gasto como reembolsado? Se creará una transacción de ingreso por{' '}
+            <strong>{refundTarget ? formatPEN(refundTarget.amountCents) : ''}</strong> en la misma
+            tarjeta.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            El reembolso agregará al balance total, pero no repondrá el saldo de la tarjeta.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRefundDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmRefund} disabled={refunding}>
+              {refunding ? 'Reembolsando…' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
