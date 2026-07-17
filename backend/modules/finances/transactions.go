@@ -159,7 +159,9 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 // CreateTransaction always stamps created_by from the authenticated user —
 // provenance for admin, the ownership boundary guests are scoped by.
 // type='transfer' is rejected here: a transfer is only ever created as a
-// side effect of CreateReload, CreateContribution, or CreateCardTransfer.
+// side effect of CreateCard (seed), CreateContribution, or CreateCardTransfer —
+// the reload flow that used to write one was removed by the mandatory-card
+// model (see SPEC.md decision log).
 func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -452,10 +454,11 @@ func (h *handler) RefundTransaction(w http.ResponseWriter, r *http.Request) {
 	refundDesc := "Reembolso: " + old.Description
 	refundDate := time.Now().Format(dateLayout)
 
-	// Note: incomes with a cardId do not move the card's computed balance
-	// (only expenses and transfers do — see cardBalance). This is the
-	// documented limitation — the refund restores the ledger balance
-	// but does not reload the card.
+	// The compensating income row is tagged to old.CardID, so under the
+	// mandatory-card model the cardBalance income branch (non-credito)
+	// repone the card's saldo automatically. Refund of a credito expense
+	// does not reduce used_credit_cents — a known edge deferred to the
+	// credit_lines split. See SPEC.md decision log (mandatory-card entry).
 	row := tx.QueryRow(
 		`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by, card_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)

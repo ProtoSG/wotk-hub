@@ -76,8 +76,9 @@ type transactionRequest struct {
 }
 
 // validate only ever accepts income/expense — transfer rows are never
-// created through this request shape (see CreateReload, CreateContribution,
-// CreateCardTransfer, the only three places a transfer is written).
+// created through this request shape (the only transfer writers are
+// CreateCard's seed, CreateContribution, and CreateCardTransfer; the reload
+// writer was removed by the mandatory-card model — see SPEC.md decision log).
 func (r transactionRequest) validate() (time.Time, error) {
 	if r.Type != "income" && r.Type != "expense" {
 		return time.Time{}, fmt.Errorf("invalid type: %s", r.Type)
