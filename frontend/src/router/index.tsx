@@ -8,6 +8,7 @@ import {
   DashboardPage,
   DbManagerPage,
   FinancesPage,
+  CategoriesPage,
   CouplePage,
   YtdlpPage,
   PublicYtdlpPage,
@@ -66,6 +67,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<RouteFallback />}>
             <FinancesPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'finances/categories',
+        element: (
+          <Suspense fallback={<RouteFallback />}>
+            <CategoriesPage />
           </Suspense>
         ),
       },

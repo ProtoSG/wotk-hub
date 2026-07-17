@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Plus } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Plus, Settings } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { cn } from '@/lib/utils'
@@ -59,6 +60,7 @@ function OnboardingGate({ onSaved }: { onSaved: () => void }) {
 }
 
 export default function FinancesPage() {
+  const navigate = useNavigate()
   const [month, setMonth] = useState(currentMonth())
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab') ?? ''
@@ -100,7 +102,17 @@ export default function FinancesPage() {
   return (
     <div className="space-y-6 pb-24 sm:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Finanzas</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-2xl font-bold">Finanzas</h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Administrar categorías"
+            onClick={() => navigate('/finances/categories')}
+          >
+            <Settings size={16} />
+          </Button>
+        </div>
         <MonthPicker month={month} onChange={setMonth} />
       </div>
       <Tabs value={tab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
