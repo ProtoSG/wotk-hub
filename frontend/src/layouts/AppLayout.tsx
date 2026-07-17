@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useThemeStore } from '@/store/themeStore'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
@@ -8,7 +9,12 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 export default function AppLayout() {
   const theme = useThemeStore((s) => s.theme)
   const [navOpen, setNavOpen] = useState(false)
-  const touchStartX = useRef<number | null>(null)
+  const location = useLocation()
+
+  // Close nav sheet on route change
+  useEffect(() => {
+    setNavOpen(false)
+  }, [location])
 
   useEffect(() => {
     const root = document.documentElement
