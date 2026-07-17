@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, Repeat, MoreVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,7 +27,6 @@ import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
 import { CATEGORY_LABELS, FREQUENCY_LABELS, type Subscription } from '@/types/finance.types'
 import SubscriptionForm from './SubscriptionForm'
-import FloatingActionButton from './FloatingActionButton'
 
 const UNDO_WINDOW_MS = 4500
 
@@ -34,8 +35,21 @@ export default function SuscripcionesTab() {
   const [committed, setCommitted] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Subscription | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const { listSubscriptions, updateSubscription, deleteSubscription } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  // Open form when navigated with ?new=1
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      flushSync(() => {
+        setEditing(null)
+        setFormOpen(true)
+        setSearchParams({}, { replace: true })
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to handle ?new=1
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -137,14 +151,6 @@ export default function SuscripcionesTab() {
           Nueva suscripción
         </Button>
       </div>
-
-      <FloatingActionButton
-        label="Nueva suscripción"
-        onClick={() => {
-          setEditing(null)
-          setFormOpen(true)
-        }}
-      />
 
       <CozyCard className="animate-card-in [animation-delay:60ms] hidden sm:block">
         <CardContent className="p-0">

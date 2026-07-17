@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, AlertTriangle, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +13,6 @@ import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import { CATEGORY_LABELS, type Budget } from '@/types/finance.types'
 import BudgetForm from './BudgetForm'
-import FloatingActionButton from './FloatingActionButton'
 
 interface Props {
   month: string
@@ -23,8 +24,21 @@ export default function PresupuestosTab({ month }: Props) {
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const { listBudgets, deleteBudget } = useFinanceApi()
   const pendingDeletes = useRef(new Map<string, number>())
+
+  // Open form when navigated with ?new=1
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      flushSync(() => {
+        setEditing(null)
+        setFormOpen(true)
+        setSearchParams({}, { replace: true })
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to handle ?new=1
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -93,14 +107,6 @@ export default function PresupuestosTab({ month }: Props) {
           Nuevo presupuesto
         </Button>
       </div>
-
-      <FloatingActionButton
-        label="Nuevo presupuesto"
-        onClick={() => {
-          setEditing(null)
-          setFormOpen(true)
-        }}
-      />
 
       {budgets.length === 0 ? (
         <CozyCard className="animate-card-in">

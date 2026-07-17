@@ -80,9 +80,7 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
   })
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
     listCards().then(setCards).catch(() => setCards([]))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
