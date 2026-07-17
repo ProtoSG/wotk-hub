@@ -359,7 +359,14 @@ export default function TarjetasTab() {
       flushSync(() => {
         setEditCard(undefined)
         setFormOpen(true)
-        setSearchParams({}, { replace: true })
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            next.delete('new')
+            return next
+          },
+          { replace: true }
+        )
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
