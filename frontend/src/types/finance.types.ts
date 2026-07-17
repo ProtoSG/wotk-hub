@@ -1,36 +1,12 @@
-export const EXPENSE_CATEGORIES = [
-  'comida',
-  'transporte',
-  'vivienda',
-  'servicios',
-  'salud',
-  'educacion',
-  'entretenimiento',
-  'ropa',
-  'suscripciones',
-  'otros',
-] as const
-
-export const INCOME_CATEGORIES = ['sueldo', 'freelance', 'inversiones', 'regalo', 'otros'] as const
-
-export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]
-export type IncomeCategory = (typeof INCOME_CATEGORIES)[number]
-
-export const CATEGORY_LABELS: Record<string, string> = {
-  comida: 'Comida',
-  transporte: 'Transporte',
-  vivienda: 'Vivienda',
-  servicios: 'Servicios',
-  salud: 'Salud',
-  educacion: 'Educación',
-  entretenimiento: 'Entretenimiento',
-  ropa: 'Ropa',
-  suscripciones: 'Suscripciones',
-  otros: 'Otros',
-  sueldo: 'Sueldo',
-  freelance: 'Freelance',
-  inversiones: 'Inversiones',
-  regalo: 'Regalo',
+// Categories are user-editable, backed by /api/finances/categories — see
+// useCategories(). `name` is the lowercase slug stored on transactions,
+// subscriptions and budgets; `label` is the free-text display name.
+export interface Category {
+  id: number
+  name: string
+  kind: 'expense' | 'income'
+  label: string
+  createdAt: string
 }
 
 // TransactionType is what the user picks in the Movimientos form — 'transfer'
