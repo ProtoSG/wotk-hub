@@ -229,24 +229,43 @@ interface ContributionFormProps {
   goal: SavingsGoal
 }
 
+const contributionSchema = z.object({
+  amount: z.number().positive('Debe ser mayor a 0'),
+  date: z.string().min(1, 'La fecha es requerida'),
+})
+
+type ContributionFormValues = z.infer<typeof contributionSchema>
+
 function ContributionForm({ open, onClose, onSaved, goal }: ContributionFormProps) {
   const { createContribution } = useFinanceApi()
   const [saving, setSaving] = useState(false)
-  const [amount, setAmount] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const amountCents = Math.round(parseFloat(amount) * 100)
-    if (!amount || isNaN(amountCents) || amountCents <= 0) {
-      toast.error('Monto inválido')
-      return
-    }
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ContributionFormValues>({
+    resolver: zodResolver(contributionSchema),
+    defaultValues: {
+      amount: 0,
+      date: new Date().toISOString().split('T')[0],
+    },
+  })
+
+  useEffect(() => {
+    if (open) reset({ amount: 0, date: new Date().toISOString().split('T')[0] })
+  }, [open, reset])
+
+  const onSubmit: SubmitHandler<ContributionFormValues> = async (values) => {
     setSaving(true)
     try {
-      await createContribution(goal.id, { amountCents, date, note: '' })
+      await createContribution(goal.id, {
+        amountCents: Math.round(values.amount * 100),
+        date: values.date,
+        note: '',
+      })
       toast.success('Ahorro registrado')
-      setAmount('')
       onSaved()
       onClose()
     } catch (err) {
@@ -262,21 +281,26 @@ function ContributionForm({ open, onClose, onSaved, goal }: ContributionFormProp
         <DialogHeader>
           <DialogTitle>Agregar ahorro a {goal.name}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1">
             <Label>Monto (PEN)</Label>
             <Input
               type="number"
               step="0.01"
               min="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              {...register('amount', { valueAsNumber: true })}
               placeholder="0.00"
             />
+            {errors.amount && (
+              <p className="text-xs text-destructive">{errors.amount.message}</p>
+            )}
           </div>
           <div className="space-y-1">
             <Label>Fecha</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input type="date" {...register('date')} />
+            {errors.date && (
+              <p className="text-xs text-destructive">{errors.date.message}</p>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
@@ -502,7 +526,16 @@ export default function MetasTab() {
                       <div className="h-2 overflow-hidden rounded-full bg-secondary">
                         <div
                           className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${progress}%`, backgroundColor: goal.color }}
+                          style={{
+                            width: `${progress}%`,
+                            backgroundColor: goal.color,
+                            ...(progress >= 100
+                              ? {
+                                  backgroundImage:
+                                    'repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(255,255,255,0.2)_4px,rgba(255,255,255,0.2)_8px)',
+                                }
+                              : {}),
+                          }}
                         />
                       </div>
                       <p className="text-right text-xs text-muted-foreground">

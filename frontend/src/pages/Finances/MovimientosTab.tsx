@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal, ArrowLeftRight } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
@@ -50,10 +52,12 @@ export default function MovimientosTab({ month }: Props) {
   const [cardFilter, setCardFilter] = useState<number | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
 
   const load = useCallback(async () => {
+    setIsLoading(true)
     try {
       const [data, cardData] = await Promise.all([
         listTransactions({
@@ -67,6 +71,8 @@ export default function MovimientosTab({ month }: Props) {
       setCards(cardData)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los movimientos')
+    } finally {
+      setIsLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, typeFilter, categoryFilter])
@@ -250,10 +256,35 @@ export default function MovimientosTab({ month }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTransactions.length === 0 ? (
+              {isLoading ? (
+                <>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-12" /></TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              ) : filteredTransactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Sin movimientos este mes
+                  <TableCell colSpan={7}>
+                    <EmptyState
+                      icon={<ArrowLeftRight className="h-8 w-8" />}
+                      title="Sin movimientos este mes"
+                      description="Registrá tu primer movimiento para empezar a controlar tus finanzas."
+                      action={{
+                        label: 'Nuevo movimiento',
+                        onClick: () => {
+                          setEditing(null)
+                          setFormOpen(true)
+                        },
+                      }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -342,10 +373,32 @@ export default function MovimientosTab({ month }: Props) {
 
       <CozyCard className="animate-card-in sm:hidden">
         <CardContent className="p-0">
-          {filteredTransactions.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              Sin movimientos este mes
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                  <Skeleton className="h-4 w-16" />
+                </div>
+              ))}
             </div>
+          ) : filteredTransactions.length === 0 ? (
+            <EmptyState
+              icon={<ArrowLeftRight className="h-8 w-8" />}
+              title="Sin movimientos este mes"
+              description="Registrá tu primer movimiento."
+              action={{
+                label: 'Nuevo movimiento',
+                onClick: () => {
+                  setEditing(null)
+                  setFormOpen(true)
+                },
+              }}
+            />
           ) : (
             filteredTransactions.map((t) => (
               <div key={t.id} className="flex items-center gap-3 border-b p-4 last:border-0">

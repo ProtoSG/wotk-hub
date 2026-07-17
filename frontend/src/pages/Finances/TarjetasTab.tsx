@@ -220,22 +220,6 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
   )
 }
 
-const transferSchema = z.object({
-  toCardId: z.string().min(1, 'Elegí una tarjeta destino'),
-  amount: z.number().positive('Debe ser mayor a 0'),
-  date: z.string().min(1, 'Requerido'),
-})
-
-type TransferFormValues = z.infer<typeof transferSchema>
-
-function transferDefaults(): TransferFormValues {
-  return {
-    toCardId: '',
-    amount: 0,
-    date: new Date().toISOString().split('T')[0],
-  }
-}
-
 interface TransferFormProps {
   open: boolean
   onClose: () => void
@@ -250,6 +234,19 @@ function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormP
   const { createCardTransfer } = useFinanceApi()
   const [saving, setSaving] = useState(false)
 
+  const transferSchema = z
+    .object({
+      toCardId: z.string().min(1, 'Elegí una tarjeta destino'),
+      amount: z.number().positive('Debe ser mayor a 0'),
+      date: z.string().min(1, 'Requerido'),
+    })
+    .refine((data) => fromCard.id !== Number(data.toCardId), {
+      message: 'No puedes transferir a la misma tarjeta',
+      path: ['toCardId'],
+    })
+
+  type TransferFormValues = z.infer<typeof transferSchema>
+
   const {
     register,
     handleSubmit,
@@ -259,11 +256,15 @@ function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormP
     formState: { errors },
   } = useForm<TransferFormValues>({
     resolver: zodResolver(transferSchema),
-    defaultValues: transferDefaults(),
+    defaultValues: {
+      toCardId: '',
+      amount: 0,
+      date: new Date().toISOString().split('T')[0],
+    },
   })
 
   useEffect(() => {
-    if (open) reset(transferDefaults())
+    if (open) reset({ toCardId: '', amount: 0, date: new Date().toISOString().split('T')[0] })
   }, [open, reset])
 
   const destinations = cards.filter((c) => c.id !== fromCard.id && c.creditLimitCents === 0)
