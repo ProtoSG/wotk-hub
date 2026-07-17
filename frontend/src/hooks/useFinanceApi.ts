@@ -159,6 +159,7 @@ export function useFinanceApi() {
     createTransaction,
     updateTransaction,
     deleteTransaction,
+    refundTransaction,
     listSubscriptions,
     createSubscription,
     updateSubscription,
