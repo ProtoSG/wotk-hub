@@ -137,7 +137,7 @@ export default function ResumenTab({ month }: Props) {
             </div>
             {summary && (
               <div className="flex justify-between text-xs text-muted-foreground pt-1">
-                <span>Balance total:</span>
+                <span>Neto:</span>
                 <span>{formatPEN(summary.balanceCents)}</span>
               </div>
             )}
