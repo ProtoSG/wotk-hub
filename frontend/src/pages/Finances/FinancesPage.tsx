@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Plus } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
@@ -15,6 +15,16 @@ import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
 import TarjetasTab, { CardFormFields } from './TarjetasTab'
 import MetasTab from './MetasTab'
+
+const FAB_TABS = new Set(['movimientos', 'suscripciones', 'presupuestos', 'tarjetas', 'metas'])
+
+const FAB_LABELS: Record<string, string> = {
+  movimientos: 'Nuevo movimiento',
+  suscripciones: 'Nueva suscripción',
+  presupuestos: 'Nuevo presupuesto',
+  tarjetas: 'Nueva tarjeta',
+  metas: 'Nueva meta',
+}
 
 const TABS = [
   { value: 'resumen', label: 'Resumen', icon: LayoutDashboard },
@@ -124,6 +134,18 @@ export default function FinancesPage() {
           <MetasTab />
         </TabsContent>
       </Tabs>
+
+      {FAB_TABS.has(tab) && (
+        <button
+          type="button"
+          aria-label={FAB_LABELS[tab]}
+          onClick={() => setSearchParams({ tab, new: '1' }, { replace: true })}
+          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 active:scale-95 sm:hidden"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
 
       <nav
         className="fixed left-4 z-40 flex h-14 items-center justify-around gap-0.5 rounded-full border bg-background px-2 shadow-lg sm:hidden"

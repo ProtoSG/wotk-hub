@@ -3,6 +3,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,7 +27,6 @@ import {
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { Card } from '@/types/finance.types'
-import FloatingActionButton from './FloatingActionButton'
 
 const UNDO_WINDOW_MS = 4500
 
@@ -348,8 +348,19 @@ export default function TarjetasTab() {
   const [editCard, setEditCard] = useState<Card | undefined>()
   const [transferOpen, setTransferOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const { listCards, deleteCard } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  // Open form when navigated with ?new=1
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditCard(undefined)
+      setFormOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -418,14 +429,6 @@ export default function TarjetasTab() {
           Nueva tarjeta
         </Button>
       </div>
-
-      <FloatingActionButton
-        label="Nueva tarjeta"
-        onClick={() => {
-          setEditCard(undefined)
-          setFormOpen(true)
-        }}
-      />
 
       {cards.length === 0 ? (
         <CozyCard className="animate-card-in">

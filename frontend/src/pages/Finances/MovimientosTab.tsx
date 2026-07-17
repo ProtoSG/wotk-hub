@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal, ArrowLeftRight } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -35,7 +36,6 @@ import {
   type Card,
 } from '@/types/finance.types'
 import TransactionForm from './TransactionForm'
-import FloatingActionButton from './FloatingActionButton'
 
 const ALL = 'all'
 const UNDO_WINDOW_MS = 4500
@@ -53,8 +53,19 @@ export default function MovimientosTab({ month }: Props) {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [searchParams, setSearchParams] = useSearchParams()
   const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  // Open form when navigated with ?new=1
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditing(null)
+      setFormOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -232,14 +243,6 @@ export default function MovimientosTab({ month }: Props) {
           </button>
         ))}
       </div>
-
-      <FloatingActionButton
-        label="Nuevo movimiento"
-        onClick={() => {
-          setEditing(null)
-          setFormOpen(true)
-        }}
-      />
 
       <CozyCard className="animate-card-in hidden sm:block">
         <CardContent className="p-0">

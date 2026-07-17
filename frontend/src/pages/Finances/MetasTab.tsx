@@ -3,6 +3,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
+import { useSearchParams } from 'react-router-dom'
 import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,7 +29,6 @@ import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { SavingsGoal, SavingsGoalInput, Card } from '@/types/finance.types'
 import { GOAL_COLORS } from '@/types/finance.types'
-import FloatingActionButton from './FloatingActionButton'
 
 const schema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
@@ -382,7 +382,18 @@ export default function MetasTab() {
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [goalToDelete, setGoalToDelete] = useState<SavingsGoal | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const { listGoals, deleteGoal, listCards } = useFinanceApi()
+
+  // Open form when navigated with ?new=1
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditGoal(undefined)
+      setFormOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -432,14 +443,6 @@ export default function MetasTab() {
           Nueva meta
         </Button>
       </div>
-
-      <FloatingActionButton
-        label="Nueva meta"
-        onClick={() => {
-          setEditGoal(undefined)
-          setFormOpen(true)
-        }}
-      />
 
       {goals.length === 0 ? (
         <CozyCard className="animate-card-in">
