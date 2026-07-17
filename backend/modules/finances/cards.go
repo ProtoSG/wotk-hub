@@ -196,10 +196,14 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// req.CreditLimitCents is a pointer so an omitted field means "keep
+	// what's stored" — same convention as the rest of cardRequest's
+	// pointer fields (see its doc comment).
 	query := `UPDATE cards
-		 SET name = $1, type = $2, bank = $3, last4 = $4, color = $5, icon = $6
-		 WHERE id = $7 AND deleted_at IS NULL`
-	args := []any{req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, id}
+		 SET name = $1, type = $2, bank = $3, last4 = $4, color = $5, icon = $6,
+		     credit_limit_cents = COALESCE($7, credit_limit_cents)
+		 WHERE id = $8 AND deleted_at IS NULL`
+	args := []any{req.Name, req.Type, req.Bank, req.Last4, req.Color, req.Icon, req.CreditLimitCents, id}
 	query, args = scopeToOwner(query, args, role, userID)
 	query += ` RETURNING id`
 

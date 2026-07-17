@@ -54,6 +54,8 @@ const cardSchema = z.object({
   last4: z.string().length(4, 'Debe tener 4 dígitos'),
   color: z.string(),
   icon: z.string(),
+  initialBalance: z.number().min(0, 'No puede ser negativo').optional(),
+  creditLimit: z.number().min(0, 'No puede ser negativo').optional(),
 })
 
 type CardFormValues = z.infer<typeof cardSchema>
@@ -73,6 +75,8 @@ function cardDefaults(editCard?: Card): CardFormValues {
     last4: editCard?.last4 ?? '',
     color: editCard?.color ?? CARD_COLORS[0],
     icon: editCard?.icon ?? 'credit-card',
+    initialBalance: 0,
+    creditLimit: editCard ? editCard.creditLimitCents / 100 : 0,
   }
 }
 
@@ -102,11 +106,25 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
   const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
     setSaving(true)
     try {
+      const input = {
+        name: values.name,
+        type: values.type,
+        bank: values.bank,
+        last4: values.last4,
+        color: values.color,
+        icon: values.icon,
+        creditLimitCents: Math.round((values.creditLimit ?? 0) * 100),
+      }
       if (editCard) {
-        await updateCard(editCard.id, values)
+        // Balance isn't editable here — it's derived from transactions
+        // (recargas/gastos/transferencias), not a field you overwrite.
+        await updateCard(editCard.id, input)
         toast.success('Tarjeta actualizada')
       } else {
-        await createCard(values)
+        await createCard({
+          ...input,
+          initialBalanceCents: Math.round((values.initialBalance ?? 0) * 100),
+        })
         toast.success('Tarjeta creada')
       }
       onSaved()
@@ -155,6 +173,36 @@ function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
             <Input {...register('last4')} placeholder="1234" maxLength={4} />
             {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
           </div>
+          {!editCard && (
+            <div className="space-y-1">
+              <Label>Saldo inicial (opcional)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                {...register('initialBalance', { valueAsNumber: true })}
+                placeholder="0.00"
+              />
+              {errors.initialBalance && (
+                <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
+              )}
+            </div>
+          )}
+          {type === 'credito' && (
+            <div className="space-y-1">
+              <Label>Límite de crédito</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                {...register('creditLimit', { valueAsNumber: true })}
+                placeholder="0.00"
+              />
+              {errors.creditLimit && (
+                <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
+              )}
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Color</Label>
             <div className="mt-1 flex flex-wrap gap-2">
