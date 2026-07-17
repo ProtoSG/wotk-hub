@@ -80,7 +80,7 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{editing ? 'Editar presupuesto' : 'Nuevo presupuesto'}</DialogTitle>
         </DialogHeader>

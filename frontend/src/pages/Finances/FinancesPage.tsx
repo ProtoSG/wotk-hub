@@ -105,22 +105,22 @@ export default function FinancesPage() {
             </TabsTrigger>
           ))}
         </TabsList>
-        <TabsContent value="resumen" className="mt-4">
+        <TabsContent value="resumen" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
           <ResumenTab month={month} />
         </TabsContent>
-        <TabsContent value="movimientos" className="mt-4">
+        <TabsContent value="movimientos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
           <MovimientosTab month={month} />
         </TabsContent>
-        <TabsContent value="suscripciones" className="mt-4">
+        <TabsContent value="suscripciones" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
           <SuscripcionesTab />
         </TabsContent>
-        <TabsContent value="presupuestos" className="mt-4">
+        <TabsContent value="presupuestos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
           <PresupuestosTab month={month} />
         </TabsContent>
-        <TabsContent value="tarjetas" className="mt-4">
+        <TabsContent value="tarjetas" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
           <TarjetasTab />
         </TabsContent>
-        <TabsContent value="metas" className="mt-4">
+        <TabsContent value="metas" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
           <MetasTab />
         </TabsContent>
       </Tabs>

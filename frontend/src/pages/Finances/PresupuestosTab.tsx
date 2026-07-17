@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Progress } from '@/components/ui/progress'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import { CATEGORY_LABELS, type Budget } from '@/types/finance.types'
@@ -103,8 +104,19 @@ export default function PresupuestosTab({ month }: Props) {
 
       {budgets.length === 0 ? (
         <CozyCard className="animate-card-in">
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Sin presupuestos definidos. Crea uno para controlar tus gastos por categoría.
+          <CardContent>
+            <EmptyState
+              icon={<Target className="h-8 w-8" />}
+              title="Sin presupuestos definidos"
+              description="Crea uno para controlar tus gastos por categoría."
+              action={{
+                label: 'Crear presupuesto',
+                onClick: () => {
+                  setEditing(null)
+                  setFormOpen(true)
+                },
+              }}
+            />
           </CardContent>
         </CozyCard>
       ) : (
@@ -112,8 +124,15 @@ export default function PresupuestosTab({ month }: Props) {
           {budgets.map((b, i) => {
             const pct = b.monthlyLimitCents > 0 ? (b.spentCents / b.monthlyLimitCents) * 100 : 0
             const over = b.spentCents > b.monthlyLimitCents
-            const indicator =
-              over ? 'bg-destructive' : pct >= 80 ? 'bg-amber-500' : 'bg-primary'
+            const isDanger = over || pct >= 80
+            const indicatorColor = over ? 'bg-destructive' : pct >= 80 ? 'bg-amber-500' : 'bg-primary'
+            const stripeStyle =
+              isDanger
+                ? {
+                    backgroundImage:
+                      'repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(255,255,255,0.2)_4px,rgba(255,255,255,0.2)_8px)',
+                  }
+                : {}
             return (
               <CozyCard
                 key={b.id}
@@ -161,7 +180,7 @@ export default function PresupuestosTab({ month }: Props) {
                       de {formatPEN(b.monthlyLimitCents)}
                     </span>
                   </div>
-                  <Progress value={pct} indicatorClassName={indicator} />
+                  <Progress value={pct} indicatorClassName={indicatorColor} indicatorStyle={stripeStyle} />
                   <p className="text-xs text-muted-foreground">
                     {over
                       ? `${formatPEN(b.spentCents - b.monthlyLimitCents)} por encima del límite`

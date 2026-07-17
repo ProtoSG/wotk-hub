@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Switch } from '@/components/ui/switch'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   Table,
   TableBody,
@@ -162,8 +163,19 @@ export default function SuscripcionesTab() {
             <TableBody>
               {subscriptions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Sin suscripciones registradas
+                  <TableCell colSpan={7}>
+                    <EmptyState
+                      icon={<Repeat className="h-8 w-8" />}
+                      title="Sin suscripciones registradas"
+                      description="Agrega tus suscripciones para hacer seguimiento de tus gastos recurrentes."
+                      action={{
+                        label: 'Agregar suscripción',
+                        onClick: () => {
+                          setEditing(null)
+                          setFormOpen(true)
+                        },
+                      }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -211,9 +223,18 @@ export default function SuscripcionesTab() {
       <CozyCard className="animate-card-in [animation-delay:60ms] sm:hidden">
         <CardContent className="p-0">
           {subscriptions.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              Sin suscripciones registradas
-            </div>
+            <EmptyState
+              icon={<Repeat className="h-8 w-8" />}
+              title="Sin suscripciones registradas"
+              description="Agrega tus suscripciones para hacer seguimiento."
+              action={{
+                label: 'Agregar suscripción',
+                onClick: () => {
+                  setEditing(null)
+                  setFormOpen(true)
+                },
+              }}
+            />
           ) : (
             subscriptions.map((s) => (
               <div

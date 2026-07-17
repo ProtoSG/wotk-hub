@@ -40,16 +40,18 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         <Menu size={18} />
       </Button>
 
-      <div className="flex flex-1 items-center justify-end gap-3">
-        {user && <span className="text-sm text-muted-foreground">{user.name}</span>}
-        <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Cerrar sesión">
-          <LogOut size={16} />
-        </Button>
+      <div className="flex flex-1 items-center justify-between">
+        <div />
+        <div className="flex items-center gap-3">
+          {user && <span className="text-sm text-muted-foreground">{user.name}</span>}
+          <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Cambiar tema">
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Cerrar sesión">
+            <LogOut size={16} />
+          </Button>
+        </div>
       </div>
-
-      <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Cambiar tema">
-        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-      </Button>
     </header>
   )
 }
