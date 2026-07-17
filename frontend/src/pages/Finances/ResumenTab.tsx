@@ -6,7 +6,7 @@ import { CozyCard } from '@/components/ui/cozy-card'
 import { useCountUp } from '@/hooks/useCountUp'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
-import type { FinanceSummary, Card } from '@/types/finance.types'
+import type { FinanceSummary, Card, SavingsGoal } from '@/types/finance.types'
 import TrendChart from './TrendChart'
 import CategoryChart from './CategoryChart'
 
@@ -31,14 +31,21 @@ export default function ResumenTab({ month }: Props) {
   const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [committed, setCommitted] = useState(0)
   const [cards, setCards] = useState<Card[]>([])
-  const { getSummary, listSubscriptions, listCards } = useFinanceApi()
+  const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const { getSummary, listSubscriptions, listCards, listGoals } = useFinanceApi()
 
   const load = useCallback(async () => {
     try {
-      const [s, subs, cardsData] = await Promise.all([getSummary(month), listSubscriptions(), listCards()])
+      const [s, subs, cardsData, goalsData] = await Promise.all([
+        getSummary(month),
+        listSubscriptions(),
+        listCards(),
+        listGoals(),
+      ])
       setSummary(s)
       setCommitted(subs.monthlyCommittedCents)
       setCards(cardsData)
+      setGoals(goalsData)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo cargar el resumen')
     }
@@ -50,12 +57,20 @@ export default function ResumenTab({ month }: Props) {
     load()
   }, [load])
 
+  // "Disponible" = netWorth (summary.balanceCents — transfer-agnostic, already
+// filters type != 'transfer') MINUS what's already committed to savings goals.
+// Computed frontend-side; no new backend endpoint (design #40 "Disponible").
+// Goal contributions visibly reduce this number because their `currentCents`
+// is subtracted from the spendable pool.
+  const goalsCommittedToCents = goals.reduce((sum, g) => sum + g.currentCents, 0)
+  const disponibleCents = summary ? summary.balanceCents - goalsCommittedToCents : 0
+
   const tiles: Tile[] = [
     {
-      label: 'Balance total',
-      cents: summary?.balanceCents ?? 0,
+      label: 'Disponible',
+      cents: disponibleCents,
       icon: Wallet,
-      color: summary ? (summary.balanceCents >= 0 ? 'text-income' : 'text-expense') : undefined,
+      color: disponibleCents >= 0 ? 'text-income' : 'text-expense',
       primary: true,
     },
     {
@@ -122,26 +137,19 @@ export default function ResumenTab({ month }: Props) {
             </div>
             {summary && (
               <div className="flex justify-between text-xs text-muted-foreground pt-1">
-                <span>Balance total:</span>
+                <span>Neto:</span>
                 <span>{formatPEN(summary.balanceCents)}</span>
               </div>
             )}
             {summary &&
-              (() => {
-                const debitTotal = cards
-                  .filter((c) => c.type === 'debito' || c.type === 'prepago')
-                  .reduce((sum, c) => sum + c.balanceCents, 0)
-                const diff = summary.balanceCents - debitTotal
-                if (diff !== 0) {
-                  return (
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Sin asignar:</span>
-                      <span>{formatPEN(diff)}</span>
-                    </div>
-                  )
-                }
-                return null
-              })()}
+              // "Sin asignar" reconciliation removed (structurally impossible
+              // once every tx is tagged to a card; design #40 / explore R5).
+              goalsCommittedToCents !== 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>En metas de ahorro:</span>
+                  <span>{formatPEN(goalsCommittedToCents)}</span>
+                </div>
+              )}
           </CardContent>
         </CozyCard>
       )}

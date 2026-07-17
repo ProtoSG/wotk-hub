@@ -9,8 +9,7 @@ import type {
   FinanceSummary,
   Card,
   CardInput,
-  CardReload,
-  CardReloadInput,
+  CardTransferInput,
   SavingsGoal,
   SavingsGoalInput,
   SavingsContribution,
@@ -110,13 +109,8 @@ export function useFinanceApi() {
     await api.delete(`/api/finances/cards/${id}`)
   }
 
-  async function listReloads(cardId: number): Promise<CardReload[]> {
-    const res = await api.get<{ reloads: CardReload[] }>(`/api/finances/cards/${cardId}/reloads`)
-    return res.data.reloads
-  }
-
-  async function createReload(cardId: number, input: CardReloadInput): Promise<CardReload> {
-    const res = await api.post<CardReload>(`/api/finances/cards/${cardId}/reloads`, input)
+  async function createCardTransfer(input: CardTransferInput): Promise<Transaction> {
+    const res = await api.post<Transaction>('/api/finances/cards/transfers', input)
     return res.data
   }
 
@@ -172,8 +166,7 @@ export function useFinanceApi() {
     createCard,
     updateCard,
     deleteCard,
-    listReloads,
-    createReload,
+    createCardTransfer,
     listGoals,
     createGoal,
     updateGoal,

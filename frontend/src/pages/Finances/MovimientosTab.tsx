@@ -389,7 +389,7 @@ export default function MovimientosTab({ month }: Props) {
             tarjeta.
           </p>
           <p className="text-xs text-muted-foreground">
-            El reembolso agregará al balance total, pero no repondrá el saldo de la tarjeta.
+            El reembolso sí repondrá el saldo de la tarjeta.
           </p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRefundDialogOpen(false)}>

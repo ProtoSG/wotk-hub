@@ -19,6 +19,24 @@ type queryRequest struct {
 	SQL string `json:"sql"`
 }
 
+type testConnectionResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+type listTablesResponse struct {
+	Tables []string `json:"tables"`
+}
+
+type tableSchemaResponse struct {
+	Table   string          `json:"table"`
+	Columns []db.ColumnInfo `json:"columns"`
+}
+
+type listRelationshipsResponse struct {
+	Relationships []db.ForeignKey `json:"relationships"`
+}
+
 func (r connRequest) toConfig() (db.ConnectionConfig, error) {
 	d := db.Dialect(r.Dialect)
 	if d != db.Postgres && d != db.MySQL {

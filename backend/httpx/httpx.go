@@ -20,6 +20,17 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// SuccessResponse is the standard body for a write endpoint that has nothing
+// else to report back beyond "it worked" (deletes, logout, etc).
+type SuccessResponse struct {
+	Success bool `json:"success"`
+}
+
+// WriteSuccess writes the standard {"success": true} body.
+func WriteSuccess(w http.ResponseWriter, status int) {
+	WriteJSON(w, status, SuccessResponse{Success: true})
+}
+
 // DecodeJSON decodes the JSON request body into dst, enforcing maxBytes as an
 // upper bound on the body size via http.MaxBytesReader. Callers are
 // responsible for writing an error response when a non-nil error is

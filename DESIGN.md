@@ -1,709 +1,429 @@
-# DESIGN.md — Savings Goals (Metas de Ahorro)
+# DESIGN.md — Finances: Transfer Ledger + Mandatory Card Account Model
 
 ## Overview
 
-Savings Goals is a per-user feature that lets users set monetary targets and track contributions over time. It follows the same ownership, request-validation, and atomic-transaction patterns already established in `backend/modules/finances/` and the existing frontend tab architecture.
+Two layered changes share this blueprint:
+
+1. **Unified transfer ledger** — replaces three independent, hand-rolled
+   money-movement code paths (goal contribution, a new card-to-card
+   transfer, and the card seed) with a single `type='transfer'`
+   transaction shape, and replaces `cards.balance_cents`/
+   `used_credit_cents` (stored counters mutated from those places) with
+   values computed live from `transactions`. See `SPEC.md` for the full
+   decision log and scenario walkthrough.
+2. **Mandatory-card account model** (layered on top) — makes `card_id`
+   mandatory on income/expense (CHECK constraint, not column NOT NULL),
+   adds an `income` branch to the `cardBalance` CASE, makes
+   `subscriptions.card_id` NOT NULL, removes the reload concept
+   entirely, renames the summary tile to "Disponible", adds an onboarding
+   gate, and adds a delete-last-card invariant.
+
+**The headline simplification**: once balance is computed instead of
+stored, there is nothing to keep in sync. `cardDelta`, `cardAdjustment`,
+and `applyCardDeltas` in `transactions.go` existed *only* to compute and
+persist a delta to a stored column — under this design that whole
+mechanism is deleted, not adapted. `UpdateTransaction`/`DeleteTransaction`
+no longer "reverse the old delta then apply the new one"; a soft-deleted or
+edited transaction is simply excluded/reflected the next time anything
+reads the aggregate. The only thing that survives is a lock-then-check
+pattern for insufficient-balance validation. The **mandatory-card** layer
+then makes `card_id` non-optional on the write path and lets income move
+balance the same way expense already did.
 
 ---
 
 ## 1. Backend
 
-### 1.1 Files to create/modify
+### 1.1 Files
 
-| File | Action | Purpose |
-|---|---|---|
-| `backend/modules/finances/savings.go` | **Create** | All goal and contribution handlers + `goalOwned` helper |
-| `backend/modules/finances/types.go` | **Modify** | Add `SavingsGoal`, `SavingsContribution`, `savingsGoalRequest`, `savingsContributionRequest` types |
-| `backend/modules/finances/routes.go` | **Modify** | Register new goal and contribution routes |
-| `backend/store/migrate.go` | **Modify** | Add `savings_goals` and `savings_contributions` DDL |
+| File | Action |
+|---|---|
+| `backend/store/migrate.go` | Transfer columns/constraint; drop `card_reloads` and the three stored card columns; make `savings_goals.default_card_id` NOT NULL; link `savings_contributions` to `transactions`. **Mandatory-card layer:** add `transactions.card_id` CHECK constraint, `subscriptions.card_id` SET NOT NULL, idempotent `DROP TABLE IF EXISTS card_reloads`. |
+| `backend/modules/finances/types.go` | `Transaction` gains `FromCardID`/`ToCardID`; `Card` loses `InitialBalanceCents`; `transactionRequest` rejects `transfer` and now requires `CardID int64` (not `*int64`); `subscriptionRequest.CardID` becomes `int64` (required); new `cardTransferRequest`; `savingsGoalRequest.DefaultCardID` required; new shared `rejectCreditCardForInflow` + `errCreditInflow`. |
+| `backend/modules/finances/cards.go` | Rewrite `scanCard`/`ListCards`/`CreateCard` for computed balance + seed transfer; `CreateCardTransfer` uses the shared inflow helper on both sides; `DeleteCard` gains last-active-card invariant (409). **Reload handlers (`ListReloads`/`CreateReload`/`scanCardReload`) DELETED** — the reload concept is removed. `cardsBaseQuery` CASE gains the mirrored income branch. |
+| `backend/modules/finances/transactions.go` | Delete `cardDelta`/`cardAdjustment`/`applyCardDeltas`; add `cardBalance` (lock + compute) helper; rewrite the balance-check parts of `CreateTransaction`/`UpdateTransaction`; reject `type=transfer` in both plus `DeleteTransaction`. **Mandatory-card layer:** `cardBalance` CASE gains the guarded income branch; `CreateTransaction`/`UpdateTransaction` always resolve cardType + run `rejectCreditCardForInflow` on income; `cardId` no longer optional. `RefundTransaction` UNCHANGED (the income branch makes refund repone saldo automatically). |
+| `backend/modules/finances/subscriptions.go` | `CreateSubscription`/`UpdateSubscription` drop the `!=nil` guard, always call `subscriptionCardExists`; `processDue` emits an expense row always tagged with the subscription's `card_id` (`int64`, not `sql.NullInt64`). |
+| `backend/modules/finances/savings.go` | `CreateContribution` rewritten around the balance-check helper + transfer insert + `transaction_id` link; `CreateGoal`/`UpdateGoal` validate `defaultCardId` is required and non-`credito`. |
+| `backend/modules/finances/summary.go` | Add `AND type != 'transfer'` to the balance and trend queries. No mandatory-card change — "Disponible" is frontend-only. |
+| `backend/modules/finances/routes.go` | Add `POST /cards/transfers`. **Mandatory-card layer:** remove the reload routes (`GET/POST /cards/{id}/reloads`). |
 
-### 1.2 New types (`types.go` additions)
+### 1.2 Migration (`store/migrate.go`)
+
+Appended to the `stmts` slice. **Must run against truncated finance data**
+— see §4. Truncate-first, no backfill: legacy NULL `card_id` rows on
+`transactions` (income/expense) and on `subscriptions` are lost, same
+convention as `savings_goals.default_card_id SET NOT NULL`.
 
 ```go
-// --- structs ---
+// --- Unified transfer ledger ---
+`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check`,
+`ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('income','expense','transfer'))`,
+`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS from_card_id BIGINT REFERENCES cards(id)`,
+`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS to_card_id BIGINT REFERENCES cards(id)`,
+`CREATE INDEX IF NOT EXISTS idx_transactions_from_card_id ON transactions (from_card_id)`,
+`CREATE INDEX IF NOT EXISTS idx_transactions_to_card_id ON transactions (to_card_id)`,
 
-type SavingsGoal struct {
-    ID           int64  `json:"id"`
-    Name         string `json:"name"`
-    TargetCents  int64  `json:"targetCents"`
-    CurrentCents int64  `json:"currentCents"`
-    Deadline     string `json:"deadline"`      // "YYYY-MM-DD" or ""
-    Icon         string `json:"icon"`
-    Color        string `json:"color"`
-    CreatedAt    string `json:"createdAt"`
-}
+// Card balance/used-credit stop being stored — computed live from
+// transactions (see cardBalance in transactions.go). initial_balance_cents
+// is replaced by a seed transfer at card-creation time.
+`ALTER TABLE cards DROP COLUMN IF EXISTS balance_cents`,
+`ALTER TABLE cards DROP COLUMN IF EXISTS initial_balance_cents`,
+`ALTER TABLE cards DROP COLUMN IF EXISTS used_credit_cents`,
 
-type SavingsContribution struct {
-    ID          int64  `json:"id"`
-    GoalID      int64  `json:"goalId"`
+// card_reloads is no longer a thing — the reload concept was removed by
+// the mandatory-card model. Idempotent.
+`DROP TABLE IF EXISTS card_reloads`,
+
+`ALTER TABLE savings_goals ALTER COLUMN default_card_id SET NOT NULL`,
+`ALTER TABLE savings_contributions ADD COLUMN IF NOT EXISTS transaction_id BIGINT REFERENCES transactions(id)`,
+
+// --- Mandatory-card account model ---
+// card_id is mandatory for income/expense. CHECK (not column NOT NULL)
+// because transfer rows legitimately carry NULL card_id; a column-wide
+// NOT NULL would break every transfer writer.
+`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_card_id_required_for_income_expense`,
+`ALTER TABLE transactions ADD CONSTRAINT transactions_card_id_required_for_income_expense
+   CHECK (type = 'transfer' OR card_id IS NOT NULL)`,
+// Subscriptions have no transfer variant — straight NOT NULL.
+`ALTER TABLE subscriptions ALTER COLUMN card_id SET NOT NULL`,
+`DROP TABLE IF EXISTS card_reloads`, // idempotent safety; already dropped above
+```
+
+### 1.3 `types.go`
+
+```go
+const transactionTypeTransfer = "transfer"
+
+// cardId is mandatory on the write path. Transfer rows never go through
+// this shape — the three transfer writers (CreateCard's seed,
+// CreateContribution, CreateCardTransfer) insert directly with
+// from_/to_card_id and a NULL card_id, which the CHECK constraint allows.
+type transactionRequest struct {
+    Type        string `json:"type"`
     AmountCents int64  `json:"amountCents"`
-    Date        string `json:"date"`          // "YYYY-MM-DD"
-    Note        string `json:"note"`
-    CreatedAt   string `json:"createdAt"`
+    Category    string `json:"category"`
+    Description string `json:"description"`
+    Date        string `json:"date"`
+    CardID      int64  `json:"cardId"` // required (was *int64)
 }
 
-// --- request/validation ---
-
-type savingsGoalRequest struct {
-    Name        string `json:"name"`
-    TargetCents int64  `json:"targetCents"`
-    Deadline    string `json:"deadline"`      // "" = no deadline
-    Icon        string `json:"icon"`
-    Color       string `json:"color"`
-}
-
-func (r savingsGoalRequest) validate() error {
-    if strings.TrimSpace(r.Name) == "" {
-        return errors.New("name is required")
+func (r transactionRequest) validate() (time.Time, error) {
+    if r.Type != "income" && r.Type != "expense" {
+        return time.Time{}, fmt.Errorf("invalid type: %s", r.Type)
     }
-    if r.TargetCents <= 0 {
-        return errors.New("targetCents must be positive")
-    }
-    if r.Deadline != "" {
-        d, err := time.Parse("2006-01-02", r.Deadline)
-        if err != nil {
-            return errors.New("invalid deadline format, use YYYY-MM-DD")
-        }
-        if d.Before(time.Now().Truncate(24 * time.Hour)) {
-            return errors.New("deadline must be today or in the future")
-        }
-    }
-    return nil
-}
-
-type savingsContributionRequest struct {
-    AmountCents int64  `json:"amountCents"`
-    Date       string `json:"date"`
-    Note       string `json:"note"`
-}
-
-func (r savingsContributionRequest) validate() (time.Time, error) {
-    if r.AmountCents <= 0 {
-        return time.Time{}, errors.New("amountCents must be positive")
-    }
-    d, err := time.Parse("2006-01-02", r.Date)
-    if err != nil {
-        return time.Time{}, errors.New("invalid date, use YYYY-MM-DD")
+    // ... amount/category/date checks ...
+    if r.CardID <= 0 {
+        return time.Time{}, fmt.Errorf("cardId requerido")
     }
     return d, nil
 }
-```
 
-### 1.3 Handler signatures (`savings.go`)
-
-```go
-package finances
-
-import (
-    "database/sql"
-    "errors"
-    "log"
-    "net/http"
-    "time"
-
-    "workhub/httpx"
-    "workhub/middleware"
-
-    chi "github.com/go-chi/chi/v5"
-)
-
-// --- scan helpers ---
-
-func scanGoal(row interface{ Scan(...any) error }) (SavingsGoal, error) {
-    var g SavingsGoal
-    var deadline interface{} // nullable DATE
-    var createdAt time.Time
-    err := row.Scan(&g.ID, &g.Name, &g.TargetCents, &g.CurrentCents,
-        &deadline, &g.Icon, &g.Color, &g.CreatedAt)
-    if err != nil {
-        return g, err
-    }
-    if deadline != nil {
-        g.Deadline = deadline.(time.Time).Format("2006-01-02")
-    }
-    g.CreatedAt = createdAt.Format(time.RFC3339)
-    return g, nil
+// subscriptionRequest.CardID is required too — processDue always emits a
+// tagged expense, so the "Sin tarjeta" state is structurally impossible.
+type subscriptionRequest struct {
+    // ...
+    CardID int64 `json:"cardId"` // required (was *int64)
 }
 
-func scanContribution(row interface{ Scan(...any) error }) (SavingsContribution, error) {
-    var c SavingsContribution
-    var occurredOn, createdAt time.Time
-    err := row.Scan(&c.ID, &c.GoalID, &c.AmountCents, &occurredOn, &c.Note, &createdAt)
-    if err != nil {
-        return c, err
-    }
-    c.Date = occurredOn.Format("2006-01-02")
-    c.CreatedAt = createdAt.Format(time.RFC3339)
-    return c, nil
+// Shared credito-inflow guard. Applied at CreateTransaction (income) and
+// CreateCardTransfer (both sides). NOT applied to RefundTransaction (an
+// internal compensating entry, not a user income-tag) nor to subscriptions
+// (processDue writes expense, allowed on credito).
+var errCreditInflow = errors.New("no se puede taggear ingresos a una tarjeta de crédito")
+func rejectCreditCardForInflow(cardType string) error {
+    if cardType == cardTypeCredit { return errCreditInflow }
+    return nil
 }
 
-// --- goal ownership guard ---
-
-func (h *handler) goalOwned(id int64, role string, userID int64) error {
-    query := `SELECT id FROM savings_goals WHERE id = $1`
-    args := []any{id}
-    query, args = scopeToOwner(query, args, role, userID)
-    var got int64
-    return h.db.QueryRow(query, args...).Scan(&got)
+// Transaction read model: CardID stays *int64 — transfer rows legitimately
+// have it NULL. scanTransaction unchanged.
+type Transaction struct {
+    ID          int64  `json:"id"`
+    Type        string `json:"type"`
+    // ...
+    CardID      *int64 `json:"cardId,omitempty"`
+    FromCardID  *int64 `json:"fromCardId,omitempty"` // transfer only
+    ToCardID    *int64 `json:"toCardId,omitempty"`   // transfer only
 }
 
-// --- handlers ---
-
-func (h *handler) ListGoals(w http.ResponseWriter, r *http.Request) {
-    userID, role, ok := middleware.UserFromContext(r.Context())
-    if !ok {
-        httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-        return
-    }
-    query := `SELECT id, name, target_cents, current_cents, deadline, icon, color, created_at
-              FROM savings_goals WHERE 1=1`
-    args := []any{}
-    query, args = scopeToOwner(query, args, role, userID)
-    query += " ORDER BY id DESC"
-
-    rows, err := h.db.Query(query, args...)
-    if err != nil {
-        log.Printf("finances: list goals failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-    defer rows.Close()
-
-    goals := []SavingsGoal{}
-    for rows.Next() {
-        g, err := scanGoal(rows)
-        if err != nil {
-            log.Printf("finances: scan goal failed: %v", err)
-            httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-            return
-        }
-        goals = append(goals, g)
-    }
-    httpx.WriteJSON(w, http.StatusOK, map[string]any{"goals": goals})
-}
-
-func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
-    userID, _, ok := middleware.UserFromContext(r.Context())
-    if !ok {
-        httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-        return
-    }
-    var req savingsGoalRequest
-    if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
-        return
-    }
-    if err := req.validate(); err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-
-    deadline := (*time.Time)(nil)
-    if req.Deadline != "" {
-        t, _ := time.Parse("2006-01-02", req.Deadline)
-        deadline = &t
-    }
-
-    row := h.db.QueryRow(
-        `INSERT INTO savings_goals (name, target_cents, current_cents, deadline, icon, color, created_by)
-         VALUES ($1, $2, 0, $3, $4, $5, $6)
-         RETURNING id, name, target_cents, current_cents, deadline, icon, color, created_at`,
-        req.Name, req.TargetCents, deadline, req.Icon, req.Color, userID,
-    )
-    g, err := scanGoal(row)
-    if err != nil {
-        log.Printf("finances: create goal failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-    httpx.WriteJSON(w, http.StatusCreated, g)
-}
-
-func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
-    userID, role, ok := middleware.UserFromContext(r.Context())
-    if !ok {
-        httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-        return
-    }
-    id, err := parseID(r)
-    if err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-    var req savingsGoalRequest
-    if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
-        return
-    }
-    if err := req.validate(); err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-
-    deadline := (*time.Time)(nil)
-    if req.Deadline != "" {
-        t, _ := time.Parse("2006-01-02", req.Deadline)
-        deadline = &t
-    }
-
-    query := `UPDATE savings_goals
-              SET name = $1, target_cents = $2, deadline = $3, icon = $4, color = $5
-              WHERE id = $6`
-    args := []any{req.Name, req.TargetCents, deadline, req.Icon, req.Color, id}
-    query, args = scopeToOwner(query, args, role, userID)
-    query += ` RETURNING id, name, target_cents, current_cents, deadline, icon, color, created_at`
-
-    row := h.db.QueryRow(query, args...)
-    g, err := scanGoal(row)
-    if errors.Is(err, sql.ErrNoRows) {
-        httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "goal not found")
-        return
-    }
-    if err != nil {
-        log.Printf("finances: update goal failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-    httpx.WriteJSON(w, http.StatusOK, g)
-}
-
-func (h *handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
-    userID, role, ok := middleware.UserFromContext(r.Context())
-    if !ok {
-        httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-        return
-    }
-    id, err := parseID(r)
-    if err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-    query := `DELETE FROM savings_goals WHERE id = $1`
-    args := []any{id}
-    query, args = scopeToOwner(query, args, role, userID)
-
-    res, err := h.db.Exec(query, args...)
-    if err != nil {
-        log.Printf("finances: delete goal failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-    if n, _ := res.RowsAffected(); n == 0 {
-        httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "goal not found")
-        return
-    }
-    httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
-}
-
-func (h *handler) ListContributions(w http.ResponseWriter, r *http.Request) {
-    userID, role, ok := middleware.UserFromContext(r.Context())
-    if !ok {
-        httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-        return
-    }
-    id, err := parseID(r)
-    if err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-    if err := h.goalOwned(id, role, userID); errors.Is(err, sql.ErrNoRows) {
-        httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "goal not found")
-        return
-    } else if err != nil {
-        log.Printf("finances: list contributions failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-
-    rows, err := h.db.Query(
-        `SELECT id, goal_id, amount_cents, occurred_on, note, created_at
-         FROM savings_contributions WHERE goal_id = $1 ORDER BY occurred_on DESC, id DESC`,
-        id,
-    )
-    if err != nil {
-        log.Printf("finances: list contributions failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-    defer rows.Close()
-
-    contributions := []SavingsContribution{}
-    for rows.Next() {
-        c, err := scanContribution(rows)
-        if err != nil {
-            log.Printf("finances: scan contribution failed: %v", err)
-            httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-            return
-        }
-        contributions = append(contributions, c)
-    }
-    httpx.WriteJSON(w, http.StatusOK, map[string]any{"contributions": contributions})
-}
-
-// CreateContribution — atomic two-step transaction:
-//   1. INSERT savings_contributions
-//   2. UPDATE savings_goals SET current_cents = current_cents + $2
-// Both succeed or both roll back. This keeps current_cents denormalized
-// but consistent with the sum of all contribution rows.
-func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
-    userID, role, ok := middleware.UserFromContext(r.Context())
-    if !ok {
-        httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-        return
-    }
-    id, err := parseID(r)
-    if err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-    if err := h.goalOwned(id, role, userID); errors.Is(err, sql.ErrNoRows) {
-        httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "goal not found")
-        return
-    } else if err != nil {
-        log.Printf("finances: create contribution ownership check failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-
-    var req savingsContributionRequest
-    if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
-        return
-    }
-    occurredOn, err := req.validate()
-    if err != nil {
-        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-        return
-    }
-
-    tx, err := h.db.Begin()
-    if err != nil {
-        log.Printf("finances: create contribution failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-
-    // Step 1 — insert contribution row
-    row := tx.QueryRow(
-        `INSERT INTO savings_contributions (goal_id, amount_cents, occurred_on, note, created_by)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, goal_id, amount_cents, occurred_on, note, created_at`,
-        id, req.AmountCents, occurredOn, req.Note, userID,
-    )
-    c, err := scanContribution(row)
-    if err != nil {
-        tx.Rollback()
-        log.Printf("finances: create contribution failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-
-    // Step 2 — increment goal's current_cents
-    if _, err := tx.Exec(
-        `UPDATE savings_goals SET current_cents = current_cents + $1 WHERE id = $2`,
-        req.AmountCents, id,
-    ); err != nil {
-        tx.Rollback()
-        log.Printf("finances: create contribution failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-
-    if err := tx.Commit(); err != nil {
-        log.Printf("finances: create contribution failed: %v", err)
-        httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-        return
-    }
-
-    httpx.WriteJSON(w, http.StatusCreated, c)
+// New — card-to-card transfer.
+type cardTransferRequest struct {
+    FromCardID  int64  `json:"fromCardId"`
+    ToCardID    int64  `json:"toCardId"`
+    AmountCents int64  `json:"amountCents"`
+    Date        string `json:"date"`
+    Note        string `json:"note"`
 }
 ```
 
-### 1.4 Routes additions (`routes.go`)
+### 1.4 `transactions.go` — `cardBalance` and the income branch
 
-Add after the existing card routes:
+**Deleted entirely**: `cardDelta` struct, `cardAdjustment()`,
+`(cardDelta) reverse()`, `(cardDelta) isZero()`, `applyCardDeltas()`,
+`addDelta()`. Nothing computes or persists a delta anymore.
+
+**`cardBalance`** — lock + compute, used by every flow that needs to check
+"does this card have enough". Now carries the **income branch** (the
+mandatory-card layer):
 
 ```go
-r.Get("/savings-goals", h.ListGoals)
-r.Post("/savings-goals", h.CreateGoal)
-r.Put("/savings-goals/{id}", h.UpdateGoal)
-r.Delete("/savings-goals/{id}", h.DeleteGoal)
-r.Get("/savings-goals/{id}/contributions", h.ListContributions)
-r.Post("/savings-goals/{id}/contributions", h.CreateContribution)
+func cardBalance(tx *sql.Tx, cardID int64, excludeTxID int64) (balanceCents, usedCreditCents int64, cardType string, err error) {
+    err = tx.QueryRow(
+        `SELECT type FROM cards WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        cardID,
+    ).Scan(&cardType)
+    if err != nil { return 0, 0, "", err }
+
+    err = tx.QueryRow(
+        `SELECT
+           COALESCE(SUM(CASE
+             WHEN to_card_id   = $1 THEN amount_cents
+             WHEN from_card_id = $1 THEN -amount_cents
+             WHEN card_id = $1 AND type = 'income'  AND $2 != 'credito' THEN  amount_cents
+             WHEN card_id = $1 AND type = 'expense' AND $2 != 'credito' THEN -amount_cents
+             ELSE 0
+           END), 0),
+           COALESCE(SUM(CASE
+             WHEN card_id = $1 AND type = 'expense' AND $2 = 'credito' THEN amount_cents
+             ELSE 0
+           END), 0)
+         FROM transactions
+         WHERE deleted_at IS NULL AND id != $3
+           AND (to_card_id = $1 OR from_card_id = $1 OR card_id = $1)`,
+        cardID, cardType, excludeTxID,
+    ).Scan(&balanceCents, &usedCreditCents)
+    return balanceCents, usedCreditCents, cardType, err
+}
 ```
 
-### 1.5 Database migration additions (`store/migrate.go`)
+The `WHEN card_id = $1 AND type = 'income' AND $2 != 'credito' THEN +amount`
+branch is what makes income move a non-credito card's balance, and what
+makes `RefundTransaction` repone saldo with **no code change** (its
+compensating INSERT is already `type='income', ..., old.CardID`). The
+`$2 != 'credito'` predicate is defense in depth on top of the
+handler-level `rejectCreditCardForInflow` guard — even if an income row
+were somehow tagged to a credito card, the CASE would ignore it.
 
-Append to the `stmts` slice:
+**`CreateTransaction`** — `cardId` is now always present (validated
+upstream). Always resolve `cardType` via `cardTypeOwned` (so a wrong-owner
+card surfaces as 404 before the write opens), and on `income` run
+`rejectCreditCardForInflow(cardType)`. The balance check for an expense
+tagged to a debito/prepago card is the same lock-then-refuse shape as
+before:
 
 ```go
-`CREATE TABLE IF NOT EXISTS savings_goals (
-    id            BIGSERIAL PRIMARY KEY,
-    name          TEXT    NOT NULL,
-    target_cents  BIGINT  NOT NULL CHECK (target_cents > 0),
-    current_cents BIGINT  NOT NULL DEFAULT 0,
-    deadline      DATE,
-    icon          TEXT    NOT NULL DEFAULT 'piggy-bank',
-    color         TEXT    NOT NULL DEFAULT '#10b981',
-    created_by    BIGINT  REFERENCES users(id),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-)`,
+cardType, err := h.cardTypeOwned(req.CardID, role, userID)
+if err == sql.ErrNoRows { /* 404 */ }
+if req.Type == "income" {
+    if e := rejectCreditCardForInflow(cardType); e != nil {
+        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, e.Error())
+        return
+    }
+}
+if req.Type == "expense" {
+    balanceCents, _, _, err := cardBalance(tx, req.CardID, 0)
+    if cardType != cardTypeCredit && balanceCents < req.AmountCents {
+        httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "saldo insuficiente en tarjeta")
+        return
+    }
+}
+// INSERT ... no applyCardDeltas afterward.
+```
 
-`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+**`UpdateTransaction`** — same shape, but `cardBalance(tx, cardID,
+editingTxID)` excludes the row being edited so the transaction's own prior
+amount isn't counted against itself.
 
-`CREATE TABLE IF NOT EXISTS savings_contributions (
-    id           BIGSERIAL PRIMARY KEY,
-    goal_id      BIGINT  NOT NULL REFERENCES savings_goals(id) ON DELETE CASCADE,
-    amount_cents BIGINT  NOT NULL CHECK (amount_cents > 0),
-    note         TEXT    NOT NULL DEFAULT '',
-    occurred_on  DATE    NOT NULL,
-    created_by   BIGINT  REFERENCES users(id),
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-)`,
+**`DeleteTransaction`** — no balance handling at all (soft-delete already
+excludes the row from every future `cardBalance`). Rejects
+`type='transfer'` (404 — a transfer isn't part of the editable ledger from
+this endpoint's perspective).
 
-`CREATE INDEX IF NOT EXISTS idx_savings_contributions_goal_id ON savings_contributions (goal_id)`,
-`CREATE INDEX IF NOT EXISTS idx_savings_contributions_occurred_on ON savings_contributions (occurred_on)`,
+**`RefundTransaction`** — **unchanged**. Inserts `type='income', ...,
+old.CardID`; the income branch in `cardBalance` repone saldo
+automatically. Refund of a credito expense does not reduce
+`used_credit_cents` — a known edge deferred to a future credit_lines split
+(see SPEC.md open question).
+
+### 1.5 `cards.go`
+
+**`scanCard`/`ListCards`** — `cardsBaseQuery` carries the computed balance
+subqueries, with the mirrored income branch:
+
+```sql
+SELECT
+  c.id, c.name, c.type, c.bank, c.last4, c.color, c.icon,
+  c.credit_limit_cents, c.created_at,
+  COALESCE((SELECT SUM(CASE
+    WHEN t.to_card_id   = c.id THEN t.amount_cents
+    WHEN t.from_card_id = c.id THEN -t.amount_cents
+    WHEN t.card_id = c.id AND t.type = 'income'  AND c.type != 'credito' THEN  t.amount_cents
+    WHEN t.card_id = c.id AND t.type = 'expense' AND c.type != 'credito' THEN -t.amount_cents
+    ELSE 0 END)
+   FROM transactions t
+   WHERE t.deleted_at IS NULL
+     AND (t.to_card_id = c.id OR t.from_card_id = c.id OR t.card_id = c.id)), 0) AS balance_cents,
+  COALESCE((SELECT SUM(t.amount_cents) FROM transactions t
+   WHERE t.deleted_at IS NULL AND t.card_id = c.id AND t.type = 'expense' AND c.type = 'credito'), 0) AS used_credit_cents
+FROM cards c
+WHERE c.deleted_at IS NULL
+```
+
+`scanCard` scans this column order (no more `InitialBalanceCents`).
+
+**`CreateCard`** — inserts the card, then (same DB transaction) a seed
+transfer if `InitialBalanceCents > 0`:
+
+```go
+INSERT INTO transactions (type, amount_cents, category, description, occurred_on, created_by, to_card_id)
+VALUES ('transfer', $1, 'transferencia', 'Saldo inicial', CURRENT_DATE, $2, $3)
+```
+
+**`DeleteCard`** — last-active-card invariant (409):
+
+```go
+var n int
+tx.QueryRow(`SELECT COUNT(*) FROM cards WHERE created_by = $1 AND deleted_at IS NULL`, userID).Scan(&n)
+if n <= 1 {
+    tx.Rollback()
+    httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
+        "no podés archivar tu última tarjeta activa")
+    return
+}
+// ... proceed to soft-delete
+```
+
+The COUNT is scoped by owner and fires **before** any mutation. Frontend
+disables the delete affordance when `cards.length === 1` (progressive UX;
+the 409 is the authoritative guard).
+
+**`CreateCardTransfer`** — locks both cards in id-sorted order, runs
+`rejectCreditCardForInflow` on both sides (the shared helper replaces the
+old inline credito check), then `cardBalance` for the source's sufficiency
+check, then a single `transfer` INSERT with both `from_card_id`/`to_card_id`
+set. 201.
+
+**Reload handlers (`CreateReload`/`ListReloads`/`scanCardReload`)** —
+**DELETED**. The reload concept is removed by the mandatory-card model; the
+`POST/GET /cards/{id}/reloads` routes are removed in §1.8. Recharge a card
+by tagging an income to it instead.
+
+### 1.6 `subscriptions.go`
+
+`CreateSubscription`/`UpdateSubscription` drop the `!=nil` guard, always
+call `subscriptionCardExists` (bogus card → 404). `processDue` emits an
+expense row always tagged with the subscription's `card_id` (`int64`,
+not `sql.NullInt64`). No credito inflow guard here — subscriptions charge
+as expense, allowed on credito cards (design decision).
+
+### 1.7 `savings.go`
+
+`CreateGoal`/`UpdateGoal` validate `defaultCardId` is required and
+non-`credito` (reuse `cardTypeOwned`). `CreateContribution` rewritten
+around `cardBalance` + a transfer insert + `transaction_id` link — same
+shape as the v1 design; the mandatory-card layer doesn't touch savings
+(`default_card_id` was already mandatory in the transfer-ledger change).
+
+### 1.8 `routes.go`
+
+```go
+r.Post("/cards/transfers", h.CreateCardTransfer)
+// reload routes REMOVED — the reload concept is gone:
+//   r.Get ("/cards/{id}/reloads", h.ListReloads)    — deleted
+//   r.Post("/cards/{id}/reloads", h.CreateReload)   — deleted
 ```
 
 ---
 
 ## 2. Frontend
 
-### 2.1 Types (`src/types/finance.types.ts`)
+No response shape changes for `Card`, `Transaction`, or subscription list
+endpoints (`initialBalanceCents` removed from `Card`; `fromCardId`/
+`toCardId` added to `Transaction` as optional fields).
 
-Add to the existing exports:
+### 2.1 `types/finance.types.ts` + `hooks/useFinanceApi.ts`
 
-```ts
-export interface SavingsGoal {
-  id: number
-  name: string
-  targetCents: number
-  currentCents: number
-  deadline: string | null   // "YYYY-MM-DD"
-  icon: string
-  color: string
-  createdAt: string
-}
+- `Card`: remove `initialBalanceCents`.
+- `CardInput`: keep `initialBalanceCents` (still sent on create).
+- `Transaction`: add `fromCardId?: number`, `toCardId?: number`.
+- `TransactionInput`: `cardId` becomes **required** (`number`).
+- `SavingsGoal`/`SavingsGoalInput`: `defaultCardId` required (`number`).
+- New: `CardTransferInput`.
+- `CardReload`/`CardReloadInput`/`createReload`/`listReloads`: **removed**
+  (their endpoints are gone).
 
-export interface SavingsGoalInput {
-  name: string
-  targetCents: number
-  deadline: string | null
-  icon: string
-  color: string
-}
+### 2.2 `TarjetasTab.tsx`
 
-export interface SavingsContribution {
-  id: number
-  goalId: number
-  amountCents: number
-  date: string   // "YYYY-MM-DD"
-  note: string
-  createdAt: string
-}
+- **ReloadForm/Recargar button removed** — no reload flow anymore.
+- New action alongside (not replacing) "Transferir" on each non-credito card.
+- **delete-last-card** — Trash disabled when `cards.length === 1`,
+  `aria-label`/`title` "No podés archivar tu última tarjeta activa"; toast
+  on the 409 (backend is authoritative).
 
-export interface SavingsContributionInput {
-  amountCents: number
-  date: string
-  note: string
-}
-```
+### 2.3 `TransactionForm.tsx`
 
-### 2.2 Hook additions (`src/hooks/useFinanceApi.ts`)
+`cardId` schema `z.string().min(1, 'Elegí una tarjeta')` (required). Drop
+the "(opcional)" label and the "Ninguna"/"Sin tarjeta" placeholder option.
 
-Append to the imports and return block:
+### 2.4 `FinancesPage.tsx` — page-level onboarding gate
 
-```ts
-import type {
-  // ... existing imports
-  SavingsGoal,
-  SavingsGoalInput,
-  SavingsContribution,
-  SavingsContributionInput,
-} from '@/types/finance.types'
+On mount, call `listCards`; count non-credito cards. If 0, render the gate
+(header "Finanzas" + a centered "Para iniciar con tus finanzas / Agregá una
+tarjeta de débito o prepago" + inline `CardFormFields blockCredit`), hide
+all tabs + the mobile nav. When the first non-credito card is created,
+`onSaved` re-runs `listCards`, the count goes to 1, and the gate lifts.
+`blockCredit` prevents the user from locking themselves out by picking
+crédito as their first card (crédito-alone doesn't clear the gate).
 
-// Inside useFinanceApi return:
+### 2.5 `ResumenTab.tsx` — "Disponible" tile
 
-async function listSavingsGoals(): Promise<SavingsGoal[]> {
-  const res = await api.get<{ goals: SavingsGoal[] }>('/api/finances/savings-goals')
-  return res.data.goals
-}
+Tile label "Balance total" → **"Disponible"**; value =
+`summary.balanceCents − Σ listGoals().currentCents` (computed frontend-side
+— no new backend endpoint). Removed the "Sin asignar" reconciliation line
+and its diff computation (structurally impossible now; every income/expense
+has a card). The "En metas de ahorro" breakdown line stays.
 
-async function createSavingsGoal(input: SavingsGoalInput): Promise<SavingsGoal> {
-  const res = await api.post<SavingsGoal>('/api/finances/savings-goals', input)
-  return res.data
-}
+### 2.6 `MovimientosTab.tsx` — refund copy
 
-async function updateSavingsGoal(id: number, input: SavingsGoalInput): Promise<SavingsGoal> {
-  const res = await api.put<SavingsGoal>(`/api/finances/savings-goals/${id}`, input)
-  return res.data
-}
+Refund dialog copy: "El reembolso agregará al balance total, pero no
+repondrá el saldo de la tarjeta." → **"El reembolso sí repondrá el saldo de
+la tarjeta."** (matches the new `cardBalance` income-branch behavior; the
+backend `RefundTransaction` needs no change).
 
-async function deleteSavingsGoal(id: number): Promise<void> {
-  await api.delete(`/api/finances/savings-goals/${id}`)
-}
+### 2.7 `MetasTab.tsx` / `GoalForm`
 
-async function listSavingsGoalContributions(goalId: number): Promise<SavingsContribution[]> {
-  const res = await api.get<{ contributions: SavingsContribution[] }>(
-    `/api/finances/savings-goals/${goalId}/contributions`
-  )
-  return res.data.contributions
-}
-
-async function createSavingsGoalContribution(
-  goalId: number,
-  input: SavingsContributionInput
-): Promise<SavingsContribution> {
-  const res = await api.post<SavingsContribution>(
-    `/api/finances/savings-goals/${goalId}/contributions`,
-    input
-  )
-  return res.data
-}
-
-// Add to return object:
-listSavingsGoals,
-createSavingsGoal,
-updateSavingsGoal,
-deleteSavingsGoal,
-listSavingsGoalContributions,
-createSavingsGoalContribution,
-```
-
-### 2.3 Components to create
-
-#### `src/pages/Finances/MetasTab.tsx`
-
-New file. Contains three exported/gated components:
-
-**`GoalForm`** — dialog for create/edit:
-- Fields: name (`Input`), target amount (`Input type=number step=0.01`, converts PEN → cents), deadline (`Input type=date`, optional), icon selector (static list of lucide keys), color swatches (use `CARD_COLORS` from `TarjetasTab.tsx`).
-- On submit: `createSavingsGoal` or `updateSavingsGoal`; calls `onSuccess` with the returned `SavingsGoal`.
-- Reuses the `Dialog` + `DialogContent` + `DialogHeader` + `DialogFooter` shadcn pattern from `CardForm`.
-
-**`ContributionForm`** — dialog to add a contribution:
-- Fields: amount (`Input type=number step=0.01`), date (`Input type=date`), note (`Input`).
-- On submit: calls `createSavingsGoalContribution`; calls `onSuccess` with the returned `SavingsContribution`.
-
-**`MetasTab`** — main grid component:
-- Receives `goals: SavingsGoal[]` and `onRefresh: () => void` as props (same pattern as `TarjetasTabProps`).
-- Summary header: total `currentCents` across all goals vs. combined `targetCents`, displayed in a `CozyCard`-style header using PEN formatting.
-- Grid of goal cards (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3`):
-  - Top border via `style={{ borderTop: \`4px solid ${goal.color}\` }}` (same as `TarjetasTab`).
-  - Icon rendered via lucide (key = `goal.icon`).
-  - Linear progress bar: `<div class="w-full bg-muted rounded-full h-2"><div class="h-2 rounded-full" style={{ width: \`${Math.min(100, Math.round((goal.currentCents / goal.targetCents) * 100))}%\`, backgroundColor: goal.color }} /></div>`
-  - Percentage label.
-  - Formatted PEN amounts (`new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(...)`).
-  - Deadline badge: days remaining or formatted date (Spanish).
-  - "Añadir" `Button` (size=sm, variant=ghost) → opens `ContributionForm`.
-  - Edit / Delete icon buttons (`Pencil`, `Trash2`) → same pattern as `TarjetasTab`.
-- Empty state: `UICard` with `PiggyBank` icon and "Sin metas de ahorro" text.
-- FloatingActionButton: same position as other tabs.
-
-#### `src/pages/Finances/MetasTabWrapper.tsx` (or inline in `FinancesPage.tsx`)
-
-Same pattern as `TarjetasTabWrapper`:
-
-```tsx
-function MetasTabWrapper() {
-  const { listSavingsGoals } = useFinanceApi()
-  const [goals, setGoals] = useState<SavingsGoal[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [hasError, setHasError] = useState(false)
-  const [formOpen, setFormOpen] = useState(false)
-  const [editGoal, setEditGoal] = useState<SavingsGoal | undefined>()
-
-  useEffect(() => {
-    let ignore = false
-    listSavingsGoals()
-      .then(data => { if (!ignore) { setGoals(data); setIsLoading(false) } })
-      .catch(() => { if (!ignore) { setHasError(true); setIsLoading(false) } })
-    return () => { ignore = true }
-  }, [listSavingsGoals])
-
-  const handleRefresh = useCallback(() => {
-    setIsLoading(true)
-    setHasError(false)
-    listSavingsGoals()
-      .then(data => { setGoals(data); setIsLoading(false) })
-      .catch(() => { setHasError(true); setIsLoading(false) })
-  }, [listSavingsGoals])
-
-  // Loading / error / empty states mirror TarjetasTabWrapper exactly
-  // ...
-}
-```
-
-### 2.4 Component to modify
-
-**`src/pages/Finances/FinancesPage.tsx`**:
-1. Import `MetasTabWrapper` and `Target` icon.
-2. Add to `TABS` array:
-   ```ts
-   { value: 'metas', label: 'Metas', icon: Target }
-   ```
-3. Add `<TabsContent value="metas">` after the tarjetas content:
-   ```tsx
-   <TabsContent value="metas" className="mt-4">
-     <MetasTabWrapper />
-   </TabsContent>
-   ```
-
-### 2.5 Color palette and icon options
-
-- Reuse `CARD_COLORS` array from `TarjetasTab.tsx` as the goal color palette.
-- Default icon: `piggy-bank`. Available icons: static curated list of lucide keys (e.g. `piggy-bank`, `plane`, `home`, `car`, `graduation-cap`, `heart`, `gift`, `briefcase`).
+- Card select required (`z.string().min(1)`), filtered to exclude `credito`.
+- Remove the "Sin tarjeta predeterminada" option.
+- Remove the amber "Sin tarjeta — se descontará saldo general" warning
+  block (every goal has a card now).
+- `ContributionForm` surfaces 409 (default card archived) via the existing
+  generic `toast.error(err.message)` — no special-case UI.
 
 ---
 
-## 3. Contribution Atomic Transaction Pattern
+## 3. What does NOT change
 
-The `CreateContribution` handler implements a two-step atomic transaction that mirrors `CreateReload` in `cards.go`.
-
-### Why a transaction is required
-
-`current_cents` on `savings_goals` is **denormalized**: it is not computed on read as `SUM(amount_cents)` from `savings_contributions`. Instead it is maintained as a pre-computed column, updated on every contribution. Without a transaction:
-
-- If step 1 (insert row) succeeds but step 2 (`UPDATE current_cents`) fails → the contribution row exists but the goal shows the wrong balance.
-- If step 1 fails → no inconsistency, but we lose the contribution.
-- If step 2 succeeds but the `INSERT` then fails → `current_cents` is inflated with no corresponding row.
-
-Using a transaction guarantees both steps succeed together or both roll back, keeping the denormalized counter consistent with the source-of-truth table.
-
-### Transaction flow (pseudo-code)
-
-```
-BEGIN
-  INSERT INTO savings_contributions (goal_id, amount_cents, occurred_on, note, created_by)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, goal_id, amount_cents, occurred_on, note, created_at
-  // → c
-
-  UPDATE savings_goals
-    SET current_cents = current_cents + $2   -- increment by amount_cents
-    WHERE id = $1
-
-  -- check rowCount = 1 or tx.Commit fails on PostgreSQL error
-COMMIT
-```
-
-### Error handling
-
-- `INSERT` failure → `tx.Rollback()`, return 500.
-- `UPDATE` failure → `tx.Rollback()`, return 500.
-- `tx.Commit()` failure → return 500.
-- `SELECT ... FOR UPDATE` (row lock) is **not** required because the `WHERE id = $1` in the UPDATE will lock the goal row for the duration of the transaction in PostgreSQL's READ COMMITTED mode, which is sufficient for this increment-only operation.
+- `PresupuestosTab.tsx`, `SuscripcionesTab.tsx` (shape) — untouched.
+- `MovimientosTab.tsx` — no new filter, no transfer rows surfacing there.
+- Card, transaction, and goal soft-delete (`deleted_at`) — unrelated
+  mechanism, already correct; both changes only add `AND deleted_at IS
+  NULL` to new aggregates the same way every existing query does.
+- `summary.go` — the "Balance total" → "Disponible" rename and the
+  `− Σ goals.currentCents` subtraction are **frontend-only**; the backend
+  `balanceQuery` already filters `type != 'transfer'` and stays unchanged
+  by the mandatory-card layer.
 
 ---
 
-## 4. Ownership and Security
+## 4. Migration operational note
 
-All goal and contribution endpoints use the same `scopeToOwner` deny-by-default pattern as cards and subscriptions:
-
-- `ListGoals` → `scopeToOwner` on the SELECT, so guests only see their own goals.
-- `CreateGoal` → stamps `created_by = userID` from JWT context.
-- `UpdateGoal` / `DeleteGoal` → `scopeToOwner` on the WHERE clause; returns 404 (not 403) to avoid revealing existence.
-- `ListContributions` → first checks `goalOwned` (which calls `scopeToOwner` on the goal); returns 404 if the goal isn't owned.
-- `CreateContribution` → first checks `goalOwned`, same 404-if-not-owned pattern.
-- Admins bypass `scopeToOwner` and see all goals/contributions.
+`ALTER TABLE savings_goals ALTER COLUMN default_card_id SET NOT NULL`,
+`ALTER TABLE subscriptions ALTER COLUMN card_id SET NOT NULL`, and the
+`transactions.card_id` CHECK constraint all fail at startup if existing
+rows violate them (NULL `card_id` on income/expense transactions, NULL
+`card_id` on subscriptions, NULL `default_card_id` on goals). Per SPEC.md's
+no-backfill decision, these ship against clean data — truncate
+`transactions, cards, card_reloads, savings_goals, savings_contributions`
+(cascade) before starting the backend on the new migration for the first
+time in any environment carrying pre-change data. The `card_reloads` DROP
+is idempotent (already dropped at a prior step; kept for safety).

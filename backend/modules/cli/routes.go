@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"workhub/httpx"
+	"workhub/modules/auth"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -26,9 +27,9 @@ func Routes(db *sql.DB, cliUserID int64, cliToken string, cliAuthMiddleware func
 
 // Me returns the user associated with the CLI token.
 func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
-	var id int64
-	var name, email, role string
-	err := h.db.QueryRow(`SELECT id, name, email, role FROM users WHERE id = $1`, h.cliUserID).Scan(&id, &name, &email, &role)
+	var u auth.User
+	err := h.db.QueryRow(`SELECT id, name, email, role FROM users WHERE id = $1`, h.cliUserID).
+		Scan(&u.ID, &u.Name, &u.Email, &u.Role)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "cli user not found")
 		return
@@ -37,10 +38,5 @@ func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "database error")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"id":    id,
-		"name":  name,
-		"email": email,
-		"role":  role,
-	})
+	httpx.WriteJSON(w, http.StatusOK, u)
 }

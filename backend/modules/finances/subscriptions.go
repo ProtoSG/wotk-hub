@@ -11,9 +11,13 @@ import (
 func scanSubscription(row interface{ Scan(...any) error }) (Subscription, error) {
 	var s Subscription
 	var nextBilling, createdAt time.Time
-	err := row.Scan(&s.ID, &s.Name, &s.AmountCents, &s.Frequency, &s.Category, &nextBilling, &createdAt, &s.Active)
+	var cardID sql.NullInt64
+	err := row.Scan(&s.ID, &s.Name, &s.AmountCents, &s.Frequency, &s.Category, &nextBilling, &createdAt, &s.Active, &cardID)
 	if err != nil {
 		return s, err
+	}
+	if cardID.Valid {
+		s.CardID = &cardID.Int64
 	}
 	s.NextBillingOn = nextBilling.Format(dateLayout)
 	s.CreatedAt = createdAt.Format(time.RFC3339)
@@ -57,7 +61,7 @@ func (h *handler) processDue() error {
 	defer tx.Rollback()
 
 	rows, err := tx.Query(
-		`SELECT id, name, amount_cents, frequency, category, next_billing_on
+		`SELECT id, name, amount_cents, frequency, category, next_billing_on, card_id
 		 FROM subscriptions
 		 WHERE active AND next_billing_on <= $1
 		 FOR UPDATE`, today)
@@ -72,11 +76,12 @@ func (h *handler) processDue() error {
 		frequency   string
 		category    string
 		next        time.Time
+		cardID      int64 // NOT NULL in the DB since slice 1a — no Null path here
 	}
 	var dues []due
 	for rows.Next() {
 		var d due
-		if err := rows.Scan(&d.id, &d.name, &d.amountCents, &d.frequency, &d.category, &d.next); err != nil {
+		if err := rows.Scan(&d.id, &d.name, &d.amountCents, &d.frequency, &d.category, &d.next, &d.cardID); err != nil {
 			rows.Close()
 			return err
 		}
@@ -84,13 +89,23 @@ func (h *handler) processDue() error {
 	}
 	rows.Close()
 
+	// No balance check here on purpose: this is an unattended auto-charge,
+	// not a user-initiated expense. A real subscription doesn't ask
+	// permission when the linked account is short — it charges, and the
+	// account goes negative. Blocking it here would silently skip a
+	// commitment that already happened while still advancing
+	// next_billing_on, which is worse than a card balance going negative.
+	//
+	// card_id is always bound: subscriptions.card_id is NOT NULL (slice 1a
+	// migration) and Create/Update enforce a valid cardId, so every due
+	// charge tags a real card — "no untagged money" holds for this path.
 	for _, d := range dues {
 		next := d.next
 		for !next.After(today) {
 			if _, err := tx.Exec(
-				`INSERT INTO transactions (type, amount_cents, category, description, occurred_on)
-				 VALUES ('expense', $1, $2, $3, $4)`,
-				d.amountCents, d.category, d.name+" (suscripción)", next); err != nil {
+				`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, card_id)
+				 VALUES ('expense', $1, $2, $3, $4, $5)`,
+				d.amountCents, d.category, d.name+" (suscripción)", next, d.cardID); err != nil {
 				return err
 			}
 			next = advance(next, d.frequency)
@@ -116,7 +131,7 @@ func monthlyCents(amountCents int64, frequency string) int64 {
 
 func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(
-		`SELECT id, name, amount_cents, frequency, category, next_billing_on, created_at, active
+		`SELECT id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id
 		 FROM subscriptions ORDER BY next_billing_on ASC, id ASC`)
 	if err != nil {
 		log.Printf("finances: list subscriptions failed: %v", err)
@@ -139,10 +154,20 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		}
 		subscriptions = append(subscriptions, s)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"subscriptions":         subscriptions,
-		"monthlyCommittedCents": committed,
+	httpx.WriteJSON(w, http.StatusOK, listSubscriptionsResponse{
+		Subscriptions:         subscriptions,
+		MonthlyCommittedCents: committed,
 	})
+}
+
+// subscriptionCardExists checks the card exists and isn't archived.
+// Unscoped by owner — subscriptions have no ownership model of their own
+// (see ListSubscriptions/UpdateSubscription/DeleteSubscription, none of
+// which check created_by either), so gatekeeping just this field would be
+// an inconsistent, partial fix to that larger gap rather than this change.
+func (h *handler) subscriptionCardExists(cardID int64) error {
+	var got int64
+	return h.db.QueryRow(`SELECT id FROM cards WHERE id = $1 AND deleted_at IS NULL`, cardID).Scan(&got)
 }
 
 func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
@@ -156,11 +181,22 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
+	// CardId is mandatory (see validate); always confirm the card exists
+	// and isn't archived before opening the write. A bogus or unowned card
+	// surfaces as a clean 404, not a FK violation 500.
+	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: create subscription card check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
 	row := h.db.QueryRow(
-		`INSERT INTO subscriptions (name, amount_cents, frequency, category, next_billing_on, active)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, name, amount_cents, frequency, category, next_billing_on, created_at, active`,
-		req.Name, req.AmountCents, req.Frequency, req.Category, next, req.isActive(),
+		`INSERT INTO subscriptions (name, amount_cents, frequency, category, next_billing_on, active, card_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id`,
+		req.Name, req.AmountCents, req.Frequency, req.Category, next, req.isActive(), req.CardID,
 	)
 	s, err := scanSubscription(row)
 	if err != nil {
@@ -185,6 +221,14 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	next, err := req.validate()
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: update subscription card check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -213,10 +257,10 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 
 	row := h.db.QueryRow(
 		`UPDATE subscriptions
-		 SET name = $1, amount_cents = $2, frequency = $3, category = $4, next_billing_on = $5, active = $6
-		 WHERE id = $7
-		 RETURNING id, name, amount_cents, frequency, category, next_billing_on, created_at, active`,
-		req.Name, req.AmountCents, req.Frequency, req.Category, next, req.isActive(), id,
+		 SET name = $1, amount_cents = $2, frequency = $3, category = $4, next_billing_on = $5, active = $6, card_id = $7
+		 WHERE id = $8
+		 RETURNING id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id`,
+		req.Name, req.AmountCents, req.Frequency, req.Category, next, req.isActive(), req.CardID, id,
 	)
 	s, err := scanSubscription(row)
 	if err == sql.ErrNoRows {
@@ -247,5 +291,5 @@ func (h *handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+	httpx.WriteSuccess(w, http.StatusOK)
 }

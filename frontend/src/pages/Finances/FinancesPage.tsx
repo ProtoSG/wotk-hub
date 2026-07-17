@@ -1,20 +1,20 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, AlertCircle, PiggyBank, Plus } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CardContent } from '@/components/ui/card'
+import { CozyCard } from '@/components/ui/cozy-card'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
+import { useFinanceApi } from '@/hooks/useFinanceApi'
+import type { Card } from '@/types/finance.types'
 import MonthPicker from './MonthPicker'
 import ResumenTab from './ResumenTab'
-import { Button } from '@/components/ui/button'
 import MovimientosTab from './MovimientosTab'
 import SuscripcionesTab from './SuscripcionesTab'
 import PresupuestosTab from './PresupuestosTab'
-import { TarjetasTab, CardForm } from './TarjetasTab'
-import { MetasTab } from './MetasTab'
-import FloatingActionButton from './FloatingActionButton'
-import { useFinanceApi } from '@/hooks/useFinanceApi'
-import type { Card, SavingsGoal } from '@/types/finance.types'
+import TarjetasTab, { CardFormFields } from './TarjetasTab'
+import MetasTab from './MetasTab'
 
 const TABS = [
   { value: 'resumen', label: 'Resumen', icon: LayoutDashboard },
@@ -25,11 +25,72 @@ const TABS = [
   { value: 'metas', label: 'Metas', icon: PiggyBank },
 ]
 
+// Page-level onboarding gate (spec finance-onboarding / design #40). Blocks
+// ALL Finances tabs until the owner has ≥1 non-credito active card. Credito
+// alone does not clear the gate (type !== 'credito' filter). Reuses the
+// existing listCards result + the CardFormFields body so the user creates
+// their first card inline without ever seeing the tabbed content.
+function OnboardingGate({ onSaved }: { onSaved: () => void }) {
+  return (
+    <CozyCard className="animate-card-in mx-auto mt-12 max-w-md">
+      <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+        <CreditCard className="h-12 w-12 opacity-30" />
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Para iniciar con tus finanzas</h2>
+          <p className="text-sm text-muted-foreground">
+            Agregá una tarjeta de débito o prepago para empezar a registrar tus movimientos.
+          </p>
+        </div>
+        {/* blockCredit: a crédito card alone does NOT clear the gate, so we
+            don't offer it here — the user can add créditos later from Tarjetas. */}
+        <div className="w-full text-left">
+          <CardFormFields onSaved={onSaved} blockCredit />
+        </div>
+      </CardContent>
+    </CozyCard>
+  )
+}
+
 export default function FinancesPage() {
   const [month, setMonth] = useState(currentMonth())
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab') ?? ''
   const tab = TABS.some((t) => t.value === param) ? param : 'resumen'
+
+  // Gate state: null while cards are still loading so we don't flash the gate
+  // before the first listCards resolves.
+  const [cards, setCards] = useState<Card[] | null>(null)
+  const { listCards } = useFinanceApi()
+
+  const loadCards = useCallback(async () => {
+    try {
+      setCards(await listCards())
+    } catch (err) {
+      // Surface but lift the gate so the user isn't hard-blocked on a transient
+      // fetch failure (the backend deletes-last-card guard still protects).
+      setCards([])
+      console.error('listCards failed in FinancesPage gate:', err)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
+    loadCards()
+  }, [loadCards])
+
+  const nonCreditCardCount =
+    cards?.filter((c) => c.type !== 'credito').length ?? 0
+  const gateActive = cards !== null && nonCreditCardCount === 0
+
+  if (gateActive) {
+    return (
+      <div className="space-y-6 pb-24 sm:pb-0">
+        <h1 className="text-2xl font-bold">Finanzas</h1>
+        <OnboardingGate onSaved={loadCards} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 pb-24 sm:pb-0">
@@ -58,10 +119,10 @@ export default function FinancesPage() {
           <PresupuestosTab month={month} />
         </TabsContent>
         <TabsContent value="tarjetas" className="mt-4">
-          <TarjetasTabWrapper />
+          <TarjetasTab />
         </TabsContent>
         <TabsContent value="metas" className="mt-4">
-          <MetasTabWrapper />
+          <MetasTab />
         </TabsContent>
       </Tabs>
 
@@ -93,176 +154,4 @@ export default function FinancesPage() {
       </nav>
     </div>
   )
-}
-
-function TarjetasTabWrapper() {
-  const { listCards } = useFinanceApi()
-  const [cards, setCards] = useState<Card[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [hasError, setHasError] = useState(false)
-  const [editCard, setEditCard] = useState<Card | undefined>()
-  const [formOpen, setFormOpen] = useState(false)
-
-  useEffect(() => {
-    let ignore = false
-    listCards()
-      .then(data => { if (!ignore) { setCards(data); setIsLoading(false) } })
-      .catch(() => { if (!ignore) { setHasError(true); setIsLoading(false) } })
-    return () => { ignore = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleRefresh = useCallback(() => {
-    setIsLoading(true)
-    setHasError(false)
-    listCards()
-      .then(data => { setCards(data); setIsLoading(false) })
-      .catch(() => { setHasError(true); setIsLoading(false) })
-  }, [listCards])
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    )
-  }
-
-  if (hasError) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-8 text-center">
-        <div className="text-destructive">
-          <AlertCircle className="h-8 w-8" />
-        </div>
-        <p className="text-sm text-muted-foreground">No se pudieron cargar las tarjetas</p>
-        <Button size="sm" variant="outline" onClick={handleRefresh}>
-          Reintentar
-        </Button>
-      </div>
-    )
-  }
-
-  if (cards.length === 0) {
-    return (
-      <>
-        <div className="mb-4 sm:hidden">
-          <FloatingActionButton
-            label="Nueva tarjeta"
-            onClick={() => {
-              setEditCard(undefined)
-              setFormOpen(true)
-            }}
-          />
-        </div>
-        <div className="hidden sm:block mb-4">
-          <Button
-            onClick={() => {
-              setEditCard(undefined)
-              setFormOpen(true)
-            }}
-          >
-            <Plus size={14} />
-            Nueva tarjeta
-          </Button>
-        </div>
-        <CardForm
-          open={formOpen}
-          onClose={() => setFormOpen(false)}
-          onSuccess={(card) => {
-            setCards([card])
-            setFormOpen(false)
-          }}
-          editCard={editCard}
-        />
-        <TarjetasTab cards={cards} onRefresh={handleRefresh} />
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div className="mb-4 sm:hidden">
-        <FloatingActionButton
-          label="Nueva tarjeta"
-          onClick={() => {
-            setEditCard(undefined)
-            setFormOpen(true)
-          }}
-        />
-      </div>
-      <div className="hidden sm:block mb-4">
-        <Button
-          onClick={() => {
-            setEditCard(undefined)
-            setFormOpen(true)
-          }}
-        >
-          <Plus size={14} />
-          Nueva tarjeta
-        </Button>
-      </div>
-      <CardForm
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSuccess={(card) => {
-          if (editCard) {
-            setCards(prev => prev.map(c => c.id === card.id ? card : c))
-          } else {
-            setCards(prev => [...prev, card])
-          }
-          setFormOpen(false)
-        }}
-        editCard={editCard}
-      />
-      <TarjetasTab cards={cards} onRefresh={handleRefresh} />
-    </>
-  )
-}
-
-function MetasTabWrapper() {
-  const { listGoals } = useFinanceApi()
-  const [goals, setGoals] = useState<SavingsGoal[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [hasError, setHasError] = useState(false)
-
-  useEffect(() => {
-    let ignore = false
-    listGoals()
-      .then(data => { if (!ignore) { setGoals(data); setIsLoading(false) } })
-      .catch(() => { if (!ignore) { setHasError(true); setIsLoading(false) } })
-    return () => { ignore = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const handleRefresh = useCallback(() => {
-    setIsLoading(true)
-    setHasError(false)
-    listGoals()
-      .then(data => { setGoals(data); setIsLoading(false) })
-      .catch(() => { setHasError(true); setIsLoading(false) })
-  }, [listGoals])
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    )
-  }
-
-  if (hasError) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-8 text-center">
-        <div className="text-destructive">
-          <AlertCircle className="h-8 w-8" />
-        </div>
-        <p className="text-sm text-muted-foreground">No se pudieron cargar las metas</p>
-        <Button size="sm" variant="outline" onClick={handleRefresh}>
-          Reintentar
-        </Button>
-      </div>
-    )
-  }
-
-  return <MetasTab goals={goals} onRefresh={handleRefresh} />
 }
