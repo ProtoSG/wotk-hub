@@ -1,10 +1,30 @@
 package finances
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 )
+
+// errCreditInflow is the shared sentinel rejecting income/transfer-inflow
+// targeting a credito card. A credito card has no spendable balance (only
+// used_credit), so tagging inflow to it is a domain error, not a silent
+// no-op. See rejectCreditCardForInflow.
+var errCreditInflow = errors.New("no se puede taggear ingresos a una tarjeta de crédito")
+
+// rejectCreditCardForInflow is the ONE inflow guard shared by every handler
+// that accepts money flowing INTO a card: CreateTransaction (income) here,
+// CreateCardTransfer (both sides) in slice 1b. RefundTransaction is exempt
+// — it's an internal compensating ledger entry, not a user income-tag, and
+// the cardBalance CASE's credito predicate makes refund a no-op on credito
+// balance by construction. Returns nil for any non-credito card type.
+func rejectCreditCardForInflow(cardType string) error {
+	if cardType == cardTypeCredit {
+		return errCreditInflow
+	}
+	return nil
+}
 
 var expenseCategories = []string{
 	"comida", "transporte", "vivienda", "servicios", "salud",
@@ -41,13 +61,18 @@ type Transaction struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
+// transactionRequest is the write model: cardId is now MANDATORY for every
+// income/expense (validated here, enforced at the DB by a CHECK). Transfer
+// rows never go through this shape — the three transfer writers (reload,
+// contribution, card-to-card) insert directly with from_/to_card_id and a
+// NULL card_id, which the CHECK allows.
 type transactionRequest struct {
 	Type        string `json:"type"`
 	AmountCents int64  `json:"amountCents"`
 	Category    string `json:"category"`
 	Description string `json:"description"`
 	Date        string `json:"date"`
-	CardID      *int64 `json:"cardId"`
+	CardID      int64  `json:"cardId"`
 }
 
 // validate only ever accepts income/expense — transfer rows are never
@@ -67,8 +92,11 @@ func (r transactionRequest) validate() (time.Time, error) {
 	if !slices.Contains(cats, r.Category) {
 		return time.Time{}, fmt.Errorf("invalid category: %s", r.Category)
 	}
-	if r.CardID != nil && *r.CardID <= 0 {
-		return time.Time{}, fmt.Errorf("invalid cardId")
+	// Mandatory-card model: every income/expense must be tagged to a
+	// card. An omitted or non-positive cardId is rejected before the
+	// handler opens a transaction. The DB CHECK backs this up.
+	if r.CardID <= 0 {
+		return time.Time{}, fmt.Errorf("cardId requerido")
 	}
 	d, err := time.Parse(dateLayout, r.Date)
 	if err != nil {

@@ -56,6 +56,7 @@ func cardBalance(tx *sql.Tx, cardID int64, excludeTxID int64) (balanceCents, use
 		   COALESCE(SUM(CASE
 		     WHEN to_card_id = $1 THEN amount_cents
 		     WHEN from_card_id = $1 THEN -amount_cents
+		     WHEN card_id = $1 AND type = 'income'  AND $2 != 'credito' THEN amount_cents
 		     WHEN card_id = $1 AND type = 'expense' AND $2 != 'credito' THEN -amount_cents
 		     ELSE 0
 		   END), 0),
@@ -176,13 +177,21 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.CardID != nil {
-		if _, err := h.cardTypeOwned(*req.CardID, role, userID); err == sql.ErrNoRows {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-			return
-		} else if err != nil {
-			log.Printf("finances: create transaction failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+	// cardId is mandatory (see validate); always resolve the card so the
+	// credito inflow guard runs on the real type and a wrong-owner card
+	// surfaces as a clean 404 before the write opens.
+	cardType, err := h.cardTypeOwned(req.CardID, role, userID)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: create transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if req.Type == "income" {
+		if err := rejectCreditCardForInflow(cardType); err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 			return
 		}
 	}
@@ -195,8 +204,8 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	if req.Type == "expense" && req.CardID != nil {
-		balanceCents, _, cardType, err := cardBalance(tx, *req.CardID, 0)
+	if req.Type == "expense" {
+		balanceCents, _, cardType, err := cardBalance(tx, req.CardID, 0)
 		if err != nil {
 			log.Printf("finances: create transaction balance check failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -256,14 +265,21 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The new card is resolved before opening the write so an unowned cardId
-	// is a clean 404 rather than a rolled-back write.
-	if req.CardID != nil {
-		if _, err := h.cardTypeOwned(*req.CardID, role, userID); err == sql.ErrNoRows {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
-			return
-		} else if err != nil {
-			log.Printf("finances: update transaction failed: %v", err)
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+	// is a clean 404 rather than a rolled-back write. validate already
+	// required cardId, so this always runs — and the credito inflow guard
+	// applies on income edits the same way create does.
+	cardType, err := h.cardTypeOwned(req.CardID, role, userID)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
+		return
+	} else if err != nil {
+		log.Printf("finances: update transaction failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if req.Type == "income" {
+		if err := rejectCreditCardForInflow(cardType); err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 			return
 		}
 	}
@@ -291,8 +307,8 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Type == "expense" && req.CardID != nil {
-		balanceCents, _, cardType, err := cardBalance(tx, *req.CardID, id)
+	if req.Type == "expense" {
+		balanceCents, _, cardType, err := cardBalance(tx, req.CardID, id)
 		if err != nil {
 			log.Printf("finances: update transaction balance check failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")

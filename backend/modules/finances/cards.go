@@ -22,6 +22,7 @@ const cardsBaseQuery = `
 	  COALESCE((SELECT SUM(CASE
 	    WHEN t.to_card_id = c.id THEN t.amount_cents
 	    WHEN t.from_card_id = c.id THEN -t.amount_cents
+	    WHEN t.card_id = c.id AND t.type = 'income'  AND c.type != 'credito' THEN t.amount_cents
 	    WHEN t.card_id = c.id AND t.type = 'expense' AND c.type != 'credito' THEN -t.amount_cents
 	    ELSE 0 END)
 	   FROM transactions t
