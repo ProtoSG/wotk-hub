@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Repeat, MoreVertical } from 'lucide-react'
+import { Plus, Pencil, Trash2, Repeat, MoreVertical, Power } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
@@ -271,7 +271,6 @@ export default function SuscripcionesTab() {
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <span className="text-sm font-semibold">{formatPEN(s.amountCents)}</span>
-                  <Switch checked={s.active} onCheckedChange={(v) => toggleActive(s, v)} />
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -288,6 +287,10 @@ export default function SuscripcionesTab() {
                     >
                       <Pencil className="h-4 w-4" />
                       Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toggleActive(s, !s.active)}>
+                      <Power className="h-4 w-4" />
+                      {s.active ? 'Desactivar' : 'Activar'}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => handleDelete(s)}
