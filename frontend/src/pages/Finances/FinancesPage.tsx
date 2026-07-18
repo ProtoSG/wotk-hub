@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Settings } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -9,7 +10,7 @@ import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
-import type { Card } from '@/types/finance.types'
+import type { Card, FinanceSummary, SavingsGoal } from '@/types/finance.types'
 import MonthPicker from './MonthPicker'
 import ResumenTab from './ResumenTab'
 import MovimientosTab from './MovimientosTab'
@@ -70,7 +71,11 @@ export default function FinancesPage() {
   // Gate state: null while cards are still loading so we don't flash the gate
   // before the first listCards resolves.
   const [cards, setCards] = useState<Card[] | null>(null)
-  const { listCards } = useFinanceApi()
+  const [summary, setSummary] = useState<FinanceSummary | null>(null)
+  const [committed, setCommitted] = useState(0)
+  const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const [resumenLoading, setResumenLoading] = useState(true)
+  const { listCards, getSummary, listSubscriptions, listGoals } = useFinanceApi()
 
   const loadCards = useCallback(async () => {
     try {
@@ -88,6 +93,32 @@ export default function FinancesPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
     loadCards()
   }, [loadCards])
+
+  // Resumen's data (summary/subscriptions/goals) used to be fetched inside
+  // ResumenTab itself, which only mounts once the gate above resolves — a
+  // serialized extra round trip on the LCP path (gate fetch, then wait, then
+  // this fetch). Fetching it here starts it in parallel with loadCards
+  // instead. Kept separate from cards (not re-fetched on month change) so
+  // navigating months can't flicker the gate on a slow request.
+  const loadResumen = useCallback(async () => {
+    setResumenLoading(true)
+    try {
+      const [s, subs, goalsData] = await Promise.all([getSummary(month), listSubscriptions(), listGoals()])
+      setSummary(s)
+      setCommitted(subs.monthlyCommittedCents)
+      setGoals(goalsData)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo cargar el resumen')
+    } finally {
+      setResumenLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount/month change
+    loadResumen()
+  }, [loadResumen])
 
   const gateActive = cards === null || cards.length === 0
 
@@ -126,7 +157,13 @@ export default function FinancesPage() {
             ))}
           </TabsList>
           <TabsContent value="resumen" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-            <ResumenTab month={month} />
+            <ResumenTab
+              summary={summary}
+              committed={committed}
+              cards={cards ?? []}
+              goals={goals}
+              isLoading={resumenLoading}
+            />
           </TabsContent>
           <TabsContent value="movimientos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
             <MovimientosTab month={month} />

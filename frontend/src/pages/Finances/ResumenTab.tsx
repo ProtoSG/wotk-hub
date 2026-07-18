@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
 import { Wallet, TrendingUp, TrendingDown, Repeat, CreditCard } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCountUp } from '@/hooks/useCountUp'
-import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { FinanceSummary, Card, SavingsGoal } from '@/types/finance.types'
 import TrendChart from './TrendChart'
 import CategoryChart from './CategoryChart'
 
 interface Props {
-  month: string
+  summary: FinanceSummary | null
+  committed: number
+  cards: Card[]
+  goals: SavingsGoal[]
+  isLoading: boolean
 }
 
 interface Tile {
@@ -65,40 +66,7 @@ function SkeletonCharts() {
   )
 }
 
-export default function ResumenTab({ month }: Props) {
-  const [summary, setSummary] = useState<FinanceSummary | null>(null)
-  const [committed, setCommitted] = useState(0)
-  const [cards, setCards] = useState<Card[]>([])
-  const [goals, setGoals] = useState<SavingsGoal[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const { getSummary, listSubscriptions, listCards, listGoals } = useFinanceApi()
-
-  const load = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const [s, subs, cardsData, goalsData] = await Promise.all([
-        getSummary(month),
-        listSubscriptions(),
-        listCards(),
-        listGoals(),
-      ])
-      setSummary(s)
-      setCommitted(subs.monthlyCommittedCents)
-      setCards(cardsData)
-      setGoals(goalsData)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo cargar el resumen')
-    } finally {
-      setIsLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    load()
-  }, [load])
-
+export default function ResumenTab({ summary, committed, cards, goals, isLoading }: Props) {
   // "Disponible" = netWorth (summary.balanceCents — transfer-agnostic, already
   // filters type != 'transfer') MINUS what's already committed to savings goals.
   // Computed frontend-side; no new backend endpoint (design #40 "Disponible").
