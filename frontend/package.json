@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
-    "@fontsource/nunito": "^5.2.7",
+    "@fontsource-variable/nunito": "^5.2.7",
     "@hookform/resolvers": "^5.4.0",
     "@radix-ui/react-collapsible": "^1.1.13",
     "@radix-ui/react-dialog": "^1.1.16",
