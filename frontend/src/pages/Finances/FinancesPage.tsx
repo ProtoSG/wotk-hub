@@ -103,9 +103,9 @@ export default function FinancesPage() {
   return (
     <>
       <div className="space-y-6 pb-24 sm:pb-0">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-nowrap items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-1">
-            <h1 className="text-2xl font-bold">Finanzas</h1>
+            <h1 className="text-xl font-bold sm:text-2xl">Finanzas</h1>
             <Button
               variant="ghost"
               size="icon"

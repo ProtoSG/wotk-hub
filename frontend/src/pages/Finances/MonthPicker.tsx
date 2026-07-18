@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { monthLabel, shiftMonth } from '@/lib/currency'
+import { monthLabel, monthLabelShort, shiftMonth } from '@/lib/currency'
 
 interface Props {
   month: string
@@ -13,7 +13,8 @@ export default function MonthPicker({ month, onChange }: Props) {
       <Button variant="ghost" size="icon" onClick={() => onChange(shiftMonth(month, -1))} aria-label="Mes anterior">
         <ChevronLeft size={16} />
       </Button>
-      <span className="min-w-32 text-center text-sm font-medium capitalize">{monthLabel(month)}</span>
+      <span className="min-w-16 text-center text-sm font-medium capitalize sm:hidden">{monthLabelShort(month)}</span>
+      <span className="hidden min-w-32 text-center text-sm font-medium capitalize sm:inline">{monthLabel(month)}</span>
       <Button variant="ghost" size="icon" onClick={() => onChange(shiftMonth(month, 1))} aria-label="Mes siguiente">
         <ChevronRight size={16} />
       </Button>
