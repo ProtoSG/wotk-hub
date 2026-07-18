@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Settings } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Settings, Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
@@ -120,9 +120,22 @@ export default function FinancesPage() {
     loadResumen()
   }, [loadResumen])
 
-  const gateActive = cards === null || cards.length === 0
+  // cards === null means "still loading, unknown" — show a spinner, not the
+  // gate. Rendering the gate here used to flash "add your first card" at
+  // every returning user for the split second before their real cards
+  // arrived. Only cards.length === 0 (confirmed empty) means the gate.
+  if (cards === null) {
+    return (
+      <div className="space-y-6 pb-24 sm:pb-0">
+        <h1 className="text-2xl font-bold">Finanzas</h1>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="animate-spin text-muted-foreground" size={24} />
+        </div>
+      </div>
+    )
+  }
 
-  if (gateActive) {
+  if (cards.length === 0) {
     return (
       <div className="space-y-6 pb-24 sm:pb-0">
         <h1 className="text-2xl font-bold">Finanzas</h1>
