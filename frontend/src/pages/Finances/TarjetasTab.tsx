@@ -126,42 +126,46 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
         <Input {...register('name')} placeholder="Ej: STM Lima, BCP Débito" />
         {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
       </div>
-      <div className="space-y-1">
-        <Label>Banco</Label>
-        <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="min-w-0 space-y-1">
+          <Label>Banco</Label>
+          <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
+        </div>
+        <div className="min-w-0 space-y-1">
+          <Label>Últimos 4 dígitos</Label>
+          <Input {...register('last4')} placeholder="1234" maxLength={4} />
+          {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
+        </div>
       </div>
-      <div className="space-y-1">
-        <Label>Últimos 4 dígitos</Label>
-        <Input {...register('last4')} placeholder="1234" maxLength={4} />
-        {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
-      </div>
-      {!editCard && (
-        <div className="space-y-1">
-          <Label>Saldo inicial (opcional)</Label>
+      <div className="grid grid-cols-2 gap-2">
+        {!editCard && (
+          <div className="min-w-0 space-y-1">
+            <Label>Saldo inicial (opcional)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              {...register('initialBalance', { valueAsNumber: true })}
+              placeholder="0.00"
+            />
+            {errors.initialBalance && (
+              <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
+            )}
+          </div>
+        )}
+        <div className="min-w-0 space-y-1">
+          <Label>Límite de crédito (opcional)</Label>
           <Input
             type="number"
             step="0.01"
             min="0"
-            {...register('initialBalance', { valueAsNumber: true })}
+            {...register('creditLimit', { valueAsNumber: true })}
             placeholder="0.00"
           />
-          {errors.initialBalance && (
-            <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
+          {errors.creditLimit && (
+            <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
           )}
         </div>
-      )}
-      <div className="space-y-1">
-        <Label>Límite de crédito (opcional)</Label>
-        <Input
-          type="number"
-          step="0.01"
-          min="0"
-          {...register('creditLimit', { valueAsNumber: true })}
-          placeholder="0.00"
-        />
-        {errors.creditLimit && (
-          <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
-        )}
       </div>
       <div className="space-y-1">
         <Label>Color</Label>
@@ -171,9 +175,14 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
               key={c}
               type="button"
               onClick={() => setValue('color', c)}
-              className="h-8 w-8 rounded-full border-2 transition-transform hover:scale-110"
-              style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
-            />
+              aria-label={c}
+              className="flex h-11 w-11 items-center justify-center rounded-full transition-transform hover:scale-110"
+            >
+              <span
+                className="h-8 w-8 rounded-full border-2"
+                style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
+              />
+            </button>
           ))}
         </div>
         {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
@@ -313,21 +322,23 @@ function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormP
             </Select>
             {errors.toCardId && <p className="text-xs text-destructive">{errors.toCardId.message}</p>}
           </div>
-          <div className="space-y-1">
-            <Label>Monto (PEN)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0.01"
-              {...register('amount', { valueAsNumber: true })}
-              placeholder="0.00"
-            />
-            {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Fecha</Label>
-            <Input type="date" {...register('date')} />
-            {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="min-w-0 space-y-1">
+              <Label>Monto (PEN)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                {...register('amount', { valueAsNumber: true })}
+                placeholder="0.00"
+              />
+              {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label>Fecha</Label>
+              <Input type="date" {...register('date')} />
+              {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
@@ -465,7 +476,7 @@ export default function TarjetasTab() {
                 ? card.usedCreditCents / card.creditLimitCents
                 : 0
             const utilizationColor =
-              utilization > 0.8 ? 'bg-destructive' : utilization > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+              utilization > 0.8 ? 'bg-destructive' : utilization > 0.5 ? 'bg-warning' : 'bg-success'
             // The backend rejects archiving your last active card with 409
             // (cards.go DeleteCard). Disable the affordance here too so the
             // user doesn't trip the failure — the helpful title explains why.

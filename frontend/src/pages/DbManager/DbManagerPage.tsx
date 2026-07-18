@@ -4,7 +4,8 @@ import QueryEditor from './QueryEditor'
 
 export default function DbManagerPage() {
   return (
-    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-x-auto overflow-y-hidden">
+      <h1 className="sr-only">DB Manager</h1>
       <div className="w-52 shrink-0">
         <ConnectionsSidebar />
       </div>

@@ -24,6 +24,7 @@
   --color-income: var(--income);
   --color-expense: var(--expense);
   --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -81,6 +82,12 @@
      chroma, more forest than lawn, so it doesn't compete with the money
      color. See .impeccable.md Aesthetic Direction. */
   --success: oklch(0.6 0.09 145);
+  /* Amber "approaching limit" warning state for Finanzas utilization/budget
+     bars (card credit usage, budget progress) — sits between --success and
+     --destructive on the traffic-light scale. Tinted toward the same warm
+     family as --primary/--expense (hue ~70) rather than a stock Tailwind
+     amber, so it still reads as part of this app's palette. */
+  --warning: oklch(0.72 0.17 70);
   /* Categorical chart palette — 8 slots, fixed order, never cycled (a 9th+
      category folds into "Otros" rather than generating a new hue). Warm/
      earthy family coordinated with the terracotta brand hue, validated with
@@ -143,6 +150,7 @@
   --income: oklch(0.7 0.11 145);
   --expense: oklch(0.68 0.15 30);
   --success: oklch(0.72 0.1 145);
+  --warning: oklch(0.8 0.16 70);
   /* Same 8 categorical slots, lightened/rebalanced for the dark surface —
      validated separately against the dark background (own lightness band,
      own contrast check), not an automatic flip of the light values. */
