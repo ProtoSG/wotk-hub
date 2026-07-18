@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Self-hosted (was a Google Fonts <link> in index.html) — removes a
+   third-party origin from the critical render path entirely instead of
+   just preconnecting to it. Only the weights actually used. */
+@import "@fontsource/nunito/400.css";
+@import "@fontsource/nunito/500.css";
+@import "@fontsource/nunito/600.css";
+@import "@fontsource/nunito/700.css";
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
