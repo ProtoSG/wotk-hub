@@ -54,7 +54,6 @@ export default function ConnectionsSidebar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6"
           onClick={() => { setEditing(null); setFormOpen(true) }}
           aria-label="Add connection"
         >
@@ -69,11 +68,19 @@ export default function ConnectionsSidebar() {
             connections.map((conn) => (
               <div
                 key={conn.id}
+                role="button"
+                tabIndex={0}
                 className={cn(
                   'group flex items-center gap-2 rounded-md px-2 py-2 cursor-pointer hover:bg-accent',
                   activeConnectionId === conn.id && 'bg-accent'
                 )}
                 onClick={() => handleConnect(conn)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleConnect(conn)
+                  }
+                }}
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{conn.name}</p>
@@ -87,7 +94,7 @@ export default function ConnectionsSidebar() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                      className="h-11 w-11 opacity-0 group-hover:opacity-100"
                       aria-label={`Connection options for ${conn.name}`}
                     >
                       <MoreVertical size={12} />

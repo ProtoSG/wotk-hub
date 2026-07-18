@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Plus, Settings } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Settings } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
@@ -100,65 +101,64 @@ export default function FinancesPage() {
   }
 
   return (
-    <div className="space-y-6 pb-24 sm:pb-0">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-1">
-          <h1 className="text-2xl font-bold">Finanzas</h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Administrar categorías"
-            onClick={() => navigate('/finances/categories')}
-          >
-            <Settings size={16} />
-          </Button>
+    <>
+      <div className="space-y-6 pb-24 sm:pb-0">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold">Finanzas</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Administrar categorías"
+              onClick={() => navigate('/finances/categories')}
+            >
+              <Settings size={16} />
+            </Button>
+          </div>
+          <MonthPicker month={month} onChange={setMonth} />
         </div>
-        <MonthPicker month={month} onChange={setMonth} />
+        <Tabs value={tab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
+          <TabsList className="hidden sm:inline-flex">
+            {TABS.map((t) => (
+              <TabsTrigger key={t.value} value={t.value}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <TabsContent value="resumen" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
+            <ResumenTab month={month} />
+          </TabsContent>
+          <TabsContent value="movimientos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
+            <MovimientosTab month={month} />
+          </TabsContent>
+          <TabsContent value="suscripciones" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
+            <SuscripcionesTab />
+          </TabsContent>
+          <TabsContent value="presupuestos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
+            <PresupuestosTab month={month} />
+          </TabsContent>
+          <TabsContent value="tarjetas" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
+            <TarjetasTab />
+          </TabsContent>
+          <TabsContent value="metas" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
+            <MetasTab />
+          </TabsContent>
+        </Tabs>
       </div>
-      <Tabs value={tab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
-        <TabsList className="hidden sm:inline-flex">
-          {TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value="resumen" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-          <ResumenTab month={month} />
-        </TabsContent>
-        <TabsContent value="movimientos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-          <MovimientosTab month={month} />
-        </TabsContent>
-        <TabsContent value="suscripciones" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-          <SuscripcionesTab />
-        </TabsContent>
-        <TabsContent value="presupuestos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-          <PresupuestosTab month={month} />
-        </TabsContent>
-        <TabsContent value="tarjetas" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-          <TarjetasTab />
-        </TabsContent>
-        <TabsContent value="metas" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
-          <MetasTab />
-        </TabsContent>
-      </Tabs>
 
       {FAB_TABS.has(tab) && (
-        <button
-          type="button"
-          aria-label={FAB_LABELS[tab]}
+        <FloatingActionButton
+          label={FAB_LABELS[tab]}
           onClick={() => setSearchParams({ tab, new: '1' }, { replace: true })}
-          className="fixed right-4 bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform hover:scale-105 active:scale-95 sm:hidden"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
+          className="bottom-[max(env(safe-area-inset-bottom),1rem)]"
+        />
       )}
 
       <nav
         className="fixed left-4 z-40 flex h-14 items-center justify-around gap-0.5 rounded-full border bg-background px-2 shadow-lg sm:hidden"
         style={{
           right: tab === 'resumen' ? '1rem' : '5.5rem',
-          bottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
+          bottom: 'max(env(safe-area-inset-bottom), 1rem)',
         }}
       >
         {TABS.map((t) => {
@@ -180,6 +180,6 @@ export default function FinancesPage() {
           )
         })}
       </nav>
-    </div>
+    </>
   )
 }

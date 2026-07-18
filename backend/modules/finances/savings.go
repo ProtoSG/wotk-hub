@@ -42,6 +42,14 @@ func scanContribution(row interface{ Scan(...any) error }) (SavingsContribution,
 }
 
 // ListGoals returns all savings goals owned by the caller.
+//
+// @Summary List savings goals
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} listGoalsResponse
+// @Failure 401 {object} httpx.APIError
+// @Router /finances/savings-goals [get]
 func (h *handler) ListGoals(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -83,6 +91,18 @@ func (h *handler) defaultCardOwned(cardID int64, role string, userID int64) erro
 }
 
 // CreateGoal creates a new savings goal for the authenticated user.
+//
+// @Summary Create a savings goal
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body savingsGoalRequest true "Goal details"
+// @Success 201 {object} SavingsGoal
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError "card not found"
+// @Router /finances/savings-goals [post]
 func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -124,6 +144,19 @@ func (h *handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateGoal updates an existing savings goal.
+//
+// @Summary Update a savings goal
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Goal ID"
+// @Param body body savingsGoalRequest true "Goal details"
+// @Success 200 {object} SavingsGoal
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/savings-goals/{id} [put]
 func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -179,6 +212,16 @@ func (h *handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 // DeleteGoal soft-deletes a savings goal — its contributions and the
 // transfer transactions they generated stay in place for history, and
 // default_card_id references keep resolving.
+// @Summary Delete a savings goal
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Goal ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/savings-goals/{id} [delete]
 func (h *handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -220,6 +263,17 @@ func (h *handler) goalOwned(id int64, role string, userID int64) error {
 }
 
 // ListContributions returns all contributions for a goal.
+//
+// @Summary List contributions to a savings goal
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Goal ID"
+// @Success 200 {object} listContributionsResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError "goal not found"
+// @Router /finances/savings-goals/{id}/contributions [get]
 func (h *handler) ListContributions(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -272,6 +326,19 @@ func (h *handler) ListContributions(w http.ResponseWriter, r *http.Request) {
 // transaction_id. The default card is now mandatory on every goal — see
 // SPEC.md's "Scenarios — goal contribution" for the full case-by-case
 // walkthrough (archived default card, insufficient balance, concurrency).
+// @Summary Contribute to a savings goal
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Goal ID"
+// @Param body body savingsContributionRequest true "Contribution details"
+// @Success 201 {object} SavingsContribution
+// @Failure 400 {object} httpx.APIError "insufficient balance or invalid request"
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError "goal not found"
+// @Failure 409 {object} httpx.APIError "goal's default card was archived"
+// @Router /finances/savings-goals/{id}/contributions [post]
 func (h *handler) CreateContribution(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {

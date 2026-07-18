@@ -56,6 +56,16 @@ func (h *handler) getCard(id int64) (Card, error) {
 // ListCards scopes results by created_by for guests (their personal cards
 // only). Admins see everything, including legacy pre-auth rows where
 // created_by is NULL.
+// ListCards returns cards, scoped to the caller's own for guests, everything
+// for admins. Balance and used credit are computed live from transactions.
+//
+// @Summary List cards
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} listCardsResponse
+// @Failure 401 {object} httpx.APIError
+// @Router /finances/cards [get]
 func (h *handler) ListCards(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -93,6 +103,19 @@ func (h *handler) ListCards(w http.ResponseWriter, r *http.Request) {
 // starting balance becomes a seed transfer (type='transfer', to_card_id
 // set) in the same DB transaction as the card insert, instead of a stored
 // initial_balance_cents column — see SPEC.md.
+// CreateCard creates a new card. An initialBalanceCents > 0 becomes a seed
+// transfer transaction rather than a stored balance column.
+//
+// @Summary Create a card
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body cardRequest true "Card details"
+// @Success 201 {object} Card
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Router /finances/cards [post]
 func (h *handler) CreateCard(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -164,6 +187,21 @@ func (h *handler) CreateCard(w http.ResponseWriter, r *http.Request) {
 // (created_by != their id) rather than revealing it exists. Balance only
 // changes via a reload, a transfer, or a tagged transaction, never through
 // this endpoint.
+// UpdateCard updates card details. Balance never changes through this
+// endpoint — only via a reload, a transfer, or a tagged transaction.
+//
+// @Summary Update a card
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Card ID"
+// @Param body body cardRequest true "Card details"
+// @Success 200 {object} Card
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/cards/{id} [put]
 func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -230,6 +268,20 @@ func (h *handler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 // count is scoped the same way the soft-delete is (created_by for guests,
 // unscoped for admins seeing legacy NULL rows), so the admin and the
 // per-user view agree on "your last card".
+// DeleteCard soft-deletes (archives) a card. Rejected with 409 if it's the
+// owner's last remaining active card.
+//
+// @Summary Delete a card
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Card ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError "last active card"
+// @Router /finances/cards/{id} [delete]
 func (h *handler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -290,6 +342,20 @@ func (h *handler) cardOwned(id int64, role string, userID int64) error {
 
 // CreateCardTransfer moves money between two of the caller's own cards in
 // one transaction row (from_card_id and to_card_id both set).
+// CreateCardTransfer moves money between two of the caller's own cards as a
+// single transfer transaction row.
+//
+// @Summary Transfer between cards
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body cardTransferRequest true "Transfer details"
+// @Success 201 {object} Transaction
+// @Failure 400 {object} httpx.APIError "insufficient balance or invalid request"
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError "card not found"
+// @Router /finances/cards/transfers [post]
 func (h *handler) CreateCardTransfer(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {

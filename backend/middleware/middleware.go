@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"slices"
@@ -67,6 +69,40 @@ type authUser struct {
 	role   string
 }
 
+// verifyJWTCookie reads the access_token cookie and validates it (HS256,
+// signed with secret), returning the authenticated user on success. Shared
+// by JWTAuth and RequireAuth so the JWT-parsing logic only lives in one
+// place.
+func verifyJWTCookie(r *http.Request, secret string) (authUser, error) {
+	cookie, err := r.Cookie("access_token")
+	if err != nil {
+		return authUser{}, err
+	}
+
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(cookie.Value, claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(secret), nil
+	})
+	if err != nil || !token.Valid {
+		return authUser{}, jwt.ErrTokenInvalidClaims
+	}
+
+	sub, err := claims.GetSubject()
+	if err != nil {
+		return authUser{}, err
+	}
+	userID, err := strconv.ParseInt(sub, 10, 64)
+	if err != nil {
+		return authUser{}, err
+	}
+	role, _ := claims["role"].(string)
+
+	return authUser{userID: userID, role: role}, nil
+}
+
 // JWTAuth reads the access_token cookie, validates it (HS256, signed with
 // secret) and stores the authenticated user's id and role in the request
 // context for downstream handlers via UserFromContext. Rejects with 401 on
@@ -74,38 +110,66 @@ type authUser struct {
 func JWTAuth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie("access_token")
+			user, err := verifyJWTCookie(r, secret)
 			if err != nil {
 				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 				return
 			}
 
-			claims := jwt.MapClaims{}
-			token, err := jwt.ParseWithClaims(cookie.Value, claims, func(t *jwt.Token) (any, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, jwt.ErrSignatureInvalid
-				}
-				return []byte(secret), nil
-			})
-			if err != nil || !token.Valid {
-				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-				return
-			}
-
-			sub, err := claims.GetSubject()
-			if err != nil {
-				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-				return
-			}
-			userID, err := strconv.ParseInt(sub, 10, 64)
-			if err != nil {
-				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
-				return
-			}
-			role, _ := claims["role"].(string)
-
-			ctx := context.WithValue(r.Context(), userContextKey, authUser{userID: userID, role: role})
+			ctx := context.WithValue(r.Context(), userContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RequireAuth authenticates a request via the access_token cookie first
+// (same as JWTAuth), and falls back to a long-lived API key passed as
+// Authorization: Bearer <key> when no valid cookie is present. This lets
+// external automation (e.g. a Shortcut) hit the same protected endpoints as
+// the browser without an interactive login. On success either way, stores
+// the authenticated user's id and role in the request context via
+// UserFromContext. Rejects with 401 if neither the cookie nor the key is
+// valid.
+func RequireAuth(db *sql.DB, jwtSecret string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if user, err := verifyJWTCookie(r, jwtSecret); err == nil {
+				ctx := context.WithValue(r.Context(), userContextKey, user)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			auth := r.Header.Get("Authorization")
+			if strings.HasPrefix(auth, "Bearer ") {
+				provided := strings.TrimPrefix(auth, "Bearer ")
+				sum := sha256.Sum256([]byte(provided))
+				hash := hex.EncodeToString(sum[:])
+
+				var user authUser
+				err := db.QueryRow(
+					`SELECT api_keys.user_id, users.role FROM api_keys
+					 JOIN users ON users.id = api_keys.user_id
+					 WHERE api_keys.key_hash = $1 AND api_keys.revoked_at IS NULL`,
+					hash,
+				).Scan(&user.userID, &user.role)
+				if err != nil && err != sql.ErrNoRows {
+					log.Printf("middleware: api key lookup failed: %v", err)
+				}
+				if err == nil {
+					// Best-effort — a failed timestamp update shouldn't fail
+					// the request the key is authenticating, so its error is
+					// only logged, not surfaced to the caller.
+					if _, uerr := db.Exec(`UPDATE api_keys SET last_used_at = now() WHERE key_hash = $1`, hash); uerr != nil {
+						log.Printf("middleware: api key last_used_at update failed: %v", uerr)
+					}
+
+					ctx := context.WithValue(r.Context(), userContextKey, user)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		})
 	}
 }

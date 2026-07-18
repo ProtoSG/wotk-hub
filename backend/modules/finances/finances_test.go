@@ -97,7 +97,7 @@ func testUserJWT(t *testing.T) string {
 // authHandler wraps the finances routes behind JWTAuth so handler tests
 // exercise the real auth→context→scopeToOwner pipeline using a cookie.
 func authHandler(db *sql.DB) http.Handler {
-	return middleware.JWTAuth(testJWTSecret)(Routes(db))
+	return middleware.JWTAuth(testJWTSecret)(Routes(db, testJWTSecret))
 }
 
 // do performs an authenticated JSON request against the test router and

@@ -138,7 +138,7 @@ export default function PresupuestosTab({ month }: Props) {
             const pct = b.monthlyLimitCents > 0 ? (b.spentCents / b.monthlyLimitCents) * 100 : 0
             const over = b.spentCents > b.monthlyLimitCents
             const isDanger = over || pct >= 80
-            const indicatorColor = over ? 'bg-destructive' : pct >= 80 ? 'bg-amber-500' : 'bg-primary'
+            const indicatorColor = over ? 'bg-destructive' : pct >= 80 ? 'bg-warning' : 'bg-primary'
             const stripeStyle =
               isDanger
                 ? {
