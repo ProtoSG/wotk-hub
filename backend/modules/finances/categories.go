@@ -51,6 +51,13 @@ func (h *handler) categoryInUse(name string) (bool, error) {
 }
 
 // ListCategories returns all categories, optionally filtered by ?kind=.
+//
+// @Summary List categories
+// @Tags finances
+// @Produce json
+// @Param kind query string false "Filter by kind (income, expense)"
+// @Success 200 {object} listCategoriesResponse
+// @Router /finances/categories [get]
 func (h *handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT id, name, kind, label, created_at FROM categories`
 	args := []any{}
@@ -81,6 +88,16 @@ func (h *handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, listCategoriesResponse{Categories: categories})
 }
 
+// @Summary Create a category
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body categoryRequest true "Category details"
+// @Success 201 {object} Category
+// @Failure 400 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError "category already exists"
+// @Router /finances/categories [post]
 func (h *handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	var req categoryRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
@@ -110,6 +127,18 @@ func (h *handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, c)
 }
 
+// @Summary Update a category
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Category ID"
+// @Param body body categoryRequest true "Category details"
+// @Success 200 {object} Category
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError "category already exists"
+// @Router /finances/categories/{id} [put]
 func (h *handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
@@ -152,6 +181,17 @@ func (h *handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 // transaction, subscription, or budget (see categoryInUse) — the FK check
 // the plan requires, enforced manually since those columns have no real
 // foreign key to categories.
+//
+// @Summary Delete a category
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Category ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError "category is in use"
+// @Router /finances/categories/{id} [delete]
 func (h *handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {

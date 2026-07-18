@@ -64,6 +64,20 @@ func Migrate(db *sql.DB) error {
 			revoked_at TIMESTAMPTZ,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// Long-lived API keys: an alternative to the cookie-JWT session for
+		// external automation (e.g. an iOS/macOS Shortcut) that can't do an
+		// interactive login. Same shape as refresh_tokens (hash-only storage,
+		// nullable revoked_at), minus expiry — these are meant to live
+		// indefinitely until manually revoked.
+		`CREATE TABLE IF NOT EXISTS api_keys (
+			id           BIGSERIAL PRIMARY KEY,
+			user_id      BIGINT NOT NULL REFERENCES users(id),
+			name         TEXT NOT NULL DEFAULT '',
+			key_hash     TEXT NOT NULL UNIQUE,
+			last_used_at TIMESTAMPTZ,
+			revoked_at   TIMESTAMPTZ,
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
 		`ALTER TABLE couple_dates ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
 		`ALTER TABLE couple_dates ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'done' CHECK (status IN ('planned','done'))`,

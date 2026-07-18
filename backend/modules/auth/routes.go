@@ -34,6 +34,10 @@ func Routes(db *sql.DB, secret string, cookieSecure bool) http.Handler {
 		pr.Post("/logout-all", h.LogoutAll)
 		pr.Delete("/users/{id}", h.DeleteUser)
 		pr.Get("/users", h.ListUsers)
+
+		pr.Post("/keys", h.CreateAPIKey)
+		pr.Get("/keys", h.ListAPIKeys)
+		pr.Delete("/keys/{id}", h.RevokeAPIKey)
 	})
 
 	return r
