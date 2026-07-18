@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { useCategories } from '@/hooks/useCategories'
@@ -39,7 +38,7 @@ interface Props {
   editing?: Subscription | null
 }
 
-function defaults(editing?: Subscription | null): FormValues {
+function defaults(editing?: Subscription | null): Partial<FormValues> {
   return editing
     ? {
         name: editing.name,
@@ -52,7 +51,6 @@ function defaults(editing?: Subscription | null): FormValues {
       }
     : {
         name: '',
-        amount: 0,
         frequency: 'monthly',
         category: 'suscripciones',
         nextBillingOn: new Date().toISOString().slice(0, 10),
@@ -89,7 +87,6 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
 
   const frequency = watch('frequency')
   const category = watch('category')
-  const active = watch('active')
   const cardId = watch('cardId')
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
@@ -135,7 +132,13 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
           <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
               <Label>Monto (S/)</Label>
-              <Input type="number" step="0.01" min="0" {...register('amount', { valueAsNumber: true })} />
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                {...register('amount', { valueAsNumber: true })}
+              />
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
             </div>
             <div className="min-w-0 space-y-1">
@@ -154,29 +157,29 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
               </Select>
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Categoría</Label>
-            <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
-              <SelectTrigger>
-                <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
-              </SelectTrigger>
-              <SelectContent>
-                {categoriesByKind.expense.map((c) => (
-                  <SelectItem key={c.id} value={c.name}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>Próximo cobro</Label>
-            <div className="w-1/2">
-              <Input type="date" {...register('nextBillingOn')} />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="min-w-0 space-y-1">
+              <Label>Categoría</Label>
+              <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoriesByKind.expense.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {errors.nextBillingOn && (
-              <p className="text-xs text-destructive">{errors.nextBillingOn.message}</p>
-            )}
+            <div className="min-w-0 space-y-1">
+              <Label>Próximo cobro</Label>
+              <Input type="date" {...register('nextBillingOn')} />
+              {errors.nextBillingOn && (
+                <p className="text-xs text-destructive">{errors.nextBillingOn.message}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-1">
             <Label>Tarjeta</Label>
@@ -195,10 +198,6 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
             <p className="mt-1 text-xs text-muted-foreground">
               Los cobros automáticos descontarán de esta tarjeta
             </p>
-          </div>
-          <div className="flex items-center justify-between">
-            <Label>Activa</Label>
-            <Switch checked={active} onCheckedChange={(v) => setValue('active', v)} />
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>

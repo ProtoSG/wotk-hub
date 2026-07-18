@@ -130,7 +130,7 @@ export default function ResumenTab({ month }: Props) {
     { label: 'Comprometido mensual', cents: committed, icon: Repeat },
   ]
 
-  if (isLoading) {
+  if (isLoading && summary === null) {
     return (
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
