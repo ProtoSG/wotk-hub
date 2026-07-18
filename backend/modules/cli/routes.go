@@ -26,6 +26,16 @@ func Routes(db *sql.DB, cliUserID int64, cliToken string, cliAuthMiddleware func
 }
 
 // Me returns the user associated with the CLI token.
+//
+// @Summary Get the CLI-token user
+// @Description Only mounted when CLI_TOKEN is set. Intended for the workhubctl CLI tool.
+// @Tags cli
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} auth.User
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /cli/me [get]
 func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
 	var u auth.User
 	err := h.db.QueryRow(`SELECT id, name, email, role FROM users WHERE id = $1`, h.cliUserID).
