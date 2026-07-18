@@ -45,6 +45,20 @@ func init() {
 	dummyPasswordHash = hash
 }
 
+// Register creates a new user account (max 2 users total — the first
+// becomes admin, the second guest) and issues auth cookies.
+//
+// @Summary Register a new user
+// @Description Public endpoint. Registration closes after 2 accounts exist; role is server-assigned (first=admin, second=guest).
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body registerRequest true "Registration details"
+// @Success 201 {object} User
+// @Failure 400 {object} httpx.APIError
+// @Failure 403 {object} httpx.APIError "registration is closed"
+// @Failure 409 {object} httpx.APIError "email already registered"
+// @Router /auth/register [post]
 func (h *handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
@@ -129,6 +143,18 @@ func (h *handler) Register(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, User{ID: userID, Name: req.Name, Email: req.Email, Role: role})
 }
 
+// Login validates credentials and issues auth cookies.
+//
+// @Summary Log in
+// @Description Public endpoint. Validates email/password and sets access_token/refresh_token cookies.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body loginRequest true "Login credentials"
+// @Success 200 {object} User
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError "invalid email or password"
+// @Router /auth/login [post]
 func (h *handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
@@ -172,6 +198,15 @@ func (h *handler) Login(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, u)
 }
 
+// Refresh rotates the refresh_token cookie for a new access/refresh pair.
+//
+// @Summary Refresh access token
+// @Description Public endpoint (relies on the refresh_token cookie, not JWT auth). Atomically claims and rotates the refresh token.
+// @Tags auth
+// @Produce json
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 401 {object} httpx.APIError "unauthorized"
+// @Router /auth/refresh [post]
 func (h *handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
@@ -216,6 +251,15 @@ func (h *handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK)
 }
 
+// Me returns the currently authenticated user.
+//
+// @Summary Get current user
+// @Tags auth
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} User
+// @Failure 401 {object} httpx.APIError
+// @Router /auth/me [get]
 func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -237,6 +281,14 @@ func (h *handler) Me(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, u)
 }
 
+// Logout revokes the current refresh token and clears auth cookies.
+//
+// @Summary Log out
+// @Tags auth
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} httpx.SuccessResponse
+// @Router /auth/logout [post]
 func (h *handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("refresh_token"); err == nil {
 		hash := hashToken(cookie.Value)
@@ -250,6 +302,16 @@ func (h *handler) Logout(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK)
 }
 
+// LogoutAll revokes every refresh token for the authenticated user (all
+// sessions/devices) and clears auth cookies for the current one.
+//
+// @Summary Log out of all sessions
+// @Tags auth
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 401 {object} httpx.APIError
+// @Router /auth/logout-all [post]
 func (h *handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -267,6 +329,17 @@ func (h *handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK)
 }
 
+// DeleteUser deletes a user by id.
+//
+// @Summary Delete a user
+// @Tags auth
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "User ID"
+// @Success 200 {object} deleteUserResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /auth/users/{id} [delete]
 func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -290,6 +363,14 @@ func (h *handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, deleteUserResponse{Deleted: true})
 }
 
+// ListUsers returns every user, including created_at (admin view).
+//
+// @Summary List users
+// @Tags auth
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {array} adminUserView
+// @Router /auth/users [get]
 func (h *handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`SELECT id, name, email, role, created_at FROM users ORDER BY id`)
 	if err != nil {

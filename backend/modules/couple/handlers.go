@@ -30,6 +30,15 @@ func scanDate(row interface{ Scan(...any) error }) (Date, error) {
 	return d, nil
 }
 
+// ListDates returns every couple date, shared between both roles.
+//
+// @Summary List couple dates
+// @Tags couple
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} listDatesResponse
+// @Failure 401 {object} httpx.APIError
+// @Router /couple/dates [get]
 func (h *handler) ListDates(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`SELECT id, occurred_on, place, category, notes, cost_cents, rating, tiktok_url, status, created_at
 		FROM couple_dates ORDER BY occurred_on DESC, id DESC`)
@@ -55,6 +64,18 @@ func (h *handler) ListDates(w http.ResponseWriter, r *http.Request) {
 
 // CreateDate stamps created_by for provenance only (who logged it) — Citas
 // stays a shared view for both roles, never filtered by it.
+// CreateDate creates a new couple date entry.
+//
+// @Summary Create a couple date
+// @Tags couple
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body dateRequest true "Date details"
+// @Success 201 {object} Date
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Router /couple/dates [post]
 func (h *handler) CreateDate(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -89,6 +110,19 @@ func (h *handler) CreateDate(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, d)
 }
 
+// UpdateDate updates an existing couple date entry.
+//
+// @Summary Update a couple date
+// @Tags couple
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Date ID"
+// @Param body body dateRequest true "Date details"
+// @Success 200 {object} Date
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /couple/dates/{id} [put]
 func (h *handler) UpdateDate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
@@ -125,6 +159,17 @@ func (h *handler) UpdateDate(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, d)
 }
 
+// DeleteDate deletes a couple date entry.
+//
+// @Summary Delete a couple date
+// @Tags couple
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Date ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /couple/dates/{id} [delete]
 func (h *handler) DeleteDate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
