@@ -22,6 +22,9 @@ export function CardTextureOverlay() {
       aria-hidden
       alt=""
       src={`data:image/svg+xml,${PAPER_SVG}`}
+      // opacity-[0.5]: full opacity washed brand colors toward pastel;
+      // below ~0.35 the shadow depth from surfaceScale/elevation above
+      // barely reads. 0.5 was the calibrated middle ground.
       className="pointer-events-none absolute inset-0 h-full w-full rounded-[inherit] object-cover opacity-[0.5] mix-blend-soft-light"
     />
   )
