@@ -1,4 +1,4 @@
-import { MoreVertical, Pencil, Trash2, Repeat, Power } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, Repeat, Power, Calendar } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
@@ -14,6 +14,16 @@ interface Props {
   onDelete: (s: Subscription) => void
   onToggleActive: (s: Subscription, active: boolean) => void
   onNewSubscription: () => void
+}
+
+// `nextBillingOn` is a date-only string ("2026-08-15"). Parsed alone, the
+// Date constructor treats it as UTC midnight, which shifts to the previous
+// day in negative-UTC-offset timezones (e.g. Peru, UTC-5) — appending a
+// local midnight time avoids that off-by-one.
+function formatShortLocalDate(dateOnly: string): string {
+  const date = new Date(`${dateOnly}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return dateOnly
+  return date.toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })
 }
 
 export default function SubscriptionsMobileList({
@@ -50,8 +60,9 @@ export default function SubscriptionsMobileList({
                 <div className="truncate text-xs text-muted-foreground">
                   {s.category} · {FREQUENCY_LABELS[s.frequency]}
                 </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  Próximo cobro: {s.nextBillingOn}
+                <div className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  {formatShortLocalDate(s.nextBillingOn)}
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
