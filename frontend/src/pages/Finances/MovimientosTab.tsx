@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { useCategories } from '@/hooks/useCategories'
 import { cn } from '@/lib/utils'
+import { formatPEN } from '@/lib/currency'
 import {
   type Transaction,
   type TransactionType,
