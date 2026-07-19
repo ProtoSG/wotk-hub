@@ -11,7 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { useCategories } from '@/hooks/useCategories'
+import { cn } from '@/lib/utils'
 import { solesToCents, centsToSoles } from '@/lib/currency'
+import { todayISO } from '@/lib/date'
 import type { Transaction, TransactionType, Card } from '@/types/finance.types'
 
 const schema = z.object({
@@ -48,7 +50,9 @@ function defaults(editing?: Transaction | null, defaultCardId?: number | null): 
     : {
         type: 'expense',
         category: 'comida',
-        date: new Date().toISOString().slice(0, 10),
+        // Not user-editable on create — the date field is only shown when
+        // `editing`, so a new transaction always dates to today.
+        date: todayISO(),
         description: '',
         cardId: defaultCardId != null ? String(defaultCardId) : '',
       }
@@ -153,7 +157,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn('grid gap-2', editing ? 'grid-cols-2' : 'grid-cols-1')}>
             <div className="min-w-0 space-y-1">
               <Label>Categoría</Label>
               <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
@@ -169,11 +173,13 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-0 space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" {...register('date')} />
-              {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
-            </div>
+            {editing && (
+              <div className="min-w-0 space-y-1">
+                <Label>Fecha</Label>
+                <Input type="date" {...register('date')} />
+                {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <Label>Descripción</Label>
