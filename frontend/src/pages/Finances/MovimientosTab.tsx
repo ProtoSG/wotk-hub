@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal, ArrowLeftRight } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -32,7 +33,6 @@ import { formatPEN } from '@/lib/currency'
 import {
   type Transaction,
   type TransactionType,
-  type Card,
 } from '@/types/finance.types'
 import TransactionForm from './TransactionForm'
 
@@ -43,19 +43,40 @@ interface Props {
   month: string
 }
 
+function transactionsKey(month: string, typeFilter: string, categoryFilter: string) {
+  return ['finances', 'transactions', month, typeFilter, categoryFilter] as const
+}
+
+function cardsKey() {
+  return ['finances', 'cards'] as const
+}
+
 export default function MovimientosTab({ month }: Props) {
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [cards, setCards] = useState<Card[]>([])
   const [typeFilter, setTypeFilter] = useState<string>(ALL)
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [cardFilter, setCardFilter] = useState<number | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
   const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
   const { data: categoriesByKind } = useCategories()
+  const queryClient = useQueryClient()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  const { data: transactions = [], isPending: isLoading } = useQuery({
+    queryKey: transactionsKey(month, typeFilter, categoryFilter),
+    queryFn: () =>
+      listTransactions({
+        month,
+        ...(typeFilter !== ALL && { type: typeFilter as TransactionType }),
+        ...(categoryFilter !== ALL && { category: categoryFilter }),
+      }),
+  })
+
+  const { data: cards = [] } = useQuery({
+    queryKey: cardsKey(),
+    queryFn: () => listCards(),
+  })
 
   // Build a name→label map from categories for display
   const categoryLabelMap = useMemo(() => {
@@ -85,31 +106,10 @@ export default function MovimientosTab({ month }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
   }, [searchParams])
 
-  const load = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const [data, cardData] = await Promise.all([
-        listTransactions({
-          month,
-          ...(typeFilter !== ALL && { type: typeFilter as TransactionType }),
-          ...(categoryFilter !== ALL && { category: categoryFilter }),
-        }),
-        listCards(),
-      ])
-      setTransactions(data)
-      setCards(cardData)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los movimientos')
-    } finally {
-      setIsLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, typeFilter, categoryFilter])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    load()
-  }, [load])
+  function invalidateAll() {
+    queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
+    queryClient.invalidateQueries({ queryKey: cardsKey() })
+  }
 
   async function commitDelete(id: number) {
     pendingDeletes.current.delete(id)
@@ -117,13 +117,13 @@ export default function MovimientosTab({ month }: Props) {
       await deleteTransaction(id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el movimiento')
-      load()
+      invalidateAll()
     }
   }
 
   function handleDelete(t: Transaction) {
     let removedIndex = -1
-    setTransactions((prev) => {
+    queryClient.setQueryData(transactionsKey(month, typeFilter, categoryFilter), (prev: Transaction[] = []) => {
       removedIndex = prev.findIndex((x) => x.id === t.id)
       return prev.filter((x) => x.id !== t.id)
     })
@@ -141,7 +141,7 @@ export default function MovimientosTab({ month }: Props) {
             window.clearTimeout(timerId)
             pendingDeletes.current.delete(t.id)
           }
-          setTransactions((prev) => {
+          queryClient.setQueryData(transactionsKey(month, typeFilter, categoryFilter), (prev: Transaction[] = []) => {
             const next = [...prev]
             next.splice(Math.min(removedIndex, next.length), 0, t)
             return next
@@ -168,7 +168,7 @@ export default function MovimientosTab({ month }: Props) {
       toast.success('Gasto marcado como reembolsado')
       setRefundDialogOpen(false)
       setRefundTarget(null)
-      load()
+      invalidateAll()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo marcar como reembolsado')
     } finally {
@@ -497,7 +497,7 @@ export default function MovimientosTab({ month }: Props) {
       <TransactionForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSaved={load}
+        onSaved={invalidateAll}
         editing={editing}
       />
 

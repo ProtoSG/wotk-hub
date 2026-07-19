@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, AlertTriangle, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,13 +21,22 @@ interface Props {
 
 const UNDO_WINDOW_MS = 4500
 
+function budgetsKey(month: string) {
+  return ['finances', 'budgets', month] as const
+}
+
 export default function PresupuestosTab({ month }: Props) {
-  const [budgets, setBudgets] = useState<Budget[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { listBudgets, deleteBudget } = useFinanceApi()
+  const queryClient = useQueryClient()
   const pendingDeletes = useRef(new Map<string, number>())
+
+  const { data: budgets = [] } = useQuery({
+    queryKey: budgetsKey(month),
+    queryFn: () => listBudgets(month),
+  })
 
   // Open form when navigated with ?new=1
   useEffect(() => {
@@ -47,33 +57,19 @@ export default function PresupuestosTab({ month }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
   }, [searchParams])
 
-  const load = useCallback(async () => {
-    try {
-      setBudgets(await listBudgets(month))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los presupuestos')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    load()
-  }, [load])
-
   async function commitDelete(category: string) {
     pendingDeletes.current.delete(category)
     try {
       await deleteBudget(category)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el presupuesto')
-      load()
+      queryClient.invalidateQueries({ queryKey: budgetsKey(month) })
     }
   }
 
   function handleDelete(b: Budget) {
     let removedIndex = -1
-    setBudgets((prev) => {
+    queryClient.setQueryData(budgetsKey(month), (prev: Budget[] = []) => {
       removedIndex = prev.findIndex((x) => x.category === b.category)
       return prev.filter((x) => x.category !== b.category)
     })
@@ -91,7 +87,7 @@ export default function PresupuestosTab({ month }: Props) {
             window.clearTimeout(timerId)
             pendingDeletes.current.delete(b.category)
           }
-          setBudgets((prev) => {
+          queryClient.setQueryData(budgetsKey(month), (prev: Budget[] = []) => {
             const next = [...prev]
             next.splice(Math.min(removedIndex, next.length), 0, b)
             return next
@@ -209,7 +205,7 @@ export default function PresupuestosTab({ month }: Props) {
       <BudgetForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSaved={load}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: budgetsKey(month) })}
         editing={editing}
         usedCategories={budgets.map((b) => b.category)}
       />

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Repeat, MoreVertical, Power } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,14 +31,22 @@ import SubscriptionForm from './SubscriptionForm'
 
 const UNDO_WINDOW_MS = 4500
 
+function subscriptionsKey() {
+  return ['finances', 'subscriptions'] as const
+}
+
 export default function SuscripcionesTab() {
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
-  const [committed, setCommitted] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Subscription | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { listSubscriptions, updateSubscription, deleteSubscription } = useFinanceApi()
+  const queryClient = useQueryClient()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  const { data: { subscriptions, monthlyCommittedCents: committed } = { subscriptions: [], monthlyCommittedCents: 0 } } = useQuery({
+    queryKey: subscriptionsKey(),
+    queryFn: () => listSubscriptions(),
+  })
 
   // Open form when navigated with ?new=1
   useEffect(() => {
@@ -58,22 +67,6 @@ export default function SuscripcionesTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
   }, [searchParams])
 
-  const load = useCallback(async () => {
-    try {
-      const data = await listSubscriptions()
-      setSubscriptions(data.subscriptions)
-      setCommitted(data.monthlyCommittedCents)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las suscripciones')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    load()
-  }, [load])
-
   async function toggleActive(s: Subscription, active: boolean) {
     try {
       await updateSubscription(s.id, {
@@ -85,7 +78,7 @@ export default function SuscripcionesTab() {
         cardId: s.cardId ?? 0,
         active,
       })
-      load()
+      queryClient.invalidateQueries({ queryKey: subscriptionsKey() })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo actualizar la suscripción')
     }
@@ -97,16 +90,19 @@ export default function SuscripcionesTab() {
       await deleteSubscription(id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la suscripción')
-      load()
+      queryClient.invalidateQueries({ queryKey: subscriptionsKey() })
     }
   }
 
   function handleDelete(s: Subscription) {
     let removedIndex = -1
-    setSubscriptions((prev) => {
-      removedIndex = prev.findIndex((x) => x.id === s.id)
-      return prev.filter((x) => x.id !== s.id)
-    })
+    queryClient.setQueryData(
+      subscriptionsKey(),
+      (prev: { subscriptions: Subscription[]; monthlyCommittedCents: number } = { subscriptions: [], monthlyCommittedCents: 0 }) => {
+        removedIndex = prev.subscriptions.findIndex((x) => x.id === s.id)
+        return { ...prev, subscriptions: prev.subscriptions.filter((x) => x.id !== s.id) }
+      }
+    )
 
     const timer = window.setTimeout(() => commitDelete(s.id), UNDO_WINDOW_MS)
     pendingDeletes.current.set(s.id, timer)
@@ -121,11 +117,14 @@ export default function SuscripcionesTab() {
             window.clearTimeout(timerId)
             pendingDeletes.current.delete(s.id)
           }
-          setSubscriptions((prev) => {
-            const next = [...prev]
-            next.splice(Math.min(removedIndex, next.length), 0, s)
-            return next
-          })
+          queryClient.setQueryData(
+            subscriptionsKey(),
+            (prev: { subscriptions: Subscription[]; monthlyCommittedCents: number } = { subscriptions: [], monthlyCommittedCents: 0 }) => {
+              const next = [...prev.subscriptions]
+              next.splice(Math.min(removedIndex, next.length), 0, s)
+              return { ...prev, subscriptions: next }
+            }
+          )
         },
       },
     })
@@ -310,7 +309,7 @@ export default function SuscripcionesTab() {
       <SubscriptionForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSaved={load}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: subscriptionsKey() })}
         editing={editing}
       />
     </div>

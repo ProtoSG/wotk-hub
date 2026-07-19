@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -381,9 +382,15 @@ function DeleteGoalDialog({ open, onClose, onConfirm, goal }: DeleteGoalDialogPr
   )
 }
 
+function goalsKey() {
+  return ['finances', 'goals'] as const
+}
+
+function cardsKey() {
+  return ['finances', 'cards'] as const
+}
+
 export default function MetasTab() {
-  const [goals, setGoals] = useState<SavingsGoal[]>([])
-  const [cards, setCards] = useState<Card[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editGoal, setEditGoal] = useState<SavingsGoal | undefined>()
   const [contributionOpen, setContributionOpen] = useState(false)
@@ -392,6 +399,17 @@ export default function MetasTab() {
   const [goalToDelete, setGoalToDelete] = useState<SavingsGoal | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { listGoals, deleteGoal, listCards } = useFinanceApi()
+  const queryClient = useQueryClient()
+
+  const { data: goals = [] } = useQuery({
+    queryKey: goalsKey(),
+    queryFn: () => listGoals(),
+  })
+
+  const { data: cards = [] } = useQuery({
+    queryKey: cardsKey(),
+    queryFn: () => listCards(),
+  })
 
   // Open form when navigated with ?new=1
   useEffect(() => {
@@ -412,22 +430,6 @@ export default function MetasTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
   }, [searchParams])
 
-  const load = useCallback(async () => {
-    try {
-      const [goalsData, cardsData] = await Promise.all([listGoals(), listCards()])
-      setGoals(goalsData)
-      setCards(cardsData)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las metas')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    load()
-  }, [load])
-
   const openDeleteDialog = (goal: SavingsGoal) => {
     setGoalToDelete(goal)
     setDeleteDialogOpen(true)
@@ -438,7 +440,7 @@ export default function MetasTab() {
     try {
       await deleteGoal(goalToDelete.id)
       toast.success('Meta eliminada')
-      load()
+      queryClient.invalidateQueries({ queryKey: goalsKey() })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la meta')
     }
@@ -607,13 +609,25 @@ export default function MetasTab() {
         </>
       )}
 
-      <GoalForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editGoal={editGoal} />
+      <GoalForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: goalsKey() })}
+        editGoal={editGoal}
+      />
 
       {selectedGoal && (
         <ContributionForm
           open={contributionOpen}
           onClose={() => setContributionOpen(false)}
-          onSaved={load}
+          onSaved={() => {
+            // A contribution both bumps goal.currentCents and debits the
+            // goal's default card (it creates a transfer-kind Transaction
+            // row, same as a card transfer) — invalidate all three.
+            queryClient.invalidateQueries({ queryKey: goalsKey() })
+            queryClient.invalidateQueries({ queryKey: cardsKey() })
+            queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
+          }}
           goal={selectedGoal}
         />
       )}
