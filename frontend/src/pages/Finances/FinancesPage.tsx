@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Settings, Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import { cn } from '@/lib/utils'
 import { currentMonth } from '@/lib/currency'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
-import type { Card, FinanceSummary, SavingsGoal } from '@/types/finance.types'
 import MonthPicker from './MonthPicker'
 import ResumenTab from './ResumenTab'
 import MovimientosTab from './MovimientosTab'
@@ -61,6 +60,22 @@ function OnboardingGate({ onSaved }: { onSaved: () => void }) {
   )
 }
 
+function cardsKey() {
+  return ['finances', 'cards'] as const
+}
+
+function summaryKey(month: string) {
+  return ['finances', 'summary', month] as const
+}
+
+function subscriptionsKey() {
+  return ['finances', 'subscriptions'] as const
+}
+
+function goalsKey() {
+  return ['finances', 'goals'] as const
+}
+
 export default function FinancesPage() {
   const navigate = useNavigate()
   const [month, setMonth] = useState(currentMonth())
@@ -68,63 +83,42 @@ export default function FinancesPage() {
   const param = searchParams.get('tab') ?? ''
   const tab = TABS.some((t) => t.value === param) ? param : 'resumen'
 
-  // Gate state: null while cards are still loading so we don't flash the gate
-  // before the first listCards resolves.
-  const [cards, setCards] = useState<Card[] | null>(null)
-  const [summary, setSummary] = useState<FinanceSummary | null>(null)
-  const [committed, setCommitted] = useState(0)
-  const [goals, setGoals] = useState<SavingsGoal[]>([])
-  const [resumenLoading, setResumenLoading] = useState(true)
   const { listCards, getSummary, listSubscriptions, listGoals } = useFinanceApi()
+  const queryClient = useQueryClient()
 
-  const loadCards = useCallback(async () => {
-    try {
-      setCards(await listCards())
-    } catch (err) {
-      // Surface but lift the gate so the user isn't hard-blocked on a transient
-      // fetch failure (the backend deletes-last-card guard still protects).
-      setCards([])
-      console.error('listCards failed in FinancesPage gate:', err)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    loadCards()
-  }, [loadCards])
+  // isPending is true while cards are still loading (no cached data yet) so
+  // we don't flash the gate before the first listCards resolves.
+  const { data: cards, isPending: cardsPending } = useQuery({
+    queryKey: cardsKey(),
+    queryFn: () => listCards(),
+  })
 
   // Resumen's data (summary/subscriptions/goals) used to be fetched inside
-  // ResumenTab itself, which only mounts once the gate above resolves — a
+  // ResumenTab itself, which only mounts once the gate below resolves — a
   // serialized extra round trip on the LCP path (gate fetch, then wait, then
-  // this fetch). Fetching it here starts it in parallel with loadCards
-  // instead. Kept separate from cards (not re-fetched on month change) so
-  // navigating months can't flicker the gate on a slow request.
-  const loadResumen = useCallback(async () => {
-    setResumenLoading(true)
-    try {
-      const [s, subs, goalsData] = await Promise.all([getSummary(month), listSubscriptions(), listGoals()])
-      setSummary(s)
-      setCommitted(subs.monthlyCommittedCents)
-      setGoals(goalsData)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo cargar el resumen')
-    } finally {
-      setResumenLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month])
+  // this fetch). Fetching it here starts it in parallel with the cards query
+  // instead. subscriptionsKey()/goalsKey() are shared with SuscripcionesTab
+  // and MetasTab so switching tabs reuses this cache instead of re-fetching.
+  const { data: summary, isPending: summaryPending } = useQuery({
+    queryKey: summaryKey(month),
+    queryFn: () => getSummary(month),
+  })
+  const { data: subscriptionsData, isPending: subscriptionsPending } = useQuery({
+    queryKey: subscriptionsKey(),
+    queryFn: () => listSubscriptions(),
+  })
+  const { data: goals = [], isPending: goalsPending } = useQuery({
+    queryKey: goalsKey(),
+    queryFn: () => listGoals(),
+  })
+  const committed = subscriptionsData?.monthlyCommittedCents ?? 0
+  const resumenLoading = summaryPending || subscriptionsPending || goalsPending
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount/month change
-    loadResumen()
-  }, [loadResumen])
-
-  // cards === null means "still loading, unknown" — show a spinner, not the
+  // cardsPending means "still loading, unknown" — show a spinner, not the
   // gate. Rendering the gate here used to flash "add your first card" at
   // every returning user for the split second before their real cards
-  // arrived. Only cards.length === 0 (confirmed empty) means the gate.
-  if (cards === null) {
+  // arrived. Only a confirmed empty list means the gate.
+  if (cardsPending) {
     return (
       <div className="space-y-6 pb-24 sm:pb-0">
         <h1 className="text-2xl font-bold">Finanzas</h1>
@@ -135,11 +129,15 @@ export default function FinancesPage() {
     )
   }
 
-  if (cards.length === 0) {
+  const cardsList = cards ?? []
+
+  if (cardsList.length === 0) {
     return (
       <div className="space-y-6 pb-24 sm:pb-0">
         <h1 className="text-2xl font-bold">Finanzas</h1>
-        <OnboardingGate onSaved={loadCards} />
+        <OnboardingGate
+          onSaved={() => queryClient.invalidateQueries({ queryKey: cardsKey() })}
+        />
       </div>
     )
   }
@@ -171,9 +169,9 @@ export default function FinancesPage() {
           </TabsList>
           <TabsContent value="resumen" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">
             <ResumenTab
-              summary={summary}
+              summary={summary ?? null}
               committed={committed}
-              cards={cards ?? []}
+              cards={cardsList}
               goals={goals}
               isLoading={resumenLoading}
             />

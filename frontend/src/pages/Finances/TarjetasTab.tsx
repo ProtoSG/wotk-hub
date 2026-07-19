@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -354,15 +355,36 @@ function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormP
   )
 }
 
+function cardsKey() {
+  return ['finances', 'cards'] as const
+}
+
 export default function TarjetasTab() {
-  const [cards, setCards] = useState<Card[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editCard, setEditCard] = useState<Card | undefined>()
   const [transferOpen, setTransferOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { listCards, deleteCard } = useFinanceApi()
+  const queryClient = useQueryClient()
   const pendingDeletes = useRef(new Map<number, number>())
+
+  const { data: cards = [] } = useQuery({
+    queryKey: cardsKey(),
+    queryFn: () => listCards(),
+  })
+
+  function invalidateCards() {
+    queryClient.invalidateQueries({ queryKey: cardsKey() })
+  }
+
+  // A card transfer moves balance between two cards AND creates a
+  // transfer-kind Transaction row — excluded from the Movimientos list, but
+  // still lives in the same table, so invalidate both cache prefixes.
+  function invalidateAfterTransfer() {
+    queryClient.invalidateQueries({ queryKey: cardsKey() })
+    queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
+  }
 
   // Open form when navigated with ?new=1
   useEffect(() => {
@@ -383,33 +405,19 @@ export default function TarjetasTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
   }, [searchParams])
 
-  const load = useCallback(async () => {
-    try {
-      setCards(await listCards())
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las tarjetas')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as DbManager pages
-    load()
-  }, [load])
-
   async function commitDelete(id: number) {
     pendingDeletes.current.delete(id)
     try {
       await deleteCard(id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la tarjeta')
-      load()
+      invalidateCards()
     }
   }
 
   function handleDelete(c: Card) {
     let removedIndex = -1
-    setCards((prev) => {
+    queryClient.setQueryData(cardsKey(), (prev: Card[] = []) => {
       removedIndex = prev.findIndex((x) => x.id === c.id)
       return prev.filter((x) => x.id !== c.id)
     })
@@ -427,7 +435,7 @@ export default function TarjetasTab() {
             window.clearTimeout(timerId)
             pendingDeletes.current.delete(c.id)
           }
-          setCards((prev) => {
+          queryClient.setQueryData(cardsKey(), (prev: Card[] = []) => {
             const next = [...prev]
             next.splice(Math.min(removedIndex, next.length), 0, c)
             return next
@@ -585,12 +593,12 @@ export default function TarjetasTab() {
         </div>
       )}
 
-      <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editCard={editCard} />
+      <CardForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={invalidateCards} editCard={editCard} />
       {selectedCard && (
         <TransferForm
           open={transferOpen}
           onClose={() => setTransferOpen(false)}
-          onSaved={load}
+          onSaved={invalidateAfterTransfer}
           fromCard={selectedCard}
           cards={cards}
         />
