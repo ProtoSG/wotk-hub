@@ -205,7 +205,7 @@ export default function MovimientosTab({ month }: Props) {
           <SelectContent>
             <SelectItem value={ALL}>Todas las categorías</SelectItem>
             {allCategoryOptions.map((c) => (
-              <SelectItem key={c.name} value={c.name}>
+              <SelectItem key={c.id} value={c.name}>
                 {c.label}
               </SelectItem>
             ))}
