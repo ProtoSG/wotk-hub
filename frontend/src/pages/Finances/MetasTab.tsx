@@ -203,18 +203,21 @@ export default function MetasTab() {
                       </div>
                     )}
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full text-xs"
-                      onClick={() => {
-                        setSelectedGoal(goal)
-                        setContributionOpen(true)
-                      }}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      Agregar ahorro
-                    </Button>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs"
+                        style={{ color: goal.color }}
+                        onClick={() => {
+                          setSelectedGoal(goal)
+                          setContributionOpen(true)
+                        }}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        Agregar ahorro
+                      </Button>
+                    </div>
                   </CardContent>
                 </CozyCard>
               )
