@@ -19,6 +19,7 @@ import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
 import TransactionForm from './TransactionForm'
 import TransactionsTable from './TransactionsTable'
 import TransactionsMobileList from './TransactionsMobileList'
+import CardCarousel from './CardCarousel'
 
 const ALL = 'all'
 
@@ -166,8 +167,8 @@ export default function MovimientosTab({ month }: Props) {
         </div>
       </div>
 
-      {/* Horizontal scrollable card filter */}
-      <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-1" style={{ scrollbarWidth: 'none' }}>
+      {/* Horizontal scrollable card filter — desktop only, mobile uses the swipeable carousel below */}
+      <div className="hidden gap-3 overflow-x-auto snap-x snap-mandatory px-1 sm:flex" style={{ scrollbarWidth: 'none' }}>
         {/* "Todos" card */}
         <button
           onClick={() => setCardFilter(null)}
@@ -202,10 +203,13 @@ export default function MovimientosTab({ month }: Props) {
               <span className="text-white/90 text-sm font-medium truncate">{card.name}</span>
               <span className="text-white/70 text-xs">•••• {card.last4}</span>
             </div>
-            <span className="text-white/60 text-xs">S/ {(card.balanceCents / 100).toFixed(2)}</span>
+            <span className="text-white/60 text-xs">{formatPEN(card.balanceCents)}</span>
           </button>
         ))}
       </div>
+
+      {/* Swipeable card carousel — mobile only */}
+      <CardCarousel cards={cards} transactionsCount={transactions.length} onCardChange={setCardFilter} />
 
       <TransactionsTable
         transactions={filteredTransactions}
@@ -245,6 +249,7 @@ export default function MovimientosTab({ month }: Props) {
         onClose={() => setFormOpen(false)}
         onSaved={invalidateAll}
         editing={editing}
+        defaultCardId={cardFilter}
       />
 
       <Dialog open={refundDialogOpen} onOpenChange={(v) => !v && setRefundDialogOpen(false)}>

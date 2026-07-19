@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar, CreditCard } from 'lucide-react'
+import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar, CreditCard, MoreVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { SavingsGoal } from '@/types/finance.types'
@@ -126,27 +127,31 @@ export default function MetasTab() {
                       <PiggyBank className="h-4 w-4" style={{ color: goal.color }} />
                       <CardTitle className="text-sm font-medium">{goal.name}</CardTitle>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Editar meta ${goal.name}`}
-                        onClick={() => {
-                          setEditGoal(goal)
-                          setFormOpen(true)
-                        }}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Eliminar meta ${goal.name}`}
-                        onClick={() => openDeleteDialog(goal)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label={`Más acciones para ${goal.name}`}>
+                          <MoreVertical size={14} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditGoal(goal)
+                            setFormOpen(true)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => openDeleteDialog(goal)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="space-y-1">

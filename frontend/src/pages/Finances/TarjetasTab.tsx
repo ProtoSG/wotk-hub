@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight, MoreVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { Card } from '@/types/finance.types'
@@ -120,35 +121,33 @@ export default function TarjetasTab() {
                       {card.last4 ? `${card.last4}` : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Editar tarjeta ${card.name}`}
-                      onClick={() => {
-                        setEditCard(card)
-                        setFormOpen(true)
-                      }}
-                    >
-                      <Pencil size={14} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      disabled={isLastCard}
-                      aria-label={
-                        isLastCard
-                          ? `No podés archivar tu última tarjeta activa`
-                          : `Eliminar tarjeta ${card.name}`
-                      }
-                      title={
-                        isLastCard ? 'No podés archivar tu última tarjeta activa' : undefined
-                      }
-                      onClick={() => !isLastCard && handleDelete(card)}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label={`Más acciones para ${card.name}`}>
+                        <MoreVertical size={14} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setEditCard(card)
+                          setFormOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={isLastCard}
+                        title={isLastCard ? 'No podés archivar tu última tarjeta activa' : undefined}
+                        onClick={() => handleDelete(card)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-end justify-between">

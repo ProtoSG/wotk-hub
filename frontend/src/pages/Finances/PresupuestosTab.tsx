@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, AlertTriangle, Target } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Target, MoreVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
@@ -111,25 +112,31 @@ export default function PresupuestosTab({ month }: Props) {
                         Excedido
                       </Badge>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Editar presupuesto de ${b.category}`}
-                      onClick={() => {
-                        setEditing(b)
-                        setFormOpen(true)
-                      }}
-                    >
-                      <Pencil size={14} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Eliminar presupuesto de ${b.category}`}
-                      onClick={() => handleDelete(b)}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label={`Más acciones para ${b.category}`}>
+                          <MoreVertical size={14} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditing(b)
+                            setFormOpen(true)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(b)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">

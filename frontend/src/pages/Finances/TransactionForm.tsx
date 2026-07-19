@@ -30,9 +30,10 @@ interface Props {
   onClose: () => void
   onSaved: () => void
   editing?: Transaction | null
+  defaultCardId?: number | null
 }
 
-function defaults(editing?: Transaction | null): Partial<FormValues> {
+function defaults(editing?: Transaction | null, defaultCardId?: number | null): Partial<FormValues> {
   return editing
     ? {
         // editing always comes from Movimientos, which never lists transfer
@@ -49,11 +50,11 @@ function defaults(editing?: Transaction | null): Partial<FormValues> {
         category: 'comida',
         date: new Date().toISOString().slice(0, 10),
         description: '',
-        cardId: '',
+        cardId: defaultCardId != null ? String(defaultCardId) : '',
       }
 }
 
-export default function TransactionForm({ open, onClose, onSaved, editing }: Props) {
+export default function TransactionForm({ open, onClose, onSaved, editing, defaultCardId }: Props) {
   const [saving, setSaving] = useState(false)
   const [cards, setCards] = useState<Card[]>([])
   const { createTransaction, updateTransaction, listCards } = useFinanceApi()
@@ -79,8 +80,8 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
   }, [open])
 
   useEffect(() => {
-    if (open) reset(defaults(editing))
-  }, [open, editing, reset])
+    if (open) reset(defaults(editing, defaultCardId))
+  }, [open, editing, defaultCardId, reset])
 
   const type = watch('type')
   const category = watch('category')
