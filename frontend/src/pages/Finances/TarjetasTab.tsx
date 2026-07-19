@@ -1,373 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import { useForm, type SubmitHandler } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { toast } from 'sonner'
-import { useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { Card } from '@/types/finance.types'
-
-const UNDO_WINDOW_MS = 4500
-
-const CARD_COLORS = [
-  '#863bff', '#3b82f6', '#10b981', '#f59e0b',
-  '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6',
-]
-
-const cardSchema = z.object({
-  name: z.string().min(1, 'El nombre es requerido'),
-  bank: z.string(),
-  last4: z.string().length(4, 'Debe tener 4 dígitos'),
-  color: z.string(),
-  icon: z.string(),
-  initialBalance: z.number().min(0, 'No puede ser negativo').optional(),
-  creditLimit: z.number().min(0, 'No puede ser negativo').optional(),
-})
-
-type CardFormValues = z.infer<typeof cardSchema>
-
-function cardDefaults(editCard?: Card): CardFormValues {
-  return {
-    name: editCard?.name ?? '',
-    bank: editCard?.bank ?? '',
-    last4: editCard?.last4 ?? '',
-    color: editCard?.color ?? CARD_COLORS[0],
-    icon: editCard?.icon ?? 'credit-card',
-    initialBalance: 0,
-    creditLimit: editCard ? editCard.creditLimitCents / 100 : 0,
-  }
-}
-
-interface CardFormFieldsProps {
-  editCard?: Card
-  onSaved: () => void
-  onClose?: () => void
-}
-
-// Reusable card form body. Rendered inside the CardForm Dialog (TarjetasTab)
-// and inline in the FinancesPage onboarding gate. Each open is a fresh mount
-// (see `key` in the Dialog wrapper) so defaultValues apply cleanly and no
-// manual reset effect is needed.
-export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsProps) {
-  const { createCard, updateCard } = useFinanceApi()
-  const [saving, setSaving] = useState(false)
-
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<CardFormValues>({
-    resolver: zodResolver(cardSchema),
-    defaultValues: cardDefaults(editCard),
-  })
-
-  const color = watch('color')
-
-  const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
-    setSaving(true)
-    try {
-      const input = {
-        name: values.name,
-        bank: values.bank,
-        last4: values.last4,
-        color: values.color,
-        icon: values.icon,
-        creditLimitCents: Math.round((values.creditLimit ?? 0) * 100),
-      }
-      if (editCard) {
-        // Balance isn't editable here — it's derived from transactions
-        // (gastos/transferencias), not a field you overwrite.
-        await updateCard(editCard.id, input)
-        toast.success('Tarjeta actualizada')
-      } else {
-        await createCard({
-          ...input,
-          initialBalanceCents: Math.round((values.initialBalance ?? 0) * 100),
-        })
-        toast.success('Tarjeta creada')
-      }
-      onSaved()
-      onClose?.()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-1">
-        <Label>Nombre</Label>
-        <Input {...register('name')} placeholder="Ej: STM Lima, BCP Débito" />
-        {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="min-w-0 space-y-1">
-          <Label>Banco</Label>
-          <Input {...register('bank')} placeholder="Ej: BCP, Interbank" />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <Label>Últimos 4 dígitos</Label>
-          <Input {...register('last4')} placeholder="1234" maxLength={4} />
-          {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {!editCard && (
-          <div className="min-w-0 space-y-1">
-            <Label>Saldo inicial (opcional)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              {...register('initialBalance', { valueAsNumber: true })}
-              placeholder="0.00"
-            />
-            {errors.initialBalance && (
-              <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
-            )}
-          </div>
-        )}
-        <div className="min-w-0 space-y-1">
-          <Label>Límite de crédito (opcional)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            {...register('creditLimit', { valueAsNumber: true })}
-            placeholder="0.00"
-          />
-          {errors.creditLimit && (
-            <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
-          )}
-        </div>
-      </div>
-      <div className="space-y-1">
-        <Label>Color</Label>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {CARD_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setValue('color', c)}
-              aria-label={c}
-              className="flex h-11 w-11 items-center justify-center rounded-full transition-transform hover:scale-110"
-            >
-              <span
-                className="h-8 w-8 rounded-full border-2"
-                style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
-              />
-            </button>
-          ))}
-        </div>
-        {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
-      </div>
-      <DialogFooter>
-        {onClose && (
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-        )}
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Guardando...' : editCard ? 'Actualizar' : 'Crear'}
-        </Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-interface CardFormProps {
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
-  editCard?: Card
-}
-
-function CardForm({ open, onClose, onSaved, editCard }: CardFormProps) {
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editCard ? 'Editar tarjeta' : 'Nueva tarjeta'}</DialogTitle>
-        </DialogHeader>
-        {/* key forces a fresh mount every time the dialog opens, so useForm
-            defaultValues apply cleanly without a manual reset-on-open effect. */}
-        {open && (
-          <CardFormFields
-            key="open"
-            editCard={editCard}
-            onSaved={onSaved}
-            onClose={onClose}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-interface TransferFormProps {
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
-  fromCard: Card
-  cards: Card[]
-}
-
-// A card with a credit limit is a credit account with no spendable balance
-// to move — filter it from the transfer destinations list.
-function TransferForm({ open, onClose, onSaved, fromCard, cards }: TransferFormProps) {
-  const { createCardTransfer } = useFinanceApi()
-  const [saving, setSaving] = useState(false)
-
-  const transferSchema = z
-    .object({
-      toCardId: z.string().min(1, 'Elegí una tarjeta destino'),
-      amount: z.number().positive('Debe ser mayor a 0'),
-      date: z.string().min(1, 'Requerido'),
-    })
-    .refine((data) => fromCard.id !== Number(data.toCardId), {
-      message: 'No puedes transferir a la misma tarjeta',
-      path: ['toCardId'],
-    })
-
-  type TransferFormValues = z.infer<typeof transferSchema>
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<TransferFormValues>({
-    resolver: zodResolver(transferSchema),
-    defaultValues: {
-      toCardId: '',
-      amount: 0,
-      date: new Date().toISOString().split('T')[0],
-    },
-  })
-
-  useEffect(() => {
-    if (open) reset({ toCardId: '', amount: 0, date: new Date().toISOString().split('T')[0] })
-  }, [open, reset])
-
-  const destinations = cards.filter((c) => c.id !== fromCard.id && c.creditLimitCents === 0)
-
-  const onSubmit: SubmitHandler<TransferFormValues> = async (values) => {
-    setSaving(true)
-    try {
-      await createCardTransfer({
-        fromCardId: fromCard.id,
-        toCardId: Number(values.toCardId),
-        amountCents: Math.round(values.amount * 100),
-        date: values.date,
-        note: '',
-      })
-      toast.success('Transferencia registrada')
-      onSaved()
-      onClose()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al transferir')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Transferir desde {fromCard.name}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1">
-            <Label>Tarjeta destino</Label>
-            <Select value={watch('toCardId')} onValueChange={(v) => setValue('toCardId', v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elegí una tarjeta" />
-              </SelectTrigger>
-              <SelectContent>
-                {destinations.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name} ({c.last4})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.toCardId && <p className="text-xs text-destructive">{errors.toCardId.message}</p>}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="min-w-0 space-y-1">
-              <Label>Monto (PEN)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0.01"
-                {...register('amount', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-              {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-            </div>
-            <div className="min-w-0 space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" {...register('date')} />
-              {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Transfiriendo...' : 'Transferir'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function cardsKey() {
-  return ['finances', 'cards'] as const
-}
+import { cardsKey } from './financeKeys'
+import { useUndoableDelete } from './useUndoableDelete'
+import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
+import { getCardUtilization } from './cardUtilization'
+import CardForm from './CardForm'
+import TransferForm from './TransferForm'
 
 export default function TarjetasTab() {
   const [formOpen, setFormOpen] = useState(false)
   const [editCard, setEditCard] = useState<Card | undefined>()
   const [transferOpen, setTransferOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
-  const [searchParams, setSearchParams] = useSearchParams()
   const { listCards, deleteCard } = useFinanceApi()
   const queryClient = useQueryClient()
-  const pendingDeletes = useRef(new Map<number, number>())
 
   const { data: cards = [] } = useQuery({
     queryKey: cardsKey(),
@@ -386,64 +39,33 @@ export default function TarjetasTab() {
     queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
   }
 
-  // Open form when navigated with ?new=1
-  useEffect(() => {
-    if (searchParams.get('new') === '1') {
-      flushSync(() => {
-        setEditCard(undefined)
-        setFormOpen(true)
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.delete('new')
-            return next
-          },
-          { replace: true }
-        )
+  useOpenFormOnQueryParam(() => {
+    setEditCard(undefined)
+    setFormOpen(true)
+  })
+
+  const { handleDelete } = useUndoableDelete<Card, number>({
+    getId: (c) => c.id,
+    deleteFn: deleteCard,
+    removeFromCache: (c) => {
+      let removedIndex = -1
+      queryClient.setQueryData(cardsKey(), (prev: Card[] = []) => {
+        removedIndex = prev.findIndex((x) => x.id === c.id)
+        return prev.filter((x) => x.id !== c.id)
       })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
-  }, [searchParams])
-
-  async function commitDelete(id: number) {
-    pendingDeletes.current.delete(id)
-    try {
-      await deleteCard(id)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la tarjeta')
-      invalidateCards()
-    }
-  }
-
-  function handleDelete(c: Card) {
-    let removedIndex = -1
-    queryClient.setQueryData(cardsKey(), (prev: Card[] = []) => {
-      removedIndex = prev.findIndex((x) => x.id === c.id)
-      return prev.filter((x) => x.id !== c.id)
-    })
-
-    const timer = window.setTimeout(() => commitDelete(c.id), UNDO_WINDOW_MS)
-    pendingDeletes.current.set(c.id, timer)
-
-    toast.success('Tarjeta eliminada', {
-      duration: UNDO_WINDOW_MS,
-      action: {
-        label: 'Deshacer',
-        onClick: () => {
-          const timerId = pendingDeletes.current.get(c.id)
-          if (timerId !== undefined) {
-            window.clearTimeout(timerId)
-            pendingDeletes.current.delete(c.id)
-          }
-          queryClient.setQueryData(cardsKey(), (prev: Card[] = []) => {
-            const next = [...prev]
-            next.splice(Math.min(removedIndex, next.length), 0, c)
-            return next
-          })
-        },
-      },
-    })
-  }
+      return removedIndex
+    },
+    restoreToCache: (c, removedIndex) => {
+      queryClient.setQueryData(cardsKey(), (prev: Card[] = []) => {
+        const next = [...prev]
+        next.splice(Math.min(removedIndex, next.length), 0, c)
+        return next
+      })
+    },
+    successMessage: 'Tarjeta eliminada',
+    errorMessage: 'No se pudo eliminar la tarjeta',
+    onDeleteError: invalidateCards,
+  })
 
   return (
     <div className="space-y-4">
@@ -478,17 +100,10 @@ export default function TarjetasTab() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card, i) => {
-            const hasCreditLimit = card.creditLimitCents > 0
-            const utilization =
-              hasCreditLimit && card.creditLimitCents > 0
-                ? card.usedCreditCents / card.creditLimitCents
-                : 0
-            const utilizationColor =
-              utilization > 0.8 ? 'bg-destructive' : utilization > 0.5 ? 'bg-warning' : 'bg-success'
-            // The backend rejects archiving your last active card with 409
-            // (cards.go DeleteCard). Disable the affordance here too so the
-            // user doesn't trip the failure — the helpful title explains why.
-            const isLastCard = cards.length === 1
+            const { hasCreditLimit, utilization, utilizationColor, isLastCard } = getCardUtilization(
+              card,
+              cards.length
+            )
 
             return (
               <CozyCard

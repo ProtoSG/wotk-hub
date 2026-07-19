@@ -1,7 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import { toast } from 'sonner'
-import { useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, AlertTriangle, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,89 +10,54 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import { type Budget } from '@/types/finance.types'
+import { budgetsKey } from './financeKeys'
+import { useUndoableDelete } from './useUndoableDelete'
+import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
+import { getBudgetStatus } from './budgetStatus'
 import BudgetForm from './BudgetForm'
 
 interface Props {
   month: string
 }
 
-const UNDO_WINDOW_MS = 4500
-
-function budgetsKey(month: string) {
-  return ['finances', 'budgets', month] as const
-}
-
 export default function PresupuestosTab({ month }: Props) {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
-  const [searchParams, setSearchParams] = useSearchParams()
   const { listBudgets, deleteBudget } = useFinanceApi()
   const queryClient = useQueryClient()
-  const pendingDeletes = useRef(new Map<string, number>())
 
   const { data: budgets = [] } = useQuery({
     queryKey: budgetsKey(month),
     queryFn: () => listBudgets(month),
   })
 
-  // Open form when navigated with ?new=1
-  useEffect(() => {
-    if (searchParams.get('new') === '1') {
-      flushSync(() => {
-        setEditing(null)
-        setFormOpen(true)
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.delete('new')
-            return next
-          },
-          { replace: true }
-        )
+  useOpenFormOnQueryParam(() => {
+    setEditing(null)
+    setFormOpen(true)
+  })
+
+  const { handleDelete } = useUndoableDelete<Budget, string>({
+    getId: (b) => b.category,
+    deleteFn: deleteBudget,
+    removeFromCache: (b) => {
+      let removedIndex = -1
+      queryClient.setQueryData(budgetsKey(month), (prev: Budget[] = []) => {
+        removedIndex = prev.findIndex((x) => x.category === b.category)
+        return prev.filter((x) => x.category !== b.category)
       })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
-  }, [searchParams])
-
-  async function commitDelete(category: string) {
-    pendingDeletes.current.delete(category)
-    try {
-      await deleteBudget(category)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el presupuesto')
-      queryClient.invalidateQueries({ queryKey: budgetsKey(month) })
-    }
-  }
-
-  function handleDelete(b: Budget) {
-    let removedIndex = -1
-    queryClient.setQueryData(budgetsKey(month), (prev: Budget[] = []) => {
-      removedIndex = prev.findIndex((x) => x.category === b.category)
-      return prev.filter((x) => x.category !== b.category)
-    })
-
-    const timer = window.setTimeout(() => commitDelete(b.category), UNDO_WINDOW_MS)
-    pendingDeletes.current.set(b.category, timer)
-
-    toast.success('Presupuesto eliminado', {
-      duration: UNDO_WINDOW_MS,
-      action: {
-        label: 'Deshacer',
-        onClick: () => {
-          const timerId = pendingDeletes.current.get(b.category)
-          if (timerId !== undefined) {
-            window.clearTimeout(timerId)
-            pendingDeletes.current.delete(b.category)
-          }
-          queryClient.setQueryData(budgetsKey(month), (prev: Budget[] = []) => {
-            const next = [...prev]
-            next.splice(Math.min(removedIndex, next.length), 0, b)
-            return next
-          })
-        },
-      },
-    })
-  }
+      return removedIndex
+    },
+    restoreToCache: (b, removedIndex) => {
+      queryClient.setQueryData(budgetsKey(month), (prev: Budget[] = []) => {
+        const next = [...prev]
+        next.splice(Math.min(removedIndex, next.length), 0, b)
+        return next
+      })
+    },
+    successMessage: 'Presupuesto eliminado',
+    errorMessage: 'No se pudo eliminar el presupuesto',
+    onDeleteError: () => queryClient.invalidateQueries({ queryKey: budgetsKey(month) }),
+  })
 
   return (
     <div className="space-y-4">
@@ -131,17 +93,7 @@ export default function PresupuestosTab({ month }: Props) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {budgets.map((b, i) => {
-            const pct = b.monthlyLimitCents > 0 ? (b.spentCents / b.monthlyLimitCents) * 100 : 0
-            const over = b.spentCents > b.monthlyLimitCents
-            const isDanger = over || pct >= 80
-            const indicatorColor = over ? 'bg-destructive' : pct >= 80 ? 'bg-warning' : 'bg-primary'
-            const stripeStyle =
-              isDanger
-                ? {
-                    backgroundImage:
-                      'repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(255,255,255,0.2)_4px,rgba(255,255,255,0.2)_8px)',
-                  }
-                : {}
+            const { pct, over, indicatorColor, stripeStyle } = getBudgetStatus(b)
             return (
               <CozyCard
                 key={b.id}

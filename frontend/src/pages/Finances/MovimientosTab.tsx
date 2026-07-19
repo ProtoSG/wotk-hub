@@ -1,31 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ArrowUpRight, ArrowDownRight, MoreVertical, RotateCcw, SlidersHorizontal, ArrowLeftRight } from 'lucide-react'
-import { EmptyState } from '@/components/ui/empty-state'
+import { Plus, SlidersHorizontal } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { CardContent } from '@/components/ui/card'
-import { CozyCard } from '@/components/ui/cozy-card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { useCategories } from '@/hooks/useCategories'
 import { cn } from '@/lib/utils'
@@ -34,21 +13,17 @@ import {
   type Transaction,
   type TransactionType,
 } from '@/types/finance.types'
+import { transactionsKey, cardsKey } from './financeKeys'
+import { useUndoableDelete } from './useUndoableDelete'
+import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
 import TransactionForm from './TransactionForm'
+import TransactionsTable from './TransactionsTable'
+import TransactionsMobileList from './TransactionsMobileList'
 
 const ALL = 'all'
-const UNDO_WINDOW_MS = 4500
 
 interface Props {
   month: string
-}
-
-function transactionsKey(month: string, typeFilter: string, categoryFilter: string) {
-  return ['finances', 'transactions', month, typeFilter, categoryFilter] as const
-}
-
-function cardsKey() {
-  return ['finances', 'cards'] as const
 }
 
 export default function MovimientosTab({ month }: Props) {
@@ -57,11 +32,9 @@ export default function MovimientosTab({ month }: Props) {
   const [cardFilter, setCardFilter] = useState<number | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const [searchParams, setSearchParams] = useSearchParams()
   const { listTransactions, deleteTransaction, listCards, refundTransaction } = useFinanceApi()
   const { data: categoriesByKind } = useCategories()
   const queryClient = useQueryClient()
-  const pendingDeletes = useRef(new Map<number, number>())
 
   const { data: transactions = [], isPending: isLoading } = useQuery({
     queryKey: transactionsKey(month, typeFilter, categoryFilter),
@@ -87,69 +60,38 @@ export default function MovimientosTab({ month }: Props) {
     return map
   }, [categoriesByKind])
 
-  // Open form when navigated with ?new=1
-  useEffect(() => {
-    if (searchParams.get('new') === '1') {
-      flushSync(() => {
-        setEditing(null)
-        setFormOpen(true)
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.delete('new')
-            return next
-          },
-          { replace: true }
-        )
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setSearchParams identity is stable, only react to searchParams changing
-  }, [searchParams])
+  useOpenFormOnQueryParam(() => {
+    setEditing(null)
+    setFormOpen(true)
+  })
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
     queryClient.invalidateQueries({ queryKey: cardsKey() })
   }
 
-  async function commitDelete(id: number) {
-    pendingDeletes.current.delete(id)
-    try {
-      await deleteTransaction(id)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el movimiento')
-      invalidateAll()
-    }
-  }
-
-  function handleDelete(t: Transaction) {
-    let removedIndex = -1
-    queryClient.setQueryData(transactionsKey(month, typeFilter, categoryFilter), (prev: Transaction[] = []) => {
-      removedIndex = prev.findIndex((x) => x.id === t.id)
-      return prev.filter((x) => x.id !== t.id)
-    })
-
-    const timer = window.setTimeout(() => commitDelete(t.id), UNDO_WINDOW_MS)
-    pendingDeletes.current.set(t.id, timer)
-
-    toast.success('Movimiento eliminado', {
-      duration: UNDO_WINDOW_MS,
-      action: {
-        label: 'Deshacer',
-        onClick: () => {
-          const timerId = pendingDeletes.current.get(t.id)
-          if (timerId !== undefined) {
-            window.clearTimeout(timerId)
-            pendingDeletes.current.delete(t.id)
-          }
-          queryClient.setQueryData(transactionsKey(month, typeFilter, categoryFilter), (prev: Transaction[] = []) => {
-            const next = [...prev]
-            next.splice(Math.min(removedIndex, next.length), 0, t)
-            return next
-          })
-        },
-      },
-    })
-  }
+  const { handleDelete } = useUndoableDelete<Transaction, number>({
+    getId: (t) => t.id,
+    deleteFn: deleteTransaction,
+    removeFromCache: (t) => {
+      let removedIndex = -1
+      queryClient.setQueryData(transactionsKey(month, typeFilter, categoryFilter), (prev: Transaction[] = []) => {
+        removedIndex = prev.findIndex((x) => x.id === t.id)
+        return prev.filter((x) => x.id !== t.id)
+      })
+      return removedIndex
+    },
+    restoreToCache: (t, removedIndex) => {
+      queryClient.setQueryData(transactionsKey(month, typeFilter, categoryFilter), (prev: Transaction[] = []) => {
+        const next = [...prev]
+        next.splice(Math.min(removedIndex, next.length), 0, t)
+        return next
+      })
+    },
+    successMessage: 'Movimiento eliminado',
+    errorMessage: 'No se pudo eliminar el movimiento',
+    onDeleteError: invalidateAll,
+  })
 
   const [refundTarget, setRefundTarget] = useState<Transaction | null>(null)
   const [refundDialogOpen, setRefundDialogOpen] = useState(false)
@@ -265,234 +207,38 @@ export default function MovimientosTab({ month }: Props) {
         ))}
       </div>
 
-      <CozyCard className="animate-card-in hidden sm:block">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Tarjeta</TableHead>
-                <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-12" /></TableCell>
-                    </TableRow>
-                  ))}
-                </>
-              ) : filteredTransactions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <EmptyState
-                      icon={<ArrowLeftRight className="h-8 w-8" />}
-                      title="Sin movimientos este mes"
-                      description="Registrá tu primer movimiento para empezar a controlar tus finanzas."
-                      action={{
-                        label: 'Nuevo movimiento',
-                        onClick: () => {
-                          setEditing(null)
-                          setFormOpen(true)
-                        },
-                      }}
-                    />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredTransactions.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="whitespace-nowrap">{t.date}</TableCell>
-                    <TableCell>
-                      <Badge variant={t.type === 'income' ? 'default' : 'secondary'}>
-                        {t.type === 'income' ? 'Ingreso' : 'Gasto'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{categoryLabelMap[t.category] ?? t.category}</TableCell>
-                    <TableCell className="max-w-64 truncate text-muted-foreground">
-                      {t.description || '—'}
-                    </TableCell>
-                    <TableCell>
-                      {t.cardId != null ? (
-                        (() => {
-                          const card = cards.find((c) => c.id === t.cardId)
-                          return card ? (
-                            <Badge
-                              variant="outline"
-                              style={{ borderColor: card.color, color: card.color }}
-                              className="text-xs"
-                            >
-                              {card.name} ({card.last4})
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs">
-                              #{t.cardId}
-                            </Badge>
-                          )
-                        })()
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right font-medium ${
-                        t.type === 'income' ? 'text-income' : 'text-expense'
-                      }`}
-                    >
-                      {t.type === 'income' ? '+' : '-'}
-                      {formatPEN(t.amountCents)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Editar movimiento"
-                          onClick={() => {
-                            setEditing(t)
-                            setFormOpen(true)
-                          }}
-                        >
-                          <Pencil size={14} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Eliminar movimiento"
-                          onClick={() => handleDelete(t)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                        {t.type === 'expense' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Marcar como reembolsado"
-                            onClick={() => handleRefund(t)}
-                          >
-                            <RotateCcw size={14} />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </CozyCard>
+      <TransactionsTable
+        transactions={filteredTransactions}
+        isLoading={isLoading}
+        cards={cards}
+        categoryLabelMap={categoryLabelMap}
+        onEdit={(t) => {
+          setEditing(t)
+          setFormOpen(true)
+        }}
+        onDelete={handleDelete}
+        onRefund={handleRefund}
+        onNewTransaction={() => {
+          setEditing(null)
+          setFormOpen(true)
+        }}
+      />
 
-      <CozyCard className="animate-card-in sm:hidden">
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-48" />
-                  </div>
-                  <Skeleton className="h-4 w-16" />
-                </div>
-              ))}
-            </div>
-          ) : filteredTransactions.length === 0 ? (
-            <EmptyState
-              icon={<ArrowLeftRight className="h-8 w-8" />}
-              title="Sin movimientos este mes"
-              description="Registrá tu primer movimiento."
-              action={{
-                label: 'Nuevo movimiento',
-                onClick: () => {
-                  setEditing(null)
-                  setFormOpen(true)
-                },
-              }}
-            />
-          ) : (
-            filteredTransactions.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 border-b p-4 last:border-0">
-                <div
-                  className={cn(
-                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-                    t.type === 'income'
-                      ? 'bg-income/10 text-income'
-                      : 'bg-expense/10 text-expense'
-                  )}
-                >
-                  {t.type === 'income' ? (
-                    <ArrowUpRight className="h-5 w-5" />
-                  ) : (
-                    <ArrowDownRight className="h-5 w-5" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">
-                    {categoryLabelMap[t.category] ?? t.category}
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {t.description ? `${t.description} · ${t.date}` : t.date}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    'shrink-0 text-sm font-semibold',
-                    t.type === 'income' ? 'text-income' : 'text-expense'
-                  )}
-                >
-                  {t.type === 'income' ? '+' : '-'}
-                  {formatPEN(t.amountCents)}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="shrink-0" aria-label="Más acciones">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setEditing(t)
-                        setFormOpen(true)
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleDelete(t)}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </DropdownMenuItem>
-                    {t.type === 'expense' && (
-                      <DropdownMenuItem onClick={() => handleRefund(t)}>
-                        <RotateCcw className="h-4 w-4" />
-                        Marcar como reembolsado
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </CozyCard>
+      <TransactionsMobileList
+        transactions={filteredTransactions}
+        isLoading={isLoading}
+        categoryLabelMap={categoryLabelMap}
+        onEdit={(t) => {
+          setEditing(t)
+          setFormOpen(true)
+        }}
+        onDelete={handleDelete}
+        onRefund={handleRefund}
+        onNewTransaction={() => {
+          setEditing(null)
+          setFormOpen(true)
+        }}
+      />
 
       <TransactionForm
         open={formOpen}
