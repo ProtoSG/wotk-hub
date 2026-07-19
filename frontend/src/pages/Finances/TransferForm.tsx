@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { todayISO } from '@/lib/date'
 import type { Card } from '@/types/finance.types'
 
 interface TransferFormProps {
@@ -29,6 +30,8 @@ export default function TransferForm({ open, onClose, onSaved, fromCard, cards }
     .object({
       toCardId: z.string().min(1, 'Elegí una tarjeta destino'),
       amount: z.number().positive('Debe ser mayor a 0'),
+      // Not rendered as a field below — a transfer always dates to today,
+      // this just carries that value through to the API payload.
       date: z.string().min(1, 'Requerido'),
     })
     .refine((data) => fromCard.id !== Number(data.toCardId), {
@@ -50,12 +53,12 @@ export default function TransferForm({ open, onClose, onSaved, fromCard, cards }
     defaultValues: {
       toCardId: '',
       amount: 0,
-      date: new Date().toISOString().split('T')[0],
+      date: todayISO(),
     },
   })
 
   useEffect(() => {
-    if (open) reset({ toCardId: '', amount: 0, date: new Date().toISOString().split('T')[0] })
+    if (open) reset({ toCardId: '', amount: 0, date: todayISO() })
   }, [open, reset])
 
   const destinations = cards.filter((c) => c.id !== fromCard.id && c.creditLimitCents === 0)
@@ -103,23 +106,16 @@ export default function TransferForm({ open, onClose, onSaved, fromCard, cards }
             </Select>
             {errors.toCardId && <p className="text-xs text-destructive">{errors.toCardId.message}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="min-w-0 space-y-1">
-              <Label>Monto (PEN)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0.01"
-                {...register('amount', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-              {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-            </div>
-            <div className="min-w-0 space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" {...register('date')} />
-              {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
-            </div>
+          <div className="space-y-1">
+            <Label>Monto (PEN)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              {...register('amount', { valueAsNumber: true })}
+              placeholder="0.00"
+            />
+            {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { todayISO } from '@/lib/date'
 import type { SavingsGoal } from '@/types/finance.types'
 
 interface ContributionFormProps {
@@ -19,6 +20,8 @@ interface ContributionFormProps {
 
 const contributionSchema = z.object({
   amount: z.number().positive('Debe ser mayor a 0'),
+  // Not rendered as a field below — a contribution always dates to today,
+  // this just carries that value through to the API payload.
   date: z.string().min(1, 'La fecha es requerida'),
 })
 
@@ -37,12 +40,12 @@ export default function ContributionForm({ open, onClose, onSaved, goal }: Contr
     resolver: zodResolver(contributionSchema),
     defaultValues: {
       amount: 0,
-      date: new Date().toISOString().split('T')[0],
+      date: todayISO(),
     },
   })
 
   useEffect(() => {
-    if (open) reset({ amount: 0, date: new Date().toISOString().split('T')[0] })
+    if (open) reset({ amount: 0, date: todayISO() })
   }, [open, reset])
 
   const onSubmit: SubmitHandler<ContributionFormValues> = async (values) => {
@@ -81,13 +84,6 @@ export default function ContributionForm({ open, onClose, onSaved, goal }: Contr
             />
             {errors.amount && (
               <p className="text-xs text-destructive">{errors.amount.message}</p>
-            )}
-          </div>
-          <div className="space-y-1">
-            <Label>Fecha</Label>
-            <Input type="date" {...register('date')} />
-            {errors.date && (
-              <p className="text-xs text-destructive">{errors.date.message}</p>
             )}
           </div>
           <DialogFooter>
