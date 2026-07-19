@@ -20,6 +20,7 @@ import TransactionForm from './TransactionForm'
 import TransactionsTable from './TransactionsTable'
 import TransactionsMobileList from './TransactionsMobileList'
 import CardCarousel from './CardCarousel'
+import { CardTextureOverlay } from './cardVisuals'
 
 const ALL = 'all'
 
@@ -192,13 +193,14 @@ export default function MovimientosTab({ month }: Props) {
             key={card.id}
             onClick={() => setCardFilter(card.id)}
             className={cn(
-              'min-w-[180px] h-[100px] rounded-xl shadow-md p-4 flex flex-col justify-between transition-all snap-start shrink-0 border-2',
+              'relative min-w-[180px] h-[100px] rounded-xl shadow-md p-4 flex flex-col justify-between overflow-hidden transition-all snap-start shrink-0 border-2',
               cardFilter === card.id
                 ? 'border-white/80 ring-2 ring-primary/50'
                 : 'border-transparent'
             )}
             style={{ backgroundColor: card.color }}
           >
+            <CardTextureOverlay />
             <div className="flex justify-between items-start">
               <span className="text-white/90 text-sm font-medium truncate">{card.name}</span>
               <span className="text-white/70 text-xs">•••• {card.last4}</span>

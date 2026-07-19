@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
 import type { Card } from '@/types/finance.types'
 import { getCardUtilization } from './cardUtilization'
+import { CardTextureOverlay } from './cardVisuals'
 
 interface Props {
   cards: Card[]
@@ -81,9 +82,10 @@ export default function CardCarousel({ cards, transactionsCount, onCardChange }:
             return (
               <CarouselItem key={card.id} className="basis-full pl-3">
                 <div
-                  className="flex h-32 flex-col justify-between rounded-xl p-4 shadow-md"
+                  className="relative flex h-32 flex-col justify-between overflow-hidden rounded-xl p-4 shadow-md"
                   style={{ backgroundColor: card.color }}
                 >
+                  <CardTextureOverlay />
                   <div className="flex items-start justify-between">
                     <span className="truncate text-sm font-medium text-white/90">{card.name}</span>
                     <span className="text-xs text-white/70">•••• {card.last4}</span>
