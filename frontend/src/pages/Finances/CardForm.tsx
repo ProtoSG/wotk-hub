@@ -10,9 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import type { Card } from '@/types/finance.types'
 
+// Derived from the app's --chart-1..8 tokens (index.css) so card swatches
+// stay in the same warm terracotta family as the rest of the UI instead of
+// the stock Tailwind rainbow. chart-1/3/4/6/7 were darkened just enough to
+// clear 4.5:1 contrast against the white overlay text used on card faces
+// (CardCarousel/TarjetasTab/MovimientosTab chip) — the chart tokens were
+// only validated for contrast against the app background, not white text.
 const CARD_COLORS = [
-  '#863bff', '#3b82f6', '#10b981', '#f59e0b',
-  '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6',
+  '#b95c38', '#3d4f99', '#93702b', '#07819e',
+  '#8b4aa6', '#49844b', '#b8586a', '#a6512a',
 ]
 
 const cardSchema = z.object({
