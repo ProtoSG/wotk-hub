@@ -16,13 +16,16 @@ interface Props {
   cards: Card[]
   transactionsCount: number
   onCardChange: (cardId: number | null) => void
+  onOpenFilters: () => void
 }
 
 // Mobile-only full-width card carousel that replaces the desktop chip row.
 // Slide 0 is "Todos" (parity with the chip row's "all cards" filter), then
 // one slide per card. Swiping drives the same setCardFilter the chip row
-// used, so filteredTransactions in MovimientosTab needs no changes.
-export default function CardCarousel({ cards, transactionsCount, onCardChange }: Props) {
+// used, so filteredTransactions in MovimientosTab needs no changes. Tapping
+// the "Todos" slide opens the type/category filter sheet — it's the natural
+// home for filters, so there's no separate filter button taking up space.
+export default function CardCarousel({ cards, transactionsCount, onCardChange, onOpenFilters }: Props) {
   const [api, setApi] = useState<CarouselApi>()
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -64,13 +67,17 @@ export default function CardCarousel({ cards, transactionsCount, onCardChange }:
       <Carousel setApi={setApi} opts={{ align: 'start', loop: false }}>
         <CarouselContent className="-ml-3">
           <CarouselItem className="basis-full pl-3">
-            <div className="flex h-32 flex-col justify-between rounded-xl border-2 border-dashed border-muted-foreground/30 bg-muted/30 p-4 shadow-sm">
+            <button
+              type="button"
+              onClick={onOpenFilters}
+              className="flex h-32 w-full flex-col justify-between rounded-xl border-2 border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-left shadow-sm"
+            >
               <div className="flex items-start justify-between">
                 <span className="text-sm font-medium text-foreground/90">Todos</span>
                 <SlidersHorizontal className="text-foreground/50" size={16} />
               </div>
               <span className="text-xs text-foreground/40">{transactionsCount} movimientos</span>
-            </div>
+            </button>
           </CarouselItem>
 
           {cards.map((card) => {
