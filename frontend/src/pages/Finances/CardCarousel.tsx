@@ -60,7 +60,7 @@ export default function CardCarousel({ cards, transactionsCount, onCardChange }:
   }, [api, handleSelect])
 
   return (
-    <div className="sm:hidden">
+    <div className="-mx-6 sm:hidden">
       <Carousel setApi={setApi} opts={{ align: 'start', loop: false }}>
         <CarouselContent className="-ml-3">
           <CarouselItem className="basis-full pl-3">
