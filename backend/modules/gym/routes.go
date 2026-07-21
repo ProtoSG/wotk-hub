@@ -22,6 +22,20 @@ func Routes(db *sql.DB) http.Handler {
 	// swallowed as an id param when the rest of the CRUD lands.
 	r.Get("/exercises/filters", h.ExerciseFilters)
 	r.Get("/exercises", h.ListExercises)
+	r.Get("/exercises/{id}/last-sets", h.LastSets)
+
+	// Same ordering reason: "active" must not be read as a session id.
+	r.Get("/sessions/active", h.ActiveSession)
+	r.Get("/sessions", h.ListSessions)
+	r.Post("/sessions", h.CreateSession)
+	r.Get("/sessions/{id}", h.GetSession)
+	r.Put("/sessions/{id}", h.UpdateSession)
+	r.Delete("/sessions/{id}", h.DeleteSession)
+	r.Post("/sessions/{id}/finish", h.FinishSession)
+
+	r.Post("/sessions/{id}/exercises", h.AddSessionExercise)
+	r.Delete("/sessions/{id}/exercises/{exerciseId}", h.RemoveSessionExercise)
+	r.Put("/sessions/{id}/exercises/{exerciseId}/sets", h.ReplaceSets)
 
 	return r
 }

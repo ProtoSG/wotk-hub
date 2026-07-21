@@ -243,6 +243,7 @@ pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(a
 | `POST` | `/sessions/{id}/exercises` | Add an exercise mid-session (appends at `MAX(position)+1`). |
 | `DELETE` | `/sessions/{id}/exercises/{seId}` | Removes it and its sets; remaining positions are re-packed. |
 | `PUT` | `/sessions/{id}/exercises/{seId}/sets` | **Bulk replace** the set list for that exercise. |
+| `GET` | `/exercises/{id}/last-sets` | Sets from the most recent session that logged this exercise, plus its date. Backs the prefill described below; returns an empty list on a first-ever exercise. |
 
 The bulk-replace on sets is deliberate: the mobile logging UI edits a small grid of rows locally and saves the whole block. Per-set `POST`/`PATCH` would multiply round-trips during a workout, exactly when the connection is worst.
 
@@ -317,8 +318,8 @@ UI copy stays **Spanish**, consistent with the rest of the app ("Finanzas", "Cit
 
 | Phase | Deliverable | Ships value on its own? |
 |-------|-------------|-------------------------|
-| P1 | Migration + CSV seeder + `GET /exercises` (+ filters) + `ExercisePicker` | Browsable catalog |
-| P2 | Sessions + sets CRUD + `EntrenarTab` freestyle logging | **Yes — the log works** |
+| P1 ✅ | Migration + CSV seeder + `GET /exercises` (+ filters) + `ExercisePicker` | Browsable catalog |
+| P2 ✅ | Sessions + sets CRUD + `EntrenarTab` freestyle logging | **Yes — the log works** |
 | P3 | Routines CRUD + builder + materialization on session start | Faster start |
 | P4 | `/progress/*` + `ProgresoTab` charts | The payoff |
 | P5 | `/progress/summary` tiles, history polish, streaks | Polish |

@@ -29,3 +29,67 @@ export interface ExerciseFilterValues {
   muscles: string[]
   equipment: string[]
 }
+
+export interface ExerciseSet {
+  id: number
+  setNumber: number
+  reps: number
+  /** Integer grams — see lib/weight.ts for display conversion. */
+  weightGrams: number
+  isWarmup: boolean
+  completed: boolean
+}
+
+/** The set shape a bulk replace sends: no id, order carries the set number. */
+export interface SetInput {
+  reps: number
+  weightGrams: number
+  isWarmup: boolean
+  completed: boolean
+}
+
+export interface SessionExercise {
+  id: number
+  exerciseId: number
+  position: number
+  notes: string
+  exercise: Exercise
+  sets: ExerciseSet[]
+}
+
+export interface Session {
+  id: number
+  routineId: number | null
+  name: string
+  occurredOn: string
+  startedAt: string
+  /** null while the session is in progress. */
+  finishedAt: string | null
+  notes: string
+  exercises: SessionExercise[]
+}
+
+export interface SessionSummary {
+  id: number
+  routineId: number | null
+  name: string
+  occurredOn: string
+  startedAt: string
+  finishedAt: string | null
+  notes: string
+  exerciseCount: number
+  totalReps: number
+  totalVolumeGrams: number
+}
+
+export interface SessionInput {
+  name: string
+  occurredOn: string
+  notes: string
+}
+
+export interface LastSetsResult {
+  sets: ExerciseSet[]
+  /** Date of the session the sets came from; absent when there are none. */
+  occurredOn?: string
+}
