@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Database, Settings, Wallet, Heart, Music } from 'lucide-react'
+import { LayoutDashboard, Database, Settings, Wallet, Heart, Music, Dumbbell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore, type Role } from '@/store/authStore'
 
@@ -8,6 +8,7 @@ const navItems: { to: string; label: string; icon: typeof LayoutDashboard; roles
   { to: '/db-manager', label: 'DB Manager', icon: Database, roles: ['admin'] },
   { to: '/finances', label: 'Finanzas', icon: Wallet },
   { to: '/citas', label: 'Citas', icon: Heart },
+  { to: '/gym', label: 'Gimnasio', icon: Dumbbell },
   { to: '/ytdlp', label: 'YouTube a MP3', icon: Music },
   { to: '/configuration', label: 'Configuración', icon: Settings },
 ]

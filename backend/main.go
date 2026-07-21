@@ -16,6 +16,7 @@ import (
 	"workhub/modules/couple"
 	"workhub/modules/dbmanager"
 	"workhub/modules/finances"
+	"workhub/modules/gym"
 	"workhub/modules/ytdlp"
 	"workhub/store"
 
@@ -66,6 +67,12 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 
+	// Idempotent, so it runs on every boot alongside Migrate. Fatal on
+	// failure: an empty exercise catalog makes the gym module unusable.
+	if err := gym.SeedExercises(appDB); err != nil {
+		log.Fatalf("seed exercises: %v", err)
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recovery)
 	r.Use(middleware.Logger)
@@ -102,6 +109,7 @@ func main() {
 		pr.Use(middleware.RequireAuth(appDB, cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
 	})
 
 	// Unauthenticated by design (token-gated, not JWT) — for sharing with

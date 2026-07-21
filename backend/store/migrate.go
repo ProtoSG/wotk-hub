@@ -232,6 +232,88 @@ func Migrate(db *sql.DB) error {
 			('regalo', 'income', 'Regalo'),
 			('otros', 'income', 'Otros')
 			ON CONFLICT (name, kind) DO NOTHING`,
+		// Gym module — see GYM_SPEC.md. The catalog is seeded from a bundled
+		// CSV (modules/gym/data/exercises.csv) by gym.SeedExercises, which
+		// matches on name, so name carries a UNIQUE constraint. Equipment and
+		// muscle columns are free TEXT rather than CHECK enums: user-created
+		// exercises may introduce new values, and a CHECK would need an ALTER
+		// for each one — a bad fit for this append-only migration style.
+		`CREATE TABLE IF NOT EXISTS exercises (
+			id               BIGSERIAL PRIMARY KEY,
+			name             TEXT NOT NULL UNIQUE,
+			equipment        TEXT NOT NULL DEFAULT '',
+			primary_muscle   TEXT NOT NULL DEFAULT 'Other',
+			secondary_muscle TEXT NOT NULL DEFAULT '',
+			media_url        TEXT NOT NULL DEFAULT '',
+			media_type       TEXT NOT NULL DEFAULT '',
+			is_custom        BOOLEAN NOT NULL DEFAULT false,
+			created_by       BIGINT REFERENCES users(id),
+			created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_primary_muscle ON exercises (primary_muscle)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercises (equipment)`,
+		`CREATE TABLE IF NOT EXISTS routines (
+			id         BIGSERIAL PRIMARY KEY,
+			name       TEXT NOT NULL,
+			notes      TEXT NOT NULL DEFAULT '',
+			color      TEXT NOT NULL DEFAULT '#3B82F6',
+			icon       TEXT NOT NULL DEFAULT 'dumbbell',
+			archived   BOOLEAN NOT NULL DEFAULT false,
+			created_by BIGINT REFERENCES users(id),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS routine_exercises (
+			id          BIGSERIAL PRIMARY KEY,
+			routine_id  BIGINT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+			exercise_id BIGINT NOT NULL REFERENCES exercises(id),
+			position    INT NOT NULL,
+			target_sets INT NOT NULL DEFAULT 3 CHECK (target_sets > 0),
+			target_reps INT NOT NULL DEFAULT 10 CHECK (target_reps > 0),
+			notes       TEXT NOT NULL DEFAULT '',
+			UNIQUE (routine_id, position)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_routine_exercises_routine_id ON routine_exercises (routine_id)`,
+		// routine_id is ON DELETE SET NULL and name snapshots the routine's
+		// name at start time: editing or deleting a template must never
+		// rewrite what a past session recorded.
+		`CREATE TABLE IF NOT EXISTS workout_sessions (
+			id          BIGSERIAL PRIMARY KEY,
+			routine_id  BIGINT REFERENCES routines(id) ON DELETE SET NULL,
+			name        TEXT NOT NULL DEFAULT '',
+			occurred_on DATE NOT NULL,
+			started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			finished_at TIMESTAMPTZ,
+			notes       TEXT NOT NULL DEFAULT '',
+			created_by  BIGINT REFERENCES users(id),
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_workout_sessions_occurred_on ON workout_sessions (occurred_on)`,
+		`CREATE TABLE IF NOT EXISTS session_exercises (
+			id          BIGSERIAL PRIMARY KEY,
+			session_id  BIGINT NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+			exercise_id BIGINT NOT NULL REFERENCES exercises(id),
+			position    INT NOT NULL,
+			notes       TEXT NOT NULL DEFAULT '',
+			UNIQUE (session_id, position)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_exercises_session_id ON session_exercises (session_id)`,
+		// Indexed on exercise_id because the progress chart query filters by
+		// it across every session.
+		`CREATE INDEX IF NOT EXISTS idx_session_exercises_exercise_id ON session_exercises (exercise_id)`,
+		// weight_grams (not kg floats) for the same reason finances stores
+		// amount_cents: 2.5 kg increments and lb conversions stay exact. 0 is
+		// meaningful — bodyweight exercises. reps >= 0 allows a failed set.
+		`CREATE TABLE IF NOT EXISTS exercise_sets (
+			id                  BIGSERIAL PRIMARY KEY,
+			session_exercise_id BIGINT NOT NULL REFERENCES session_exercises(id) ON DELETE CASCADE,
+			set_number          INT    NOT NULL CHECK (set_number > 0),
+			reps                INT    NOT NULL CHECK (reps >= 0),
+			weight_grams        BIGINT NOT NULL DEFAULT 0 CHECK (weight_grams >= 0),
+			is_warmup           BOOLEAN NOT NULL DEFAULT false,
+			completed           BOOLEAN NOT NULL DEFAULT true,
+			UNIQUE (session_exercise_id, set_number)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercise_sets_session_exercise_id ON exercise_sets (session_exercise_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
