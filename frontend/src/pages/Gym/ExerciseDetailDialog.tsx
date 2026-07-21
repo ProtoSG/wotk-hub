@@ -5,6 +5,8 @@ import ExerciseDetail from './ExerciseDetail'
 interface ExerciseDetailDialogProps {
   exercise: Exercise | null
   onClose: () => void
+  onEdit?: (exercise: Exercise) => void
+  onDelete?: (exercise: Exercise) => void
 }
 
 /**
@@ -12,7 +14,12 @@ interface ExerciseDetailDialogProps {
  * already inside a dialog — the picker and the routine builder show the same
  * content as another view of their own dialog instead.
  */
-export default function ExerciseDetailDialog({ exercise, onClose }: ExerciseDetailDialogProps) {
+export default function ExerciseDetailDialog({
+  exercise,
+  onClose,
+  onEdit,
+  onDelete,
+}: ExerciseDetailDialogProps) {
   return (
     <Dialog open={exercise !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -21,7 +28,7 @@ export default function ExerciseDetailDialog({ exercise, onClose }: ExerciseDeta
             <DialogHeader>
               <DialogTitle className="pr-6 text-left">{exercise.name}</DialogTitle>
             </DialogHeader>
-            <ExerciseDetail exercise={exercise} />
+            <ExerciseDetail exercise={exercise} onEdit={onEdit} onDelete={onDelete} />
           </>
         )}
       </DialogContent>

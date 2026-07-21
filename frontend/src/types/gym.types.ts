@@ -13,6 +13,14 @@ export interface Exercise {
   isCustom: boolean
 }
 
+export interface ExerciseInput {
+  name: string
+  equipment: string
+  primaryMuscle: string
+  secondaryMuscle: string
+  description: string
+}
+
 export interface ExerciseFilters {
   q?: string
   muscle?: string

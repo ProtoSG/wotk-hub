@@ -217,8 +217,9 @@ pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(a
 | `GET` | `/exercises` | Filters: `?q=` (name ILIKE), `?muscle=`, `?equipment=`, `?limit=`&`?offset=`. Returns `{ exercises, total }`. |
 | `GET` | `/exercises/filters` | Distinct `muscles` and `equipment` values, for picker dropdowns. |
 | `POST` | `/exercises` | Custom exercise. Forces `is_custom = true`. |
-| `PUT` | `/exercises/{id}` | Custom only. |
-| `DELETE` | `/exercises/{id}` | Custom only, and 409 if referenced by any `session_exercises` row. |
+| `PUT` | `/exercises/{id}` | Custom only — seeded rows 409, since their name and muscles come from the imported catalog. |
+| `PUT` | `/exercises/{id}/description` | Text only, allowed on seeded rows too. The seeder never overwrites a non-empty description, so edits survive every boot. |
+| `DELETE` | `/exercises/{id}` | Custom only, and 409 if referenced by any `session_exercises` or `routine_exercises` row. |
 
 ### Routines
 
@@ -325,7 +326,7 @@ UI copy stays **Spanish**, consistent with the rest of the app ("Finanzas", "Cit
 | P2 ✅ | Sessions + sets CRUD + `EntrenarTab` freestyle logging | **Yes — the log works** |
 | P3 ✅ | Routines CRUD + builder + materialization on session start | Faster start |
 | P4 ✅ | `/progress/*` + `ProgresoTab` charts + summary tiles | The payoff |
-| P5 | History polish, custom exercises, body metrics | Polish |
+| P5 | Custom exercises ✅ · history polish, body metrics | Polish |
 
 P2 is the first shippable slice. Do not let P3/P4 block it.
 

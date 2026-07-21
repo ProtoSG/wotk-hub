@@ -1,3 +1,4 @@
+import { Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { Exercise } from '@/types/gym.types'
@@ -8,6 +9,9 @@ interface ExerciseDetailProps {
   /** When set, an action button offers to add this exercise. */
   onSelect?: (exercise: Exercise) => void
   selectLabel?: string
+  /** Editing and deleting are offered for custom exercises only. */
+  onEdit?: (exercise: Exercise) => void
+  onDelete?: (exercise: Exercise) => void
 }
 
 /**
@@ -21,6 +25,8 @@ export default function ExerciseDetail({
   exercise,
   onSelect,
   selectLabel = 'Agregar ejercicio',
+  onEdit,
+  onDelete,
 }: ExerciseDetailProps) {
   const secondary = exercise.secondaryMuscle
     .split(',')
@@ -66,6 +72,28 @@ export default function ExerciseDetail({
         <Button className="w-full" onClick={() => onSelect(exercise)}>
           {selectLabel}
         </Button>
+      )}
+
+      {exercise.isCustom && (onEdit || onDelete) && (
+        <div className="flex gap-2 border-t pt-3">
+          {onEdit && (
+            <Button variant="outline" size="sm" onClick={() => onEdit(exercise)}>
+              <Pencil className="mr-1 h-4 w-4" />
+              Editar
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDelete(exercise)}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="mr-1 h-4 w-4" />
+              Eliminar
+            </Button>
+          )}
+        </div>
       )}
     </div>
   )

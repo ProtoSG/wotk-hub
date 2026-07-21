@@ -2,6 +2,7 @@ import api from '@/lib/axios'
 import type {
   Exercise,
   ExerciseFilters,
+  ExerciseInput,
   ExerciseFilterValues,
   ExerciseListResult,
   LastSetsResult,
@@ -31,6 +32,27 @@ export function useGymApi() {
   async function listExerciseFilters(): Promise<ExerciseFilterValues> {
     const res = await api.get<ExerciseFilterValues>('/api/gym/exercises/filters')
     return res.data
+  }
+
+  async function createExercise(input: ExerciseInput): Promise<Exercise> {
+    const res = await api.post<Exercise>('/api/gym/exercises', input)
+    return res.data
+  }
+
+  /** Full edit — custom exercises only; the API rejects seeded ones. */
+  async function updateExercise(id: number, input: ExerciseInput): Promise<Exercise> {
+    const res = await api.put<Exercise>(`/api/gym/exercises/${id}`, input)
+    return res.data
+  }
+
+  /** Text-only edit, allowed on seeded exercises too. */
+  async function updateExerciseDescription(id: number, description: string): Promise<Exercise> {
+    const res = await api.put<Exercise>(`/api/gym/exercises/${id}/description`, { description })
+    return res.data
+  }
+
+  async function deleteExercise(id: number): Promise<void> {
+    await api.delete(`/api/gym/exercises/${id}`)
   }
 
   /** Sets logged for this exercise in the most recent session that had any. */
@@ -146,6 +168,10 @@ export function useGymApi() {
   return {
     listExercises,
     listExerciseFilters,
+    createExercise,
+    updateExercise,
+    updateExerciseDescription,
+    deleteExercise,
     lastSets,
     loggedExercises,
     exerciseProgress,

@@ -129,3 +129,61 @@ func TestReplaceSetsRequestErrorNumbersSetsFromOne(t *testing.T) {
 		t.Errorf("error = %q, want it to point at set 2", err)
 	}
 }
+
+func TestExerciseRequestValidate(t *testing.T) {
+	valid := exerciseRequest{Name: "Remo con toalla", PrimaryMuscle: "Upper Back"}
+	if err := valid.validate(); err != nil {
+		t.Fatalf("valid exercise rejected: %v", err)
+	}
+	// Equipment, secondary muscle and description are all optional.
+	if err := (exerciseRequest{Name: "X", PrimaryMuscle: "Chest"}).validate(); err != nil {
+		t.Errorf("minimal exercise rejected: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  exerciseRequest
+	}{
+		{"blank name", exerciseRequest{Name: "   ", PrimaryMuscle: "Chest"}},
+		{"missing primary muscle", exerciseRequest{Name: "X"}},
+		{"blank primary muscle", exerciseRequest{Name: "X", PrimaryMuscle: " "}},
+		{"name too long", exerciseRequest{
+			Name:          strings.Repeat("a", maxExerciseNameLength+1),
+			PrimaryMuscle: "Chest",
+		}},
+		{"description too long", exerciseRequest{
+			Name:          "X",
+			PrimaryMuscle: "Chest",
+			Description:   strings.Repeat("a", maxExerciseDescriptionLength+1),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.req.validate(); err == nil {
+				t.Error("invalid exercise accepted")
+			}
+		})
+	}
+}
+
+// Length is counted in runes, not bytes: a name of accented characters would
+// otherwise be rejected at roughly half the advertised limit.
+func TestExerciseRequestNameLengthCountsRunes(t *testing.T) {
+	req := exerciseRequest{
+		Name:          strings.Repeat("á", maxExerciseNameLength),
+		PrimaryMuscle: "Chest",
+	}
+	if err := req.validate(); err != nil {
+		t.Fatalf("name of %d accented runes rejected: %v", maxExerciseNameLength, err)
+	}
+}
+
+func TestDescriptionRequestValidate(t *testing.T) {
+	// Clearing a description is legitimate.
+	if err := (descriptionRequest{Description: ""}).validate(); err != nil {
+		t.Errorf("empty description rejected: %v", err)
+	}
+	if err := (descriptionRequest{Description: strings.Repeat("a", maxExerciseDescriptionLength+1)}).validate(); err == nil {
+		t.Error("oversized description accepted")
+	}
+}

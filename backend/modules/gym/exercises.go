@@ -1,10 +1,15 @@
 package gym
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"workhub/httpx"
+	"workhub/middleware"
+
+	"github.com/lib/pq"
 )
 
 const (
@@ -142,4 +147,247 @@ func (h *handler) distinctColumn(column string) ([]string, error) {
 		values = append(values, v)
 	}
 	return values, rows.Err()
+}
+
+// exerciseUniqueViolation mirrors finances.categoryUniqueViolation — the same
+// Postgres error code, redefined locally since that constant is unexported
+// outside its package.
+const exerciseUniqueViolation = "23505"
+
+// CreateExercise adds a user-defined exercise to the catalog. It is always
+// flagged is_custom, which is what keeps the CSV seeder from ever touching it.
+//
+// @Summary Create a custom exercise
+// @Tags gym
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body exerciseRequest true "Exercise details"
+// @Success 201 {object} Exercise
+// @Failure 400 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError "an exercise with that name already exists"
+// @Router /gym/exercises [post]
+func (h *handler) CreateExercise(w http.ResponseWriter, r *http.Request) {
+	var req exerciseRequest
+	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	if err := req.validate(); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	userID, _, _ := middleware.UserFromContext(r.Context())
+	row := h.db.QueryRow(
+		`INSERT INTO exercises (name, equipment, primary_muscle, secondary_muscle, description, is_custom, created_by)
+		 VALUES ($1, $2, $3, $4, $5, true, $6)
+		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom`,
+		strings.TrimSpace(req.Name), strings.TrimSpace(req.Equipment),
+		strings.TrimSpace(req.PrimaryMuscle), strings.TrimSpace(req.SecondaryMuscle),
+		strings.TrimSpace(req.Description), userID,
+	)
+	exercise, err := scanExercise(row)
+	if pqErr, ok := err.(*pq.Error); ok && string(pqErr.Code) == exerciseUniqueViolation {
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, "ya existe un ejercicio con ese nombre")
+		return
+	}
+	if err != nil {
+		log.Printf("gym: create exercise failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, exercise)
+}
+
+// UpdateExercise edits a custom exercise in full.
+//
+// Seeded rows reject this: their name and muscles come from the imported
+// catalog, and rewriting them would fork it silently on the next import.
+// Their text is editable through UpdateExerciseDescription instead.
+//
+// @Summary Update a custom exercise
+// @Tags gym
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Exercise ID"
+// @Param body body exerciseRequest true "Exercise details"
+// @Success 200 {object} Exercise
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError
+// @Router /gym/exercises/{id} [put]
+func (h *handler) UpdateExercise(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	var req exerciseRequest
+	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	if err := req.validate(); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	isCustom, err := h.exerciseIsCustom(id)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "exercise not found")
+		return
+	}
+	if err != nil {
+		log.Printf("gym: update exercise lookup failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if !isCustom {
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
+			"solo se pueden editar los ejercicios propios")
+		return
+	}
+
+	row := h.db.QueryRow(
+		`UPDATE exercises
+		 SET name = $1, equipment = $2, primary_muscle = $3, secondary_muscle = $4, description = $5
+		 WHERE id = $6
+		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom`,
+		strings.TrimSpace(req.Name), strings.TrimSpace(req.Equipment),
+		strings.TrimSpace(req.PrimaryMuscle), strings.TrimSpace(req.SecondaryMuscle),
+		strings.TrimSpace(req.Description), id,
+	)
+	exercise, err := scanExercise(row)
+	if pqErr, ok := err.(*pq.Error); ok && string(pqErr.Code) == exerciseUniqueViolation {
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, "ya existe un ejercicio con ese nombre")
+		return
+	}
+	if err != nil {
+		log.Printf("gym: update exercise failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, exercise)
+}
+
+// UpdateExerciseDescription edits only the how-to text, and works for seeded
+// exercises too. The seeder only writes descriptions that are empty, so text
+// saved here survives every later boot.
+//
+// @Summary Update an exercise's description
+// @Tags gym
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Exercise ID"
+// @Param body body descriptionRequest true "Description"
+// @Success 200 {object} Exercise
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /gym/exercises/{id}/description [put]
+func (h *handler) UpdateExerciseDescription(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	var req descriptionRequest
+	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	if err := req.validate(); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	row := h.db.QueryRow(
+		`UPDATE exercises SET description = $1 WHERE id = $2
+		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom`,
+		strings.TrimSpace(req.Description), id,
+	)
+	exercise, err := scanExercise(row)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "exercise not found")
+		return
+	}
+	if err != nil {
+		log.Printf("gym: update exercise description failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, exercise)
+}
+
+// DeleteExercise removes a custom exercise, refusing when a session or a
+// routine still points at it — the exercises FK has no ON DELETE action, so
+// this is the check that turns a constraint violation into a clear message.
+//
+// @Summary Delete a custom exercise
+// @Tags gym
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Exercise ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 404 {object} httpx.APIError
+// @Failure 409 {object} httpx.APIError "the exercise is seeded or still in use"
+// @Router /gym/exercises/{id} [delete]
+func (h *handler) DeleteExercise(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	isCustom, err := h.exerciseIsCustom(id)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "exercise not found")
+		return
+	}
+	if err != nil {
+		log.Printf("gym: delete exercise lookup failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if !isCustom {
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
+			"solo se pueden eliminar los ejercicios propios")
+		return
+	}
+
+	var inUse bool
+	err = h.db.QueryRow(
+		`SELECT EXISTS (SELECT 1 FROM session_exercises WHERE exercise_id = $1)
+		     OR EXISTS (SELECT 1 FROM routine_exercises WHERE exercise_id = $1)`, id,
+	).Scan(&inUse)
+	if err != nil {
+		log.Printf("gym: delete exercise usage check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if inUse {
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict,
+			"el ejercicio está en uso en un entrenamiento o una rutina")
+		return
+	}
+
+	res, err := h.db.Exec(`DELETE FROM exercises WHERE id = $1`, id)
+	if err != nil {
+		log.Printf("gym: delete exercise failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "exercise not found")
+		return
+	}
+	httpx.WriteSuccess(w, http.StatusOK)
+}
+
+func (h *handler) exerciseIsCustom(id int64) (bool, error) {
+	var isCustom bool
+	err := h.db.QueryRow(`SELECT is_custom FROM exercises WHERE id = $1`, id).Scan(&isCustom)
+	return isCustom, err
 }

@@ -1,7 +1,12 @@
 import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Plus } from 'lucide-react'
+import { useGymApi } from '@/hooks/useGymApi'
 import type { Exercise } from '@/types/gym.types'
 import { ClipboardList, Dumbbell, History, ListChecks, TrendingUp } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import MobileTabNav from '@/components/MobileTabNav'
 import { useActiveTab } from '@/hooks/useActiveTab'
@@ -13,6 +18,7 @@ import ProgresoTab from './ProgresoTab'
 import HistorialTab from './HistorialTab'
 import ExerciseCatalog from './ExerciseCatalog'
 import ExerciseDetailDialog from './ExerciseDetailDialog'
+import ExerciseForm from './ExerciseForm'
 import SessionDetailDialog from './SessionDetailDialog'
 import { useStartSession } from './useStartSession'
 
@@ -28,6 +34,7 @@ const TABS = [
 const FAB_LABELS: Record<string, string> = {
   entrenar: 'Agregar ejercicio',
   rutinas: 'Nueva rutina',
+  ejercicios: 'Nuevo ejercicio',
 }
 
 const TAB_CONTENT_CLASS =
@@ -40,6 +47,28 @@ export default function GymPage() {
   const [openSessionId, setOpenSessionId] = useState<number | null>(null)
   // The catalog tab is not inside a dialog, so the detail can be one here.
   const [detailExercise, setDetailExercise] = useState<Exercise | null>(null)
+  const [exerciseFormOpen, setExerciseFormOpen] = useState(false)
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null)
+  const queryClient = useQueryClient()
+  const { deleteExercise } = useGymApi()
+
+  const removeExercise = useMutation({
+    mutationFn: (exercise: Exercise) => deleteExercise(exercise.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gym', 'exercises'] })
+      setDetailExercise(null)
+      toast.success('Ejercicio eliminado')
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el ejercicio')
+    },
+  })
+
+  const openExerciseForm = (exercise: Exercise | null) => {
+    setEditingExercise(exercise)
+    setDetailExercise(null)
+    setExerciseFormOpen(true)
+  }
 
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 
@@ -86,8 +115,17 @@ export default function GymPage() {
 
           <TabsContent value="ejercicios" className={TAB_CONTENT_CLASS}>
             <CozyCard>
-              <CardHeader>
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle>Catálogo</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:flex"
+                  onClick={() => openExerciseForm(null)}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Nuevo ejercicio
+                </Button>
               </CardHeader>
               <CardContent>
                 <ExerciseCatalog onOpen={setDetailExercise} />
@@ -103,7 +141,11 @@ export default function GymPage() {
       {fabLabel && (
         <FloatingActionButton
           label={fabLabel}
-          onClick={() => (tab === 'rutinas' ? setRoutineFormOpen(true) : setPickerOpen(true))}
+          onClick={() => {
+            if (tab === 'rutinas') return setRoutineFormOpen(true)
+            if (tab === 'ejercicios') return openExerciseForm(null)
+            return setPickerOpen(true)
+          }}
           className="bottom-[max(env(safe-area-inset-bottom),1rem)]"
         />
       )}
@@ -117,7 +159,19 @@ export default function GymPage() {
 
       <SessionDetailDialog sessionId={openSessionId} onClose={() => setOpenSessionId(null)} />
 
-      <ExerciseDetailDialog exercise={detailExercise} onClose={() => setDetailExercise(null)} />
+      <ExerciseDetailDialog
+        exercise={detailExercise}
+        onClose={() => setDetailExercise(null)}
+        onEdit={openExerciseForm}
+        onDelete={(exercise) => removeExercise.mutate(exercise)}
+      />
+
+      <ExerciseForm
+        open={exerciseFormOpen}
+        editing={editingExercise}
+        onClose={() => setExerciseFormOpen(false)}
+        onSaved={setDetailExercise}
+      />
     </>
   )
 }

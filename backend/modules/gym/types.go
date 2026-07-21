@@ -51,6 +51,53 @@ type exerciseFiltersResponse struct {
 	Equipment []string `json:"equipment"`
 }
 
+// maxExerciseNameLength keeps a user-created name to something a list row can
+// still show. Descriptions are bounded too, since the request body limit alone
+// would allow a megabyte of text in one field.
+const (
+	maxExerciseNameLength        = 120
+	maxExerciseDescriptionLength = 2000
+)
+
+type exerciseRequest struct {
+	Name            string `json:"name"`
+	Equipment       string `json:"equipment"`
+	PrimaryMuscle   string `json:"primaryMuscle"`
+	SecondaryMuscle string `json:"secondaryMuscle"`
+	Description     string `json:"description"`
+}
+
+func (r exerciseRequest) validate() error {
+	name := strings.TrimSpace(r.Name)
+	if name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if len([]rune(name)) > maxExerciseNameLength {
+		return fmt.Errorf("name is too long (max %d characters)", maxExerciseNameLength)
+	}
+	if strings.TrimSpace(r.PrimaryMuscle) == "" {
+		return fmt.Errorf("primaryMuscle is required")
+	}
+	if len([]rune(r.Description)) > maxExerciseDescriptionLength {
+		return fmt.Errorf("description is too long (max %d characters)", maxExerciseDescriptionLength)
+	}
+	return nil
+}
+
+// descriptionRequest edits only the how-to text. Seeded exercises accept this
+// but not a full update: their name and muscles come from the imported
+// catalog, and rewriting them would silently fork it.
+type descriptionRequest struct {
+	Description string `json:"description"`
+}
+
+func (r descriptionRequest) validate() error {
+	if len([]rune(r.Description)) > maxExerciseDescriptionLength {
+		return fmt.Errorf("description is too long (max %d characters)", maxExerciseDescriptionLength)
+	}
+	return nil
+}
+
 // ExerciseSet is one logged set. Weight is in grams for the same reason
 // finances stores cents — 2.5 kg increments stay exact with no float drift.
 type ExerciseSet struct {
