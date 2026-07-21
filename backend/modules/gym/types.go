@@ -31,9 +31,11 @@ type Exercise struct {
 	Equipment       string `json:"equipment"`
 	PrimaryMuscle   string `json:"primaryMuscle"`
 	SecondaryMuscle string `json:"secondaryMuscle"`
-	MediaURL        string `json:"mediaUrl"`
-	MediaType       string `json:"mediaType"`
-	IsCustom        bool   `json:"isCustom"`
+	// Spanish how-to text; empty until seeded or written in the app.
+	Description string `json:"description"`
+	MediaURL    string `json:"mediaUrl"`
+	MediaType   string `json:"mediaType"`
+	IsCustom    bool   `json:"isCustom"`
 }
 
 type listExercisesResponse struct {
@@ -204,6 +206,39 @@ func (r sessionRequest) validate() error {
 		return fmt.Errorf("routineId must be a positive id")
 	}
 	return nil
+}
+
+// TopSet is the heaviest working set of a session — the one the estimated
+// 1RM is derived from.
+type TopSet struct {
+	Reps        int   `json:"reps"`
+	WeightGrams int64 `json:"weightGrams"`
+}
+
+// ProgressPoint is one session's worth of an exercise's progress.
+type ProgressPoint struct {
+	SessionID        int64  `json:"sessionId"`
+	OccurredOn       string `json:"occurredOn"`
+	MaxWeightGrams   int64  `json:"maxWeightGrams"`
+	TotalReps        int64  `json:"totalReps"`
+	TotalVolumeGrams int64  `json:"totalVolumeGrams"`
+	TopSet           TopSet `json:"topSet"`
+	// Epley estimate from the top set: weight x (1 + reps/30).
+	Estimated1RMGrams int64 `json:"estimated1rmGrams"`
+}
+
+type exerciseProgressResponse struct {
+	Points []ProgressPoint `json:"points"`
+}
+
+type ProgressSummaryResponse struct {
+	SessionsThisMonth    int   `json:"sessionsThisMonth"`
+	VolumeThisMonthGrams int64 `json:"volumeThisMonthGrams"`
+	// Consecutive weeks with at least one session — weeks, not days, because
+	// rest days are part of training.
+	WeekStreak int `json:"weekStreak"`
+	// Empty when nothing has been logged in the trailing 90 days.
+	TopMuscle string `json:"topMuscle"`
 }
 
 type sessionExerciseRequest struct {

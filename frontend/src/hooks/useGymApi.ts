@@ -1,9 +1,13 @@
 import api from '@/lib/axios'
 import type {
+  Exercise,
   ExerciseFilters,
   ExerciseFilterValues,
   ExerciseListResult,
   LastSetsResult,
+  ProgressFilters,
+  ProgressPoint,
+  ProgressSummary,
   Routine,
   RoutineInput,
   RoutineSummary,
@@ -32,6 +36,28 @@ export function useGymApi() {
   /** Sets logged for this exercise in the most recent session that had any. */
   async function lastSets(exerciseId: number): Promise<LastSetsResult> {
     const res = await api.get<LastSetsResult>(`/api/gym/exercises/${exerciseId}/last-sets`)
+    return res.data
+  }
+
+  /** Only the exercises that have logged sets — what's worth charting. */
+  async function loggedExercises(): Promise<Exercise[]> {
+    const res = await api.get<ExerciseListResult>('/api/gym/progress/exercises')
+    return res.data.exercises
+  }
+
+  async function exerciseProgress(
+    exerciseId: number,
+    filters: ProgressFilters = {},
+  ): Promise<ProgressPoint[]> {
+    const res = await api.get<{ points: ProgressPoint[] }>(
+      `/api/gym/progress/exercises/${exerciseId}`,
+      { params: filters },
+    )
+    return res.data.points
+  }
+
+  async function progressSummary(): Promise<ProgressSummary> {
+    const res = await api.get<ProgressSummary>('/api/gym/progress/summary')
     return res.data
   }
 
@@ -121,6 +147,9 @@ export function useGymApi() {
     listExercises,
     listExerciseFilters,
     lastSets,
+    loggedExercises,
+    exerciseProgress,
+    progressSummary,
     listRoutines,
     getRoutine,
     createRoutine,

@@ -25,3 +25,15 @@ export function routinesKey() {
 export function routineKey(id: number) {
   return ['gym', 'routines', id] as const
 }
+
+export function loggedExercisesKey() {
+  return ['gym', 'progress', 'exercises'] as const
+}
+
+export function exerciseProgressKey(exerciseId: number, from: string) {
+  return ['gym', 'progress', 'exercises', exerciseId, from] as const
+}
+
+export function progressSummaryKey() {
+  return ['gym', 'progress', 'summary'] as const
+}

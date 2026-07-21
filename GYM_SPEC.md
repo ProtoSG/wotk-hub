@@ -251,8 +251,11 @@ The bulk-replace on sets is deliberate: the mobile logging UI edits a small grid
 
 | Method | Path | Notes |
 |--------|------|-------|
+| `GET` | `/progress/exercises` | Only the exercises with logged sets, so the picker offers the handful worth charting instead of all 413. |
 | `GET` | `/progress/exercises/{id}` | `?from=`&`?to=`. One point per session. |
-| `GET` | `/progress/summary` | Sessions this month, total volume, current streak, most-trained muscle. |
+| `GET` | `/progress/summary` | Sessions this month, volume this month, streak, most-trained muscle (trailing 90 days). |
+
+The streak counts **consecutive weeks with at least one session**, not days: rest days are part of training, so a day-based streak would break every week and mean nothing.
 
 Per-point payload:
 
@@ -321,8 +324,8 @@ UI copy stays **Spanish**, consistent with the rest of the app ("Finanzas", "Cit
 | P1 ✅ | Migration + CSV seeder + `GET /exercises` (+ filters) + `ExercisePicker` | Browsable catalog |
 | P2 ✅ | Sessions + sets CRUD + `EntrenarTab` freestyle logging | **Yes — the log works** |
 | P3 ✅ | Routines CRUD + builder + materialization on session start | Faster start |
-| P4 | `/progress/*` + `ProgresoTab` charts | The payoff |
-| P5 | `/progress/summary` tiles, history polish, streaks | Polish |
+| P4 ✅ | `/progress/*` + `ProgresoTab` charts + summary tiles | The payoff |
+| P5 | History polish, custom exercises, body metrics | Polish |
 
 P2 is the first shippable slice. Do not let P3/P4 block it.
 

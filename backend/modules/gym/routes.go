@@ -33,6 +33,11 @@ func Routes(db *sql.DB) http.Handler {
 	r.Delete("/sessions/{id}", h.DeleteSession)
 	r.Post("/sessions/{id}/finish", h.FinishSession)
 
+	// "exercises" before "exercises/{id}" for the same ordering reason as above.
+	r.Get("/progress/exercises", h.LoggedExercises)
+	r.Get("/progress/exercises/{id}", h.ExerciseProgress)
+	r.Get("/progress/summary", h.ProgressSummary)
+
 	r.Get("/routines", h.ListRoutines)
 	r.Post("/routines", h.CreateRoutine)
 	r.Get("/routines/{id}", h.GetRoutine)

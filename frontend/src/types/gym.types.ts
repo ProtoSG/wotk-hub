@@ -6,6 +6,8 @@ export interface Exercise {
   primaryMuscle: string
   /** Comma-separated list, e.g. "Triceps, Shoulders". Empty when none. */
   secondaryMuscle: string
+  /** Spanish how-to text; empty until seeded or written in the app. */
+  description: string
   mediaUrl: string
   mediaType: 'image' | 'video' | ''
   isCustom: boolean
@@ -138,4 +140,35 @@ export interface LastSetsResult {
   sets: ExerciseSet[]
   /** Date of the session the sets came from; absent when there are none. */
   occurredOn?: string
+}
+
+export interface TopSet {
+  reps: number
+  weightGrams: number
+}
+
+/** One session's worth of an exercise's progress. */
+export interface ProgressPoint {
+  sessionId: number
+  occurredOn: string
+  maxWeightGrams: number
+  totalReps: number
+  totalVolumeGrams: number
+  topSet: TopSet
+  /** Epley estimate from the top set: weight x (1 + reps/30). */
+  estimated1rmGrams: number
+}
+
+export interface ProgressSummary {
+  sessionsThisMonth: number
+  volumeThisMonthGrams: number
+  /** Consecutive weeks with at least one session. */
+  weekStreak: number
+  /** Empty when nothing was logged in the trailing 90 days. */
+  topMuscle: string
+}
+
+export interface ProgressFilters {
+  from?: string
+  to?: string
 }

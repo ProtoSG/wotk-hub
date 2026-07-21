@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ClipboardList, Dumbbell, History, ListChecks } from 'lucide-react'
+import type { Exercise } from '@/types/gym.types'
+import { ClipboardList, Dumbbell, History, ListChecks, TrendingUp } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import MobileTabNav from '@/components/MobileTabNav'
@@ -8,14 +9,17 @@ import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import EntrenarTab from './EntrenarTab'
 import RutinasTab from './RutinasTab'
+import ProgresoTab from './ProgresoTab'
 import HistorialTab from './HistorialTab'
 import ExerciseCatalog from './ExerciseCatalog'
+import ExerciseDetailDialog from './ExerciseDetailDialog'
 import SessionDetailDialog from './SessionDetailDialog'
 import { useStartSession } from './useStartSession'
 
 const TABS = [
   { value: 'entrenar',   label: 'Entrenar',   icon: Dumbbell },
   { value: 'rutinas',    label: 'Rutinas',    icon: ClipboardList },
+  { value: 'progreso',   label: 'Progreso',   icon: TrendingUp },
   { value: 'historial',  label: 'Historial',  icon: History },
   { value: 'ejercicios', label: 'Ejercicios', icon: ListChecks },
 ]
@@ -34,6 +38,8 @@ export default function GymPage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [routineFormOpen, setRoutineFormOpen] = useState(false)
   const [openSessionId, setOpenSessionId] = useState<number | null>(null)
+  // The catalog tab is not inside a dialog, so the detail can be one here.
+  const [detailExercise, setDetailExercise] = useState<Exercise | null>(null)
 
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 
@@ -70,6 +76,10 @@ export default function GymPage() {
             />
           </TabsContent>
 
+          <TabsContent value="progreso" className={TAB_CONTENT_CLASS}>
+            <ProgresoTab />
+          </TabsContent>
+
           <TabsContent value="historial" className={TAB_CONTENT_CLASS}>
             <HistorialTab onOpen={(session) => setOpenSessionId(session.id)} />
           </TabsContent>
@@ -80,7 +90,7 @@ export default function GymPage() {
                 <CardTitle>Catálogo</CardTitle>
               </CardHeader>
               <CardContent>
-                <ExerciseCatalog />
+                <ExerciseCatalog onOpen={setDetailExercise} />
               </CardContent>
             </CozyCard>
           </TabsContent>
@@ -106,6 +116,8 @@ export default function GymPage() {
       />
 
       <SessionDetailDialog sessionId={openSessionId} onClose={() => setOpenSessionId(null)} />
+
+      <ExerciseDetailDialog exercise={detailExercise} onClose={() => setDetailExercise(null)} />
     </>
   )
 }
