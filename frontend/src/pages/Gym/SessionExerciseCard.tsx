@@ -13,6 +13,7 @@ import { useGymApi } from '@/hooks/useGymApi'
 import { formatVolume } from '@/lib/weight'
 import type { SessionExercise } from '@/types/gym.types'
 import { activeSessionKey } from './gymKeys'
+import ExerciseMedia from './ExerciseMedia'
 import SetGrid from './SetGrid'
 import { nextRow, rowsEqual, toInputs, toRows, type SetRow } from './setRows'
 
@@ -81,6 +82,8 @@ export default function SessionExerciseCard({
   return (
     <section className="rounded-lg border bg-card">
       <header className="flex items-start gap-3 border-b px-4 py-3">
+        <ExerciseMedia exercise={sessionExercise.exercise} className="h-10 w-10" />
+
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-semibold">{sessionExercise.exercise.name}</h3>
           <p className="truncate text-sm text-muted-foreground">
