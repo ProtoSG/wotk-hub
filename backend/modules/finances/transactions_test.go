@@ -253,7 +253,7 @@ func TestTransactionsCheckConstraint(t *testing.T) {
 	db := setupTestDB(t)
 	resetFinanceTables(t, db)
 	var cardA int64
-	if err := db.QueryRow(`INSERT INTO cards (name,type,bank,created_by) VALUES ('A','debito','t',1) RETURNING id`).Scan(&cardA); err != nil {
+	if err := db.QueryRow(`INSERT INTO cards (name,bank,created_by) VALUES ('A','t',1) RETURNING id`).Scan(&cardA); err != nil {
 		t.Fatalf("insert A: %v", err)
 	}
 

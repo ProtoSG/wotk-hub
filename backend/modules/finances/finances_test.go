@@ -121,19 +121,33 @@ func do(t *testing.T, db *sql.DB, method, path string, body any) *httptest.Respo
 	return w
 }
 
+// testCreditLimitCents is the limit given to fixture cards that stand in for a
+// credit card. Any value above zero would do — the production code only asks
+// whether the limit is positive.
+const testCreditLimitCents = 1_000_000
+
 // insertCard is the minimal fixture: a card row owned by the seeded admin.
-// type is "debito" | "credito" | "prepago". Tests that need a starting
+//
+// kind is "debito" | "credito" | "prepago". Cards no longer carry a type
+// column — credit behaviour is inferred from credit_limit_cents > 0 (see
+// cardBalance in transactions.go) — so the argument survives only as the
+// fixture's name and as the switch for that limit. Tests that need a starting
 // balance seed it themselves with a transfer.
-func insertCard(t *testing.T, db *sql.DB, typ string) int64 {
+func insertCard(t *testing.T, db *sql.DB, kind string) int64 {
 	t.Helper()
+	creditLimit := int64(0)
+	if kind == "credito" {
+		creditLimit = testCreditLimitCents
+	}
+
 	var id int64
 	err := db.QueryRow(
-		`INSERT INTO cards (name, type, bank, created_by)
-		 VALUES ($1, $2, 'test', 1) RETURNING id`,
-		"card-"+typ, typ,
+		`INSERT INTO cards (name, bank, credit_limit_cents, created_by)
+		 VALUES ($1, 'test', $2, 1) RETURNING id`,
+		"card-"+kind, creditLimit,
 	).Scan(&id)
 	if err != nil {
-		t.Fatalf("insert card (%s): %v", typ, err)
+		t.Fatalf("insert card (%s): %v", kind, err)
 	}
 	return id
 }
