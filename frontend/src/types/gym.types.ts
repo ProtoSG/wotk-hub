@@ -83,9 +83,55 @@ export interface SessionSummary {
 }
 
 export interface SessionInput {
+  /** When set, the session is materialized from that template. */
+  routineId?: number
   name: string
   occurredOn: string
   notes: string
+}
+
+export interface RoutineExercise {
+  id: number
+  exerciseId: number
+  position: number
+  targetSets: number
+  targetReps: number
+  notes: string
+  exercise: Exercise
+}
+
+export interface Routine {
+  id: number
+  name: string
+  notes: string
+  color: string
+  icon: string
+  archived: boolean
+  exercises: RoutineExercise[]
+}
+
+export interface RoutineSummary {
+  id: number
+  name: string
+  notes: string
+  color: string
+  icon: string
+  archived: boolean
+  exerciseCount: number
+}
+
+/** One template entry as the builder sends it; order carries the position. */
+export interface RoutineExerciseInput {
+  exerciseId: number
+  targetSets: number
+  targetReps: number
+  notes: string
+}
+
+export interface RoutineInput {
+  name: string
+  notes: string
+  exercises: RoutineExerciseInput[]
 }
 
 export interface LastSetsResult {

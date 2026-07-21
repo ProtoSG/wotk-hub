@@ -4,6 +4,9 @@ import type {
   ExerciseFilterValues,
   ExerciseListResult,
   LastSetsResult,
+  Routine,
+  RoutineInput,
+  RoutineSummary,
   Session,
   SessionInput,
   SessionSummary,
@@ -30,6 +33,30 @@ export function useGymApi() {
   async function lastSets(exerciseId: number): Promise<LastSetsResult> {
     const res = await api.get<LastSetsResult>(`/api/gym/exercises/${exerciseId}/last-sets`)
     return res.data
+  }
+
+  async function listRoutines(): Promise<RoutineSummary[]> {
+    const res = await api.get<{ routines: RoutineSummary[] }>('/api/gym/routines')
+    return res.data.routines
+  }
+
+  async function getRoutine(id: number): Promise<Routine> {
+    const res = await api.get<Routine>(`/api/gym/routines/${id}`)
+    return res.data
+  }
+
+  async function createRoutine(input: RoutineInput): Promise<Routine> {
+    const res = await api.post<Routine>('/api/gym/routines', input)
+    return res.data
+  }
+
+  async function updateRoutine(id: number, input: RoutineInput): Promise<Routine> {
+    const res = await api.put<Routine>(`/api/gym/routines/${id}`, input)
+    return res.data
+  }
+
+  async function deleteRoutine(id: number): Promise<void> {
+    await api.delete(`/api/gym/routines/${id}`)
   }
 
   async function listSessions(filters: SessionFilters = {}): Promise<SessionSummary[]> {
@@ -94,6 +121,11 @@ export function useGymApi() {
     listExercises,
     listExerciseFilters,
     lastSets,
+    listRoutines,
+    getRoutine,
+    createRoutine,
+    updateRoutine,
+    deleteRoutine,
     listSessions,
     activeSession,
     getSession,

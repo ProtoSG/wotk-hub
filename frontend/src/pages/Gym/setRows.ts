@@ -11,16 +11,14 @@ export interface SetRow extends SetInput {
   key: string
 }
 
-let nextKey = 0
-
-function makeKey(): string {
-  nextKey += 1
-  return `set-${nextKey}`
-}
-
+/**
+ * Keys are derived from data, never from a module-level counter: `toRows` runs
+ * during render (as a useState initializer), and mutating shared state there
+ * is impure — the same render could produce different keys.
+ */
 export function toRows(sets: readonly ExerciseSet[]): SetRow[] {
   return sets.map((set) => ({
-    key: makeKey(),
+    key: `saved-${set.id}`,
     reps: set.reps,
     weightGrams: set.weightGrams,
     isWarmup: set.isWarmup,
@@ -45,7 +43,9 @@ export function toInputs(rows: readonly SetRow[]): SetInput[] {
 export function nextRow(rows: readonly SetRow[]): SetRow {
   const previous = [...rows].reverse().find((row) => !row.isWarmup) ?? rows[rows.length - 1]
   return {
-    key: makeKey(),
+    // Only ever called from an event handler, so a random key is safe here —
+    // and it can't collide with the `saved-<id>` keys above.
+    key: `draft-${crypto.randomUUID()}`,
     reps: previous?.reps ?? 0,
     weightGrams: previous?.weightGrams ?? 0,
     isWarmup: false,

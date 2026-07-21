@@ -26,6 +26,62 @@ func TestSessionRequestValidate(t *testing.T) {
 	}
 }
 
+func TestSessionRequestValidateRoutineID(t *testing.T) {
+	valid := int64(3)
+	zero := int64(0)
+	negative := int64(-1)
+
+	if err := (sessionRequest{OccurredOn: "2026-07-20", RoutineID: &valid}).validate(); err != nil {
+		t.Errorf("valid routineId rejected: %v", err)
+	}
+	// Freestyle sessions carry no routine at all.
+	if err := (sessionRequest{OccurredOn: "2026-07-20"}).validate(); err != nil {
+		t.Errorf("absent routineId rejected: %v", err)
+	}
+	if err := (sessionRequest{OccurredOn: "2026-07-20", RoutineID: &zero}).validate(); err == nil {
+		t.Error("zero routineId accepted")
+	}
+	if err := (sessionRequest{OccurredOn: "2026-07-20", RoutineID: &negative}).validate(); err == nil {
+		t.Error("negative routineId accepted")
+	}
+}
+
+func TestRoutineRequestValidate(t *testing.T) {
+	valid := routineRequest{
+		Name: "Día de Pecho",
+		Exercises: []routineExerciseInput{
+			{ExerciseID: 1, TargetSets: 4, TargetReps: 8},
+			{ExerciseID: 2, TargetSets: 3, TargetReps: 12},
+		},
+	}
+	if err := valid.validate(); err != nil {
+		t.Fatalf("valid routine rejected: %v", err)
+	}
+
+	// An empty template is legal — exercises get added to it later.
+	if err := (routineRequest{Name: "Nueva"}).validate(); err != nil {
+		t.Errorf("empty exercise list rejected: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  routineRequest
+	}{
+		{"blank name", routineRequest{Name: "   "}},
+		{"missing exercise id", routineRequest{Name: "X", Exercises: []routineExerciseInput{{TargetSets: 3, TargetReps: 8}}}},
+		{"zero sets", routineRequest{Name: "X", Exercises: []routineExerciseInput{{ExerciseID: 1, TargetSets: 0, TargetReps: 8}}}},
+		{"zero reps", routineRequest{Name: "X", Exercises: []routineExerciseInput{{ExerciseID: 1, TargetSets: 3, TargetReps: 0}}}},
+		{"too many exercises", routineRequest{Name: "X", Exercises: make([]routineExerciseInput, maxExercisesPerRoutine+1)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.req.validate(); err == nil {
+				t.Error("invalid routine accepted")
+			}
+		})
+	}
+}
+
 func TestReplaceSetsRequestValidate(t *testing.T) {
 	// A bodyweight set (0 g) and a failed set (0 reps) are both legal — the
 	// validation only rejects negatives.

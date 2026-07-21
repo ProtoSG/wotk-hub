@@ -33,6 +33,12 @@ func Routes(db *sql.DB) http.Handler {
 	r.Delete("/sessions/{id}", h.DeleteSession)
 	r.Post("/sessions/{id}/finish", h.FinishSession)
 
+	r.Get("/routines", h.ListRoutines)
+	r.Post("/routines", h.CreateRoutine)
+	r.Get("/routines/{id}", h.GetRoutine)
+	r.Put("/routines/{id}", h.UpdateRoutine)
+	r.Delete("/routines/{id}", h.DeleteRoutine)
+
 	r.Post("/sessions/{id}/exercises", h.AddSessionExercise)
 	r.Delete("/sessions/{id}/exercises/{exerciseId}", h.RemoveSessionExercise)
 	r.Put("/sessions/{id}/exercises/{exerciseId}/sets", h.ReplaceSets)

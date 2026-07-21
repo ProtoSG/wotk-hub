@@ -182,13 +182,56 @@ func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID, _, _ := middleware.UserFromContext(r.Context())
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		log.Printf("gym: create session begin failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer tx.Rollback()
+
+	name := req.Name
+	if req.RoutineID != nil {
+		// The routine's name is snapshotted onto the session so the history
+		// still reads correctly after the template is renamed or deleted.
+		var routineName string
+		err := tx.QueryRow(`SELECT name FROM routines WHERE id = $1`, *req.RoutineID).Scan(&routineName)
+		if err == sql.ErrNoRows {
+			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "routine not found")
+			return
+		}
+		if err != nil {
+			log.Printf("gym: routine lookup failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		if name == "" {
+			name = routineName
+		}
+	}
+
 	var id int64
-	if err := h.db.QueryRow(
-		`INSERT INTO workout_sessions (name, occurred_on, notes, created_by)
-		 VALUES ($1, $2, $3, $4) RETURNING id`,
-		req.Name, req.OccurredOn, req.Notes, userID,
+	if err := tx.QueryRow(
+		`INSERT INTO workout_sessions (routine_id, name, occurred_on, notes, created_by)
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		req.RoutineID, name, req.OccurredOn, req.Notes, userID,
 	).Scan(&id); err != nil {
 		log.Printf("gym: create session failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if req.RoutineID != nil {
+		if err := materializeRoutine(tx, id, *req.RoutineID); err != nil {
+			log.Printf("gym: materialize routine failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("gym: create session commit failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
@@ -328,6 +371,66 @@ func (h *handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteSuccess(w, http.StatusOK)
+}
+
+// materializeRoutine copies a template's exercises into a session and
+// pre-creates the empty sets the template targets, so the logger opens with
+// the day's plan already laid out and each set is one tap away.
+//
+// It is a copy, not a reference: from here on the session owns its contents,
+// and editing the routine later changes nothing about this workout.
+func materializeRoutine(tx *sql.Tx, sessionID, routineID int64) error {
+	rows, err := tx.Query(
+		`SELECT exercise_id, position, target_sets, target_reps, notes
+		 FROM routine_exercises WHERE routine_id = $1 ORDER BY position`, routineID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type planned struct {
+		exerciseID int64
+		position   int
+		sets       int
+		reps       int
+		notes      string
+	}
+	plan := []planned{}
+	for rows.Next() {
+		var p planned
+		if err := rows.Scan(&p.exerciseID, &p.position, &p.sets, &p.reps, &p.notes); err != nil {
+			return err
+		}
+		plan = append(plan, p)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, p := range plan {
+		var sessionExerciseID int64
+		if err := tx.QueryRow(
+			`INSERT INTO session_exercises (session_id, exercise_id, position, notes)
+			 VALUES ($1, $2, $3, $4) RETURNING id`,
+			sessionID, p.exerciseID, p.position, p.notes,
+		).Scan(&sessionExerciseID); err != nil {
+			return err
+		}
+
+		// Target reps are prefilled but weight is not: the reps are the plan,
+		// the weight is whatever the day allows. completed = false — nothing
+		// has been lifted yet.
+		for i := 1; i <= p.sets; i++ {
+			if _, err := tx.Exec(
+				`INSERT INTO exercise_sets (session_exercise_id, set_number, reps, weight_grams, is_warmup, completed)
+				 VALUES ($1, $2, $3, 0, false, false)`,
+				sessionExerciseID, i, p.reps,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // loadSession reads a session and its nested exercises and sets. Two queries

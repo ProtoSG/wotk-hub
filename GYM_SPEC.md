@@ -320,7 +320,7 @@ UI copy stays **Spanish**, consistent with the rest of the app ("Finanzas", "Cit
 |-------|-------------|-------------------------|
 | P1 ✅ | Migration + CSV seeder + `GET /exercises` (+ filters) + `ExercisePicker` | Browsable catalog |
 | P2 ✅ | Sessions + sets CRUD + `EntrenarTab` freestyle logging | **Yes — the log works** |
-| P3 | Routines CRUD + builder + materialization on session start | Faster start |
+| P3 ✅ | Routines CRUD + builder + materialization on session start | Faster start |
 | P4 | `/progress/*` + `ProgresoTab` charts | The payoff |
 | P5 | `/progress/summary` tiles, history polish, streaks | Polish |
 

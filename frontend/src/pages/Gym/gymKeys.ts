@@ -17,3 +17,11 @@ export function sessionsKey() {
 export function lastSetsKey(exerciseId: number) {
   return ['gym', 'exercises', exerciseId, 'last-sets'] as const
 }
+
+export function routinesKey() {
+  return ['gym', 'routines'] as const
+}
+
+export function routineKey(id: number) {
+  return ['gym', 'routines', id] as const
+}

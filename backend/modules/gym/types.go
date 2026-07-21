@@ -2,6 +2,7 @@ package gym
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,15 @@ const dateLayout = "2006-01-02"
 // maxSetsPerExercise bounds a single bulk replace. Far above any real workout,
 // low enough that a malformed client can't insert an unbounded batch.
 const maxSetsPerExercise = 100
+
+// maxExercisesPerRoutine bounds a template for the same reason.
+const maxExercisesPerRoutine = 50
+
+// Defaults mirroring the routines table, applied when a client omits them.
+const (
+	defaultRoutineColor = "#3B82F6"
+	defaultRoutineIcon  = "dumbbell"
+)
 
 // Exercise is a catalog entry. Seeded rows (is_custom = false) come from the
 // bundled CSV; user-created ones are flagged is_custom = true so the seeder
@@ -104,7 +114,83 @@ type lastSetsResponse struct {
 	OccurredOn string `json:"occurredOn,omitempty"`
 }
 
+// RoutineExercise is one entry of a template, with its catalog data inlined.
+type RoutineExercise struct {
+	ID         int64    `json:"id"`
+	ExerciseID int64    `json:"exerciseId"`
+	Position   int      `json:"position"`
+	TargetSets int      `json:"targetSets"`
+	TargetReps int      `json:"targetReps"`
+	Notes      string   `json:"notes"`
+	Exercise   Exercise `json:"exercise"`
+}
+
+type Routine struct {
+	ID        int64             `json:"id"`
+	Name      string            `json:"name"`
+	Notes     string            `json:"notes"`
+	Color     string            `json:"color"`
+	Icon      string            `json:"icon"`
+	Archived  bool              `json:"archived"`
+	Exercises []RoutineExercise `json:"exercises"`
+}
+
+// RoutineSummary is the list shape: the count instead of the contents.
+type RoutineSummary struct {
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	Notes         string `json:"notes"`
+	Color         string `json:"color"`
+	Icon          string `json:"icon"`
+	Archived      bool   `json:"archived"`
+	ExerciseCount int    `json:"exerciseCount"`
+}
+
+type listRoutinesResponse struct {
+	Routines []RoutineSummary `json:"routines"`
+}
+
+type routineExerciseInput struct {
+	ExerciseID int64  `json:"exerciseId"`
+	TargetSets int    `json:"targetSets"`
+	TargetReps int    `json:"targetReps"`
+	Notes      string `json:"notes"`
+}
+
+type routineRequest struct {
+	Name      string                 `json:"name"`
+	Notes     string                 `json:"notes"`
+	Color     string                 `json:"color"`
+	Icon      string                 `json:"icon"`
+	Exercises []routineExerciseInput `json:"exercises"`
+}
+
+// validate mirrors the routine_exercises CHECK constraints so a bad payload
+// fails with a readable message instead of a Postgres error string.
+func (r routineRequest) validate() error {
+	if strings.TrimSpace(r.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	if len(r.Exercises) > maxExercisesPerRoutine {
+		return fmt.Errorf("too many exercises (max %d)", maxExercisesPerRoutine)
+	}
+	for i, e := range r.Exercises {
+		if e.ExerciseID <= 0 {
+			return fmt.Errorf("exercise %d: exerciseId is required", i+1)
+		}
+		if e.TargetSets <= 0 {
+			return fmt.Errorf("exercise %d: targetSets must be greater than 0", i+1)
+		}
+		if e.TargetReps <= 0 {
+			return fmt.Errorf("exercise %d: targetReps must be greater than 0", i+1)
+		}
+	}
+	return nil
+}
+
 type sessionRequest struct {
+	// Optional: when set, the session is materialized from that template.
+	RoutineID  *int64 `json:"routineId"`
 	Name       string `json:"name"`
 	OccurredOn string `json:"occurredOn"`
 	Notes      string `json:"notes"`
@@ -113,6 +199,9 @@ type sessionRequest struct {
 func (r sessionRequest) validate() error {
 	if _, err := time.Parse(dateLayout, r.OccurredOn); err != nil {
 		return fmt.Errorf("occurredOn must be YYYY-MM-DD")
+	}
+	if r.RoutineID != nil && *r.RoutineID <= 0 {
+		return fmt.Errorf("routineId must be a positive id")
 	}
 	return nil
 }
