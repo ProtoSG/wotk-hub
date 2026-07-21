@@ -461,7 +461,7 @@ func (h *handler) loadSession(id int64) (*Session, error) {
 
 	rows, err := h.db.Query(`
 		SELECT se.id, se.exercise_id, se.position, se.notes,
-		       e.name, e.equipment, e.primary_muscle, e.secondary_muscle, e.media_url, e.media_type, e.is_custom
+		       e.name, e.equipment, e.primary_muscle, e.secondary_muscle, e.description, e.media_url, e.media_type, e.is_custom
 		FROM session_exercises se
 		JOIN exercises e ON e.id = se.exercise_id
 		WHERE se.session_id = $1
@@ -478,7 +478,8 @@ func (h *handler) loadSession(id int64) (*Session, error) {
 		if err := rows.Scan(
 			&se.ID, &se.ExerciseID, &se.Position, &se.Notes,
 			&se.Exercise.Name, &se.Exercise.Equipment, &se.Exercise.PrimaryMuscle,
-			&se.Exercise.SecondaryMuscle, &se.Exercise.MediaURL, &se.Exercise.MediaType, &se.Exercise.IsCustom,
+			&se.Exercise.SecondaryMuscle, &se.Exercise.Description,
+			&se.Exercise.MediaURL, &se.Exercise.MediaType, &se.Exercise.IsCustom,
 		); err != nil {
 			return nil, err
 		}

@@ -14,7 +14,7 @@ const (
 
 func scanExercise(row interface{ Scan(...any) error }) (Exercise, error) {
 	var e Exercise
-	err := row.Scan(&e.ID, &e.Name, &e.Equipment, &e.PrimaryMuscle, &e.SecondaryMuscle, &e.MediaURL, &e.MediaType, &e.IsCustom)
+	err := row.Scan(&e.ID, &e.Name, &e.Equipment, &e.PrimaryMuscle, &e.SecondaryMuscle, &e.Description, &e.MediaURL, &e.MediaType, &e.IsCustom)
 	return e, err
 }
 
@@ -65,7 +65,7 @@ func (h *handler) ListExercises(w http.ResponseWriter, r *http.Request) {
 	}
 
 	args = append(args, limit, offset)
-	query := `SELECT id, name, equipment, primary_muscle, secondary_muscle, media_url, media_type, is_custom
+	query := `SELECT id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom
 		FROM exercises` + where +
 		` ORDER BY name
 		  LIMIT $` + strconv.Itoa(len(args)-1) + ` OFFSET $` + strconv.Itoa(len(args))

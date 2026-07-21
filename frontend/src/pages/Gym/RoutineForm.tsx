@@ -17,6 +17,7 @@ import { useGymApi } from '@/hooks/useGymApi'
 import type { Exercise, RoutineInput } from '@/types/gym.types'
 import { routineKey, routinesKey } from './gymKeys'
 import ExerciseCatalog from './ExerciseCatalog'
+import ExerciseDetail from './ExerciseDetail'
 import NumericField from './NumericField'
 
 const DEFAULT_SETS = 3
@@ -63,6 +64,8 @@ export default function RoutineForm({ open, routineId, onClose }: RoutineFormPro
   // counts as an outside press for the parent and dismisses it — taking the
   // unsaved draft with it.
   const [picking, setPicking] = useState(false)
+  // Third view of the same dialog, for the same nesting reason as the picker.
+  const [detail, setDetail] = useState<Exercise | null>(null)
   const [loadedId, setLoadedId] = useState<number | null>(null)
 
   const { data: routine, isPending: loadingRoutine } = useQuery({
@@ -77,8 +80,10 @@ export default function RoutineForm({ open, routineId, onClose }: RoutineFormPro
   const wantedId = open ? routineId : null
   if (loadedId !== wantedId && (wantedId === null || routine?.id === wantedId)) {
     setLoadedId(wantedId)
-    // Always reopen on the form, never on the picker the last edit left behind.
+    // Always reopen on the form, never on the picker or detail the last edit
+    // left behind.
     setPicking(false)
+    setDetail(null)
     setName(routine && wantedId !== null ? routine.name : '')
     setExercises(
       routine && wantedId !== null
@@ -137,6 +142,8 @@ export default function RoutineForm({ open, routineId, onClose }: RoutineFormPro
   const canSave = name.trim() !== '' && !save.isPending
 
   if (picking) {
+    const back = () => (detail ? setDetail(null) : setPicking(false))
+
     return (
       <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
         <DialogContent className="flex max-h-[85vh] flex-col gap-4 sm:max-w-2xl">
@@ -145,23 +152,32 @@ export default function RoutineForm({ open, routineId, onClose }: RoutineFormPro
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setPicking(false)}
-                aria-label="Volver a la rutina"
+                onClick={back}
+                aria-label={detail ? 'Volver al catálogo' : 'Volver a la rutina'}
                 className="-ml-2 h-9 w-9"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <DialogTitle>Agregar ejercicio</DialogTitle>
+              <DialogTitle className="text-left">
+                {detail ? detail.name : 'Agregar ejercicio'}
+              </DialogTitle>
             </div>
           </DialogHeader>
 
           <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
-            <ExerciseCatalog
-              onSelect={(exercise) => {
-                setExercises((current) => [...current, draftFrom(exercise)])
-                setPicking(false)
-              }}
-            />
+            {detail ? (
+              <ExerciseDetail
+                exercise={detail}
+                onSelect={(exercise) => {
+                  setExercises((current) => [...current, draftFrom(exercise)])
+                  setDetail(null)
+                  setPicking(false)
+                }}
+                selectLabel="Agregar a la rutina"
+              />
+            ) : (
+              <ExerciseCatalog onOpen={setDetail} />
+            )}
           </div>
         </DialogContent>
       </Dialog>

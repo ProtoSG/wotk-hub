@@ -24,11 +24,15 @@ const PAGE_SIZE = 50
 const ALL = 'all'
 
 interface ExerciseCatalogProps {
-  /** Rendered when a row is picked. Omit to make the list read-only. */
-  onSelect?: (exercise: Exercise) => void
+  /**
+   * Called when a row is clicked. The caller decides how to present the
+   * detail — a dialog when the catalog stands alone, another view of the
+   * surrounding dialog when it doesn't.
+   */
+  onOpen: (exercise: Exercise) => void
 }
 
-export default function ExerciseCatalog({ onSelect }: ExerciseCatalogProps) {
+export default function ExerciseCatalog({ onOpen }: ExerciseCatalogProps) {
   const [search, setSearch] = useState('')
   const [muscle, setMuscle] = useState(ALL)
   const [equipment, setEquipment] = useState(ALL)
@@ -166,7 +170,7 @@ export default function ExerciseCatalog({ onSelect }: ExerciseCatalogProps) {
       ) : (
         <ul className="space-y-2">
           {exercises.map((exercise) => (
-            <ExerciseRow key={exercise.id} exercise={exercise} onSelect={onSelect} />
+            <ExerciseRow key={exercise.id} exercise={exercise} onOpen={onOpen} />
           ))}
         </ul>
       )}

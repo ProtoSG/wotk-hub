@@ -272,7 +272,7 @@ func (h *handler) loadRoutine(id int64) (*Routine, error) {
 
 	rows, err := h.db.Query(`
 		SELECT re.id, re.exercise_id, re.position, re.target_sets, re.target_reps, re.notes,
-		       e.name, e.equipment, e.primary_muscle, e.secondary_muscle, e.media_url, e.media_type, e.is_custom
+		       e.name, e.equipment, e.primary_muscle, e.secondary_muscle, e.description, e.media_url, e.media_type, e.is_custom
 		FROM routine_exercises re
 		JOIN exercises e ON e.id = re.exercise_id
 		WHERE re.routine_id = $1
@@ -288,7 +288,8 @@ func (h *handler) loadRoutine(id int64) (*Routine, error) {
 		if err := rows.Scan(
 			&re.ID, &re.ExerciseID, &re.Position, &re.TargetSets, &re.TargetReps, &re.Notes,
 			&re.Exercise.Name, &re.Exercise.Equipment, &re.Exercise.PrimaryMuscle,
-			&re.Exercise.SecondaryMuscle, &re.Exercise.MediaURL, &re.Exercise.MediaType, &re.Exercise.IsCustom,
+			&re.Exercise.SecondaryMuscle, &re.Exercise.Description,
+			&re.Exercise.MediaURL, &re.Exercise.MediaType, &re.Exercise.IsCustom,
 		); err != nil {
 			return nil, err
 		}

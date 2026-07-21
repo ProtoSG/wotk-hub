@@ -27,6 +27,13 @@ const csvFieldCount = 6
 // primary_muscle, where it never appears (that column uses "Other").
 const nullSentinel = "None"
 
+// descriptionsCSV holds the Spanish how-to text, keyed by exercise name. It is
+// a separate file from the catalog so the imported source data and the text
+// written for this app stay independently replaceable.
+//
+//go:embed data/descriptions.csv
+var descriptionsCSV []byte
+
 // SeedExercises imports the bundled catalog into the exercises table.
 //
 // Idempotent by design: this project has no migration tool (see
@@ -75,7 +82,87 @@ func SeedExercises(db *sql.DB) error {
 	}
 
 	log.Printf("gym: exercise catalog seeded (%d parsed, %d inserted)", len(exercises), inserted)
+
+	return seedDescriptions(db)
+}
+
+// seedDescriptions fills in the how-to text for exercises that don't have one.
+//
+// Only empty descriptions are written, so text edited
+// in the app is never overwritten on the next boot — the same reasoning behind
+// the catalog's ON CONFLICT DO NOTHING.
+func seedDescriptions(db *sql.DB) error {
+	descriptions, err := parseDescriptionsCSV(descriptionsCSV)
+	if err != nil {
+		return fmt.Errorf("parse descriptions csv: %w", err)
+	}
+	if len(descriptions) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(
+		`UPDATE exercises SET description = $2 WHERE name = $1 AND description = ''`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	var written int64
+	for name, description := range descriptions {
+		res, err := stmt.Exec(name, description)
+		if err != nil {
+			return fmt.Errorf("describe exercise %q: %w", name, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			written += n
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	log.Printf("gym: exercise descriptions seeded (%d available, %d written)", len(descriptions), written)
 	return nil
+}
+
+// parseDescriptionsCSV reads the name,description pairs. Names that no longer
+// exist in the catalog are simply never matched by the UPDATE.
+func parseDescriptionsCSV(data []byte) (map[string]string, error) {
+	r := csv.NewReader(bytes.NewReader(data))
+	r.FieldsPerRecord = 2
+
+	if _, err := r.Read(); err != nil {
+		if err == io.EOF {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("read header: %w", err)
+	}
+
+	descriptions := map[string]string{}
+	for {
+		rec, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		name := strings.TrimSpace(rec[0])
+		description := strings.TrimSpace(rec[1])
+		if name == "" || description == "" {
+			continue
+		}
+		descriptions[name] = description
+	}
+	return descriptions, nil
 }
 
 // parseExercisesCSV decodes the bundled catalog. It uses encoding/csv rather

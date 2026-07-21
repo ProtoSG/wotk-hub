@@ -250,6 +250,9 @@ func Migrate(db *sql.DB) error {
 			created_by       BIGINT REFERENCES users(id),
 			created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// Spanish how-to text, seeded from a companion CSV. Kept out of the
+		// source catalog file so re-importing that file never touches it.
+		`ALTER TABLE exercises ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_exercises_primary_muscle ON exercises (primary_muscle)`,
 		`CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercises (equipment)`,
 		`CREATE TABLE IF NOT EXISTS routines (
