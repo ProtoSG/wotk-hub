@@ -79,7 +79,7 @@ export default function HistorialTab({ onOpen }: HistorialTabProps) {
                       {session.finishedAt && (
                         <>
                           <span aria-hidden>·</span>
-                          {formatDuration(durationMinutes(session))}
+                          {formatDuration(durationSeconds(session))}
                         </>
                       )}
                     </p>
@@ -117,10 +117,10 @@ function formatDayLabel(occurredOn: string): string {
   })
 }
 
-function durationMinutes(session: SessionSummary): number {
+function durationSeconds(session: SessionSummary): number {
   if (!session.finishedAt) return 0
   const started = new Date(session.startedAt).getTime()
   const finished = new Date(session.finishedAt).getTime()
   if (Number.isNaN(started) || Number.isNaN(finished)) return 0
-  return Math.max(0, Math.round((finished - started) / 60_000))
+  return Math.max(0, Math.round((finished - started) / 1_000))
 }

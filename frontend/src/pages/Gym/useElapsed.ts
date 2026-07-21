@@ -1,34 +1,36 @@
 import { useEffect, useState } from 'react'
 
-/**
- * Minutes elapsed since `startedAt`, ticking once a minute. Minute resolution
- * on purpose: a seconds counter reads as a stopwatch you're supposed to race,
- * which is the wrong pressure for a workout log.
- */
-export function useElapsedMinutes(startedAt: string | undefined): number {
+/** Seconds elapsed since `startedAt`, ticking once a second. */
+export function useElapsedSeconds(startedAt: string | undefined): number {
   // The elapsed value is derived, not stored — the tick only exists to
-  // re-render once a minute, so a changing startedAt needs no resync.
+  // re-render, so a changing startedAt needs no resync.
   const [, setTick] = useState(0)
 
   useEffect(() => {
-    const timer = window.setInterval(() => setTick((n) => n + 1), 60_000)
+    const timer = window.setInterval(() => setTick((n) => n + 1), 1_000)
     return () => window.clearInterval(timer)
   }, [])
 
-  return minutesSince(startedAt)
+  return secondsSince(startedAt)
 }
 
-function minutesSince(startedAt: string | undefined): number {
+function secondsSince(startedAt: string | undefined): number {
   if (!startedAt) return 0
   const started = new Date(startedAt).getTime()
   if (Number.isNaN(started)) return 0
-  return Math.max(0, Math.floor((Date.now() - started) / 60_000))
+  return Math.max(0, Math.floor((Date.now() - started) / 1_000))
 }
 
-/** "45 min", "1 h 05 min" */
-export function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  return `${hours} h ${String(rest).padStart(2, '0')} min`
+/**
+ * "12:04" under an hour, "1:05:03" past it — clock format, with the minutes
+ * zero-padded once hours appear so the digits don't jump around as it counts.
+ */
+export function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const paddedSeconds = String(seconds).padStart(2, '0')
+
+  if (hours === 0) return `${minutes}:${paddedSeconds}`
+  return `${hours}:${String(minutes).padStart(2, '0')}:${paddedSeconds}`
 }
