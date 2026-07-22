@@ -187,3 +187,55 @@ func TestDescriptionRequestValidate(t *testing.T) {
 		t.Error("oversized description accepted")
 	}
 }
+
+func TestExerciseRequestValidateTrackingType(t *testing.T) {
+	// Empty means "use the default", so an older client stays valid.
+	if err := (exerciseRequest{Name: "X", PrimaryMuscle: "Chest"}).validate(); err != nil {
+		t.Errorf("absent trackingType rejected: %v", err)
+	}
+	for _, tracking := range trackingTypes {
+		req := exerciseRequest{Name: "X", PrimaryMuscle: "Chest", TrackingType: tracking}
+		if err := req.validate(); err != nil {
+			t.Errorf("tracking type %q rejected: %v", tracking, err)
+		}
+	}
+	req := exerciseRequest{Name: "X", PrimaryMuscle: "Chest", TrackingType: "reps_only"}
+	if err := req.validate(); err == nil {
+		t.Error("unknown tracking type accepted")
+	}
+}
+
+func TestReplaceSetsRequestValidateDurationAndDistance(t *testing.T) {
+	valid := replaceSetsRequest{Sets: []setInput{
+		{DurationSeconds: 1800, DistanceMeters: 5000, Completed: true},
+		{DurationSeconds: 45, Completed: true},
+	}}
+	if err := valid.validate(); err != nil {
+		t.Fatalf("cardio and hold sets rejected: %v", err)
+	}
+
+	if err := (replaceSetsRequest{Sets: []setInput{{DurationSeconds: -1}}}).validate(); err == nil {
+		t.Error("negative duration accepted")
+	}
+	if err := (replaceSetsRequest{Sets: []setInput{{DistanceMeters: -1}}}).validate(); err == nil {
+		t.Error("negative distance accepted")
+	}
+}
+
+// The hold list drives a one-time classification, so a typo would silently
+// leave a plank logged as reps.
+func TestIsometricHoldsExistInCatalog(t *testing.T) {
+	exercises, err := parseExercisesCSV(exercisesCSV)
+	if err != nil {
+		t.Fatalf("parse bundled csv: %v", err)
+	}
+	names := map[string]bool{}
+	for _, e := range exercises {
+		names[e.Name] = true
+	}
+	for _, hold := range isometricHolds {
+		if !names[hold] {
+			t.Errorf("isometric hold %q is not in the catalog", hold)
+		}
+	}
+}

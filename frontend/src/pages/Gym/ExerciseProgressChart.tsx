@@ -9,13 +9,21 @@ import {
 } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
 import { paperSurfaceStyle } from '@/components/ui/cozy-card'
-import { formatKg, formatVolume, gramsToKg } from '@/lib/weight'
-import type { ProgressPoint } from '@/types/gym.types'
-import { METRIC_LABELS, metricGrams, type ProgressMetric } from './progressMetrics'
+import { formatDuration } from '@/lib/duration'
+import type { ProgressPoint, TrackingType } from '@/types/gym.types'
+import {
+  chartValue,
+  describeEffort,
+  formatMetric,
+  METRIC_LABELS,
+  metricUnit,
+  type ProgressMetric,
+} from './progressMetrics'
 
 interface ExerciseProgressChartProps {
   points: ProgressPoint[]
   metric: ProgressMetric
+  trackingType: TrackingType
 }
 
 /**
@@ -23,14 +31,21 @@ interface ExerciseProgressChartProps {
  * volume runs in the thousands of kg while a top set is double digits — and
  * comparing two exercises isn't the question this screen answers.
  */
-export default function ExerciseProgressChart({ points, metric }: ExerciseProgressChartProps) {
-  const isVolume = metric === 'volume'
+export default function ExerciseProgressChart({
+  points,
+  metric,
+  trackingType,
+}: ExerciseProgressChartProps) {
+  const unit = metricUnit(metric)
+  // Totals belong on a zero baseline; a level (a top set, a best hold) does
+  // not — anchoring those at zero flattens months of progress into a line.
+  const isTotal = metric === 'volume' || metric === 'duration' || metric === 'distance'
 
   const data = points.map((point) => ({
     date: formatAxisDate(point.occurredOn),
-    // Charted in kg, not grams: the axis should read in the unit the user
-    // thinks in, and recharts needs a plain number.
-    value: gramsToKg(metricGrams(point, metric)),
+    // Charted in the unit the user thinks in (kg, km, seconds), since recharts
+    // needs a plain number and the axis has to read naturally.
+    value: chartValue(point, metric),
     point,
   }))
 
@@ -52,12 +67,14 @@ export default function ExerciseProgressChart({ points, metric }: ExerciseProgre
           tickLine={false}
           axisLine={false}
           width={48}
-          // A lifter's working weight lives far from zero, so a zero-based
-          // axis would flatten months of progress into a straight line.
-          domain={isVolume ? [0, 'auto'] : ['dataMin - 5', 'dataMax + 5']}
-          tickFormatter={(value: number) => (isVolume ? formatAxisVolume(value) : String(Math.round(value)))}
+          domain={isTotal ? [0, 'auto'] : ['dataMin - 5', 'dataMax + 5']}
+          tickFormatter={(value: number) => formatAxisValue(value, unit)}
         />
-        <Tooltip content={(props) => <ProgressTooltip {...props} metric={metric} />} />
+        <Tooltip
+          content={(props) => (
+            <ProgressTooltip {...props} metric={metric} trackingType={trackingType} />
+          )}
+        />
         <Line
           type="monotone"
           dataKey="value"
@@ -80,7 +97,8 @@ function ProgressTooltip({
   active,
   payload,
   metric,
-}: TooltipContentProps & { metric: ProgressMetric }) {
+  trackingType,
+}: TooltipContentProps & { metric: ProgressMetric; trackingType: TrackingType }) {
   if (!active || !payload?.length) return null
   const entry = payload[0].payload as { point: ProgressPoint }
   const point = entry.point
@@ -94,14 +112,10 @@ function ProgressTooltip({
       <p className="text-muted-foreground">
         {METRIC_LABELS[metric]}:{' '}
         <span className="font-medium text-foreground tabular-nums">
-          {metric === 'volume'
-            ? formatVolume(point.totalVolumeGrams)
-            : `${formatKg(metricGrams(point, metric))} kg`}
+          {formatMetric(point, metric)}
         </span>
       </p>
-      <p className="text-muted-foreground tabular-nums">
-        Mejor serie: {formatKg(point.topSet.weightGrams)} kg × {point.topSet.reps}
-      </p>
+      <p className="text-muted-foreground tabular-nums">{describeEffort(point, trackingType)}</p>
     </div>
   )
 }
@@ -122,7 +136,13 @@ function formatTooltipDate(occurredOn: string): string {
   })
 }
 
-/** Axis ticks are in kg; past a tonne they'd crowd the gutter with digits. */
-function formatAxisVolume(kg: number): string {
-  return kg >= 1000 ? `${Math.round(kg / 1000)} t` : String(Math.round(kg))
+/**
+ * Axis ticks stay short: tonnes past 1000 kg, clock notation for time. A gutter
+ * full of digits pushes the plot area out of the card.
+ */
+function formatAxisValue(value: number, unit: 'kg' | 'km' | 'seconds'): string {
+  if (unit === 'seconds') return formatDuration(Math.round(value))
+  if (unit === 'kg' && value >= 1000) return `${Math.round(value / 1000)} t`
+  if (unit === 'km') return value % 1 === 0 ? String(value) : value.toFixed(1)
+  return String(Math.round(value))
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	_ "embed"
+
+	"github.com/lib/pq"
 )
 
 // exercisesCSV is the bundled exercise catalog. Embedded rather than read from
@@ -83,7 +85,67 @@ func SeedExercises(db *sql.DB) error {
 
 	log.Printf("gym: exercise catalog seeded (%d parsed, %d inserted)", len(exercises), inserted)
 
+	if err := seedTrackingTypes(db); err != nil {
+		return err
+	}
 	return seedDescriptions(db)
+}
+
+// isometricHolds are the seeded exercises measured by how long the position is
+// held. They can't be derived from the CSV the way cardio can (primary_muscle
+// = "Cardio"), so they are listed by name.
+var isometricHolds = []string{
+	"Dead Hang",
+	"Front Lever Hold",
+	"Handstand Hold",
+	"Hollow Rock",
+	"L-Sit Hold",
+	"Plank",
+	"Reverse Plank",
+	"Side Plank",
+	"Wall Sit",
+}
+
+// seedTrackingTypes classifies how each seeded exercise is logged: cardio by
+// distance and time, isometric holds by time alone, everything else by weight
+// and reps.
+//
+// This runs only while every row still carries the default, which makes it a
+// one-time backfill for databases created before the column existed. After
+// that the classification is the user's to change — re-running it on every
+// boot would undo any correction they make.
+func seedTrackingTypes(db *sql.DB) error {
+	var classified bool
+	err := db.QueryRow(
+		`SELECT EXISTS (SELECT 1 FROM exercises WHERE tracking_type <> $1)`, TrackingWeightReps,
+	).Scan(&classified)
+	if err != nil {
+		return err
+	}
+	if classified {
+		return nil
+	}
+
+	res, err := db.Exec(
+		`UPDATE exercises SET tracking_type = $1 WHERE primary_muscle = 'Cardio' AND is_custom = false`,
+		TrackingDurationDistance,
+	)
+	if err != nil {
+		return err
+	}
+	cardio, _ := res.RowsAffected()
+
+	res, err = db.Exec(
+		`UPDATE exercises SET tracking_type = $1 WHERE is_custom = false AND name = ANY($2)`,
+		TrackingDuration, pq.Array(isometricHolds),
+	)
+	if err != nil {
+		return err
+	}
+	holds, _ := res.RowsAffected()
+
+	log.Printf("gym: tracking types seeded (%d cardio, %d holds)", cardio, holds)
+	return nil
 }
 
 // seedDescriptions fills in the how-to text for exercises that don't have one.

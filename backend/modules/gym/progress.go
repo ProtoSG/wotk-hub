@@ -55,7 +55,8 @@ func (h *handler) ExerciseProgress(w http.ResponseWriter, r *http.Request) {
 	// is computed from. Epley: weight x (1 + reps/30).
 	rows, err := h.db.Query(`
 		WITH worked AS (
-			SELECT s.id AS session_id, s.occurred_on, s.started_at, st.reps, st.weight_grams
+			SELECT s.id AS session_id, s.occurred_on, s.started_at, st.reps, st.weight_grams,
+			       st.duration_seconds, st.distance_meters
 			FROM exercise_sets st
 			JOIN session_exercises se ON se.id = st.session_exercise_id
 			JOIN workout_sessions s ON s.id = se.session_id
@@ -73,7 +74,10 @@ func (h *handler) ExerciseProgress(w http.ResponseWriter, r *http.Request) {
 		       SUM(w.reps * w.weight_grams),
 		       t.reps,
 		       t.weight_grams,
-		       ROUND(t.weight_grams * (1 + t.reps / 30.0))
+		       ROUND(t.weight_grams * (1 + t.reps / 30.0)),
+		       SUM(w.duration_seconds),
+		       SUM(w.distance_meters),
+		       MAX(w.duration_seconds)
 		FROM worked w
 		JOIN top t ON t.session_id = w.session_id
 		GROUP BY w.session_id, w.occurred_on, w.started_at, t.reps, t.weight_grams
@@ -91,6 +95,7 @@ func (h *handler) ExerciseProgress(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(
 			&p.SessionID, &p.OccurredOn, &p.MaxWeightGrams, &p.TotalReps, &p.TotalVolumeGrams,
 			&p.TopSet.Reps, &p.TopSet.WeightGrams, &p.Estimated1RMGrams,
+			&p.TotalDurationSeconds, &p.TotalDistanceMeters, &p.MaxDurationSeconds,
 		); err != nil {
 			log.Printf("gym: scan progress point failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -201,7 +206,7 @@ func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
 func (h *handler) LoggedExercises(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`
 		SELECT e.id, e.name, e.equipment, e.primary_muscle, e.secondary_muscle,
-		       e.description, e.media_url, e.media_type, e.is_custom
+		       e.description, e.tracking_type, e.media_url, e.media_type, e.is_custom
 		FROM exercises e
 		WHERE EXISTS (
 			SELECT 1

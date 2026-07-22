@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Skeleton } from '@/components/ui/skeleton'
 import { useGymApi } from '@/hooks/useGymApi'
 import { formatKg, formatVolume } from '@/lib/weight'
+import { formatDistance, formatDuration } from '@/lib/duration'
+import type { TrackingType } from '@/types/gym.types'
 import { sessionsKey } from './gymKeys'
 
 interface SessionDetailDialogProps {
@@ -56,18 +58,21 @@ export default function SessionDetailDialog({ sessionId, onClose }: SessionDetai
             </p>
           ) : (
             session.exercises.map((sessionExercise) => {
+              const trackingType = sessionExercise.exercise.trackingType
               const working = sessionExercise.sets.filter((set) => !set.isWarmup)
-              const volume = working
-                .filter((set) => set.completed)
-                .reduce((sum, set) => sum + set.reps * set.weightGrams, 0)
+              const done = working.filter((set) => set.completed)
+              const total =
+                trackingType === 'weight_reps'
+                  ? formatVolume(done.reduce((sum, set) => sum + set.reps * set.weightGrams, 0))
+                  : formatDuration(done.reduce((sum, set) => sum + set.durationSeconds, 0))
 
               return (
                 <section key={sessionExercise.id} className="rounded-lg border bg-card px-4 py-3">
                   <div className="flex items-baseline justify-between gap-3">
                     <h3 className="truncate font-medium">{sessionExercise.exercise.name}</h3>
-                    {volume > 0 && (
+                    {done.length > 0 && (
                       <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
-                        {formatVolume(volume)}
+                        {total}
                       </span>
                     )}
                   </div>
@@ -81,9 +86,7 @@ export default function SessionDetailDialog({ sessionId, onClose }: SessionDetai
                         <span className="w-6 shrink-0">
                           {set.isWarmup ? 'W' : countWorking(sessionExercise.sets, index)}
                         </span>
-                        <span className="text-foreground">
-                          {formatKg(set.weightGrams)} kg × {set.reps}
-                        </span>
+                        <span className="text-foreground">{describeSet(set, trackingType)}</span>
                         {!set.completed && <span className="text-xs">no completada</span>}
                       </li>
                     ))}
@@ -109,6 +112,18 @@ export default function SessionDetailDialog({ sessionId, onClose }: SessionDetai
       </DialogContent>
     </Dialog>
   )
+}
+
+/** Renders a logged set the way its tracking type is measured. */
+function describeSet(
+  set: { reps: number; weightGrams: number; durationSeconds: number; distanceMeters: number },
+  trackingType: TrackingType,
+): string {
+  if (trackingType === 'weight_reps') return `${formatKg(set.weightGrams)} kg × ${set.reps}`
+  if (trackingType === 'duration') return formatDuration(set.durationSeconds)
+  return [formatDuration(set.durationSeconds), formatDistance(set.distanceMeters)]
+    .filter((part) => part !== '0s' && part !== '0 m')
+    .join(' · ')
 }
 
 /** Working-set number at `index`, ignoring warmups above it. */

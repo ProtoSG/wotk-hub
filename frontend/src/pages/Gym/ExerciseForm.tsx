@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useGymApi } from '@/hooks/useGymApi'
-import type { Exercise } from '@/types/gym.types'
+import type { Exercise, TrackingType } from '@/types/gym.types'
 import { exerciseFiltersKey } from './gymKeys'
 
 interface ExerciseFormProps {
@@ -29,6 +29,12 @@ interface ExerciseFormProps {
 /** Offered when the catalog has no equipment value that fits. */
 const NO_EQUIPMENT = 'Sin equipo'
 
+const TRACKING_LABELS: Record<TrackingType, string> = {
+  weight_reps: 'Peso y repeticiones',
+  duration_distance: 'Tiempo y distancia',
+  duration: 'Solo tiempo',
+}
+
 export default function ExerciseForm({ open, editing, onClose, onSaved }: ExerciseFormProps) {
   const queryClient = useQueryClient()
   const { listExerciseFilters, createExercise, updateExercise } = useGymApi()
@@ -37,6 +43,7 @@ export default function ExerciseForm({ open, editing, onClose, onSaved }: Exerci
   const [primaryMuscle, setPrimaryMuscle] = useState('')
   const [equipment, setEquipment] = useState(NO_EQUIPMENT)
   const [description, setDescription] = useState('')
+  const [trackingType, setTrackingType] = useState<TrackingType>('weight_reps')
   const [loadedId, setLoadedId] = useState<number | null | undefined>(undefined)
 
   const { data: filterValues } = useQuery({
@@ -55,6 +62,7 @@ export default function ExerciseForm({ open, editing, onClose, onSaved }: Exerci
     setPrimaryMuscle(editing?.primaryMuscle ?? '')
     setEquipment(editing?.equipment || NO_EQUIPMENT)
     setDescription(editing?.description ?? '')
+    setTrackingType(editing?.trackingType ?? 'weight_reps')
   }
 
   const save = useMutation({
@@ -67,6 +75,7 @@ export default function ExerciseForm({ open, editing, onClose, onSaved }: Exerci
         primaryMuscle,
         secondaryMuscle: editing?.secondaryMuscle ?? '',
         description: description.trim(),
+        trackingType,
       }
       return editing ? updateExercise(editing.id, input) : createExercise(input)
     },
@@ -131,6 +140,25 @@ export default function ExerciseForm({ open, editing, onClose, onSaved }: Exerci
                 {filterValues?.equipment.map((item) => (
                   <SelectItem key={item} value={item}>
                     {item}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Cómo se mide</Label>
+            <Select
+              value={trackingType}
+              onValueChange={(value) => setTrackingType(value as TrackingType)}
+            >
+              <SelectTrigger aria-label="Cómo se mide">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TRACKING_LABELS) as TrackingType[]).map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {TRACKING_LABELS[type]}
                   </SelectItem>
                 ))}
               </SelectContent>

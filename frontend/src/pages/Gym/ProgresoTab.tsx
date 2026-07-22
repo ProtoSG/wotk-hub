@@ -15,14 +15,20 @@ import {
 } from '@/components/ui/select'
 import { useGymApi } from '@/hooks/useGymApi'
 import { cn } from '@/lib/utils'
-import { formatKg, formatVolume } from '@/lib/weight'
+import { formatVolume } from '@/lib/weight'
 import {
   exerciseProgressKey,
   loggedExercisesKey,
   progressSummaryKey,
 } from './gymKeys'
 import ExerciseProgressChart from './ExerciseProgressChart'
-import { bestPoint, METRIC_LABELS, METRICS, type ProgressMetric } from './progressMetrics'
+import {
+  bestPoint,
+  formatMetric,
+  METRIC_LABELS,
+  METRICS_BY_TRACKING,
+  type ProgressMetric,
+} from './progressMetrics'
 
 const RANGES = [
   { value: '1m', label: '1M', months: 1 },
@@ -78,7 +84,12 @@ export default function ProgresoTab() {
   }
 
   const selected = exercises.find((e) => e.id === selectedId)
-  const best = bestPoint(points, metric)
+  const trackingType = selected?.trackingType ?? 'weight_reps'
+  const metrics = METRICS_BY_TRACKING[trackingType]
+  // Switching to a cardio exercise while "1RM estimado" is selected would ask
+  // for a metric that doesn't apply, so fall back to that type's first one.
+  const activeMetric = metrics.includes(metric) ? metric : metrics[0]
+  const best = bestPoint(points, activeMetric)
 
   return (
     <div className="space-y-4">
@@ -124,10 +135,10 @@ export default function ProgresoTab() {
           </Select>
 
           <div className="flex flex-wrap gap-2">
-            {METRICS.map((value) => (
+            {metrics.map((value) => (
               <Button
                 key={value}
-                variant={metric === value ? 'default' : 'outline'}
+                variant={activeMetric === value ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setMetric(value)}
               >
@@ -146,14 +157,16 @@ export default function ProgresoTab() {
             </p>
           ) : (
             <>
-              <ExerciseProgressChart points={points} metric={metric} />
+              <ExerciseProgressChart
+                points={points}
+                metric={activeMetric}
+                trackingType={trackingType}
+              />
               {best && (
                 <p className="text-sm text-muted-foreground">
                   Mejor marca del período:{' '}
                   <span className="font-medium text-foreground tabular-nums">
-                    {metric === 'volume'
-                      ? formatVolume(best.totalVolumeGrams)
-                      : `${formatKg(metric === 'weight' ? best.maxWeightGrams : best.estimated1rmGrams)} kg`}
+                    {formatMetric(best, activeMetric)}
                   </span>{' '}
                   el {formatDay(best.occurredOn)}
                 </p>

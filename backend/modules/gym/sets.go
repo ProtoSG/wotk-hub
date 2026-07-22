@@ -200,9 +200,11 @@ func (h *handler) ReplaceSets(w http.ResponseWriter, r *http.Request) {
 
 	for i, set := range req.Sets {
 		if _, err := tx.Exec(
-			`INSERT INTO exercise_sets (session_exercise_id, set_number, reps, weight_grams, is_warmup, completed)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			sessionExerciseID, i+1, set.Reps, set.WeightGrams, set.IsWarmup, set.Completed,
+			`INSERT INTO exercise_sets (session_exercise_id, set_number, reps, weight_grams,
+			                            duration_seconds, distance_meters, is_warmup, completed)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			sessionExerciseID, i+1, set.Reps, set.WeightGrams,
+			set.DurationSeconds, set.DistanceMeters, set.IsWarmup, set.Completed,
 		); err != nil {
 			log.Printf("gym: insert set failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -258,7 +260,7 @@ func (h *handler) LastSets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(
-		`SELECT id, set_number, reps, weight_grams, is_warmup, completed
+		`SELECT id, set_number, reps, weight_grams, duration_seconds, distance_meters, is_warmup, completed
 		 FROM exercise_sets WHERE session_exercise_id = $1 ORDER BY set_number`, sessionExerciseID)
 	if err != nil {
 		log.Printf("gym: last sets failed: %v", err)
@@ -270,7 +272,8 @@ func (h *handler) LastSets(w http.ResponseWriter, r *http.Request) {
 	sets := []ExerciseSet{}
 	for rows.Next() {
 		var s ExerciseSet
-		if err := rows.Scan(&s.ID, &s.SetNumber, &s.Reps, &s.WeightGrams, &s.IsWarmup, &s.Completed); err != nil {
+		if err := rows.Scan(&s.ID, &s.SetNumber, &s.Reps, &s.WeightGrams,
+			&s.DurationSeconds, &s.DistanceMeters, &s.IsWarmup, &s.Completed); err != nil {
 			log.Printf("gym: scan last set failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return

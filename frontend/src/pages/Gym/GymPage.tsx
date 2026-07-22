@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { useGymApi } from '@/hooks/useGymApi'
@@ -21,6 +21,7 @@ import ExerciseDetailDialog from './ExerciseDetailDialog'
 import ExerciseForm from './ExerciseForm'
 import SessionDetailDialog from './SessionDetailDialog'
 import { useStartSession } from './useStartSession'
+import { activeSessionKey } from './gymKeys'
 
 const TABS = [
   { value: 'entrenar',   label: 'Entrenar',   icon: Dumbbell },
@@ -50,7 +51,14 @@ export default function GymPage() {
   const [exerciseFormOpen, setExerciseFormOpen] = useState(false)
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null)
   const queryClient = useQueryClient()
-  const { deleteExercise } = useGymApi()
+  const { deleteExercise, activeSession } = useGymApi()
+
+  // Shares EntrenarTab's cache entry, so this costs no extra request. The FAB
+  // needs it because the exercise picker only exists once a session does.
+  const { data: session } = useQuery({
+    queryKey: activeSessionKey(),
+    queryFn: () => activeSession(),
+  })
 
   const removeExercise = useMutation({
     mutationFn: (exercise: Exercise) => deleteExercise(exercise.id),
@@ -144,6 +152,12 @@ export default function GymPage() {
           onClick={() => {
             if (tab === 'rutinas') return setRoutineFormOpen(true)
             if (tab === 'ejercicios') return openExerciseForm(null)
+            // With no workout in progress there is nothing to add an exercise
+            // to, so the FAB starts a freestyle one first — otherwise it would
+            // open a picker that isn't mounted yet and appear dead.
+            if (!session) {
+              return start.mutate(undefined, { onSuccess: () => setPickerOpen(true) })
+            }
             return setPickerOpen(true)
           }}
           className="bottom-[max(env(safe-area-inset-bottom),1rem)]"

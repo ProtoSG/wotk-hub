@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useGymApi } from '@/hooks/useGymApi'
 import { formatVolume } from '@/lib/weight'
+import { formatDistance, formatDuration } from '@/lib/duration'
 import type { SessionExercise } from '@/types/gym.types'
 import { activeSessionKey } from './gymKeys'
 import ExerciseMedia from './ExerciseMedia'
@@ -75,9 +76,23 @@ export default function SessionExerciseCard({
     }
   }
 
+  const trackingType = sessionExercise.exercise.trackingType
   const completed = rows.filter((row) => row.completed && !row.isWarmup)
-  const volume = completed.reduce((sum, row) => sum + row.reps * row.weightGrams, 0)
   const working = rows.filter((row) => !row.isWarmup)
+
+  // The summary follows the tracking type for the same reason the grid does:
+  // volume in kg says nothing about a run or a plank.
+  const summary =
+    trackingType === 'weight_reps'
+      ? formatVolume(completed.reduce((sum, row) => sum + row.reps * row.weightGrams, 0))
+      : trackingType === 'duration_distance'
+        ? [
+            formatDuration(completed.reduce((sum, row) => sum + row.durationSeconds, 0)),
+            formatDistance(completed.reduce((sum, row) => sum + row.distanceMeters, 0)),
+          ]
+            .filter((part) => part !== '0s' && part !== '0 m')
+            .join(' · ')
+        : formatDuration(completed.reduce((sum, row) => sum + row.durationSeconds, 0))
 
   return (
     <section className="rounded-lg border bg-card">
@@ -120,7 +135,7 @@ export default function SessionExerciseCard({
             Sin series todavía. Agregá la primera o copiá la última sesión.
           </div>
         ) : (
-          <SetGrid rows={rows} onChange={commit} />
+          <SetGrid rows={rows} trackingType={trackingType} onChange={commit} />
         )}
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -138,7 +153,8 @@ export default function SessionExerciseCard({
           {completed.length > 0 && (
             <p className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
               <Check className="h-3.5 w-3.5 text-success" />
-              {completed.length}/{working.length} · {formatVolume(volume)}
+              {completed.length}/{working.length}
+              {summary && ` · ${summary}`}
             </p>
           )}
         </div>

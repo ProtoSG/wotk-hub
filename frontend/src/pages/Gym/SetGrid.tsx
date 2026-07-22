@@ -2,36 +2,58 @@ import { Check, Flame, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatKg, parseKgInput } from '@/lib/weight'
+import {
+  formatDuration,
+  metersToKm,
+  parseDurationInput,
+  parseKmInput,
+} from '@/lib/duration'
+import type { TrackingType } from '@/types/gym.types'
 import NumericField from './NumericField'
 import { withWorkingNumbers, type SetRow } from './setRows'
 
 interface SetGridProps {
   rows: SetRow[]
+  trackingType: TrackingType
   onChange: (rows: SetRow[]) => void
   disabled?: boolean
+}
+
+/**
+ * The two editable columns for a tracking type. A hold has one, so its second
+ * slot is left empty rather than showing a reps box that means nothing.
+ */
+const COLUMN_HEADERS: Record<TrackingType, [string, string]> = {
+  weight_reps: ['Kg', 'Reps'],
+  duration_distance: ['Tiempo', 'Km'],
+  duration: ['Tiempo', ''],
 }
 
 /** Shared column template so the header and the rows can't drift apart. */
 const COLUMNS = 'grid grid-cols-[2rem_1fr_1fr_2.75rem_2.25rem] items-center gap-2'
 
 /**
- * The logging surface: one row per set, edited locally and pushed up as a
- * whole list (the API replaces sets in bulk). Set numbers come from row order,
- * so removing a middle row never needs renumbering.
+ * The logging surface: one row per set, edited locally and pushed up as a whole
+ * list (the API replaces sets in bulk). Set numbers come from row order, so
+ * removing a middle row never needs renumbering.
+ *
+ * The two middle columns change with the exercise's tracking type — weight and
+ * reps for most movements, time and distance for cardio, time alone for a hold.
  */
-export default function SetGrid({ rows, onChange, disabled }: SetGridProps) {
+export default function SetGrid({ rows, trackingType, onChange, disabled }: SetGridProps) {
   const update = (key: string, patch: Partial<SetRow>) => {
     onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)))
   }
 
   const numbered = withWorkingNumbers(rows)
+  const [firstHeader, secondHeader] = COLUMN_HEADERS[trackingType]
 
   return (
     <div className="space-y-1">
       <div className={cn(COLUMNS, 'px-1 text-xs font-medium text-muted-foreground')}>
         <span className="text-center">#</span>
-        <span>Kg</span>
-        <span>Reps</span>
+        <span>{firstHeader}</span>
+        <span>{secondHeader}</span>
         <span className="sr-only">Completada</span>
         <span className="sr-only">Quitar</span>
       </div>
@@ -63,22 +85,47 @@ export default function SetGrid({ rows, onChange, disabled }: SetGridProps) {
               {row.isWarmup ? <Flame className="h-4 w-4" /> : workingNumber}
             </button>
 
-            <NumericField
-              value={row.weightGrams === 0 ? '' : formatKg(row.weightGrams)}
-              parse={parseKgInput}
-              onCommit={(weightGrams) => update(row.key, { weightGrams })}
-              label={`Peso de la ${label}`}
-              decimal
-              disabled={disabled}
-            />
-
-            <NumericField
-              value={row.reps === 0 ? '' : String(row.reps)}
-              parse={parseReps}
-              onCommit={(reps) => update(row.key, { reps })}
-              label={`Repeticiones de la ${label}`}
-              disabled={disabled}
-            />
+            {trackingType === 'weight_reps' ? (
+              <>
+                <NumericField
+                  value={row.weightGrams === 0 ? '' : formatKg(row.weightGrams)}
+                  parse={parseKgInput}
+                  onCommit={(weightGrams) => update(row.key, { weightGrams })}
+                  label={`Peso de la ${label}`}
+                  decimal
+                  disabled={disabled}
+                />
+                <NumericField
+                  value={row.reps === 0 ? '' : String(row.reps)}
+                  parse={parseReps}
+                  onCommit={(reps) => update(row.key, { reps })}
+                  label={`Repeticiones de la ${label}`}
+                  disabled={disabled}
+                />
+              </>
+            ) : (
+              <>
+                <NumericField
+                  value={row.durationSeconds === 0 ? '' : formatDuration(row.durationSeconds)}
+                  parse={parseDurationInput}
+                  onCommit={(durationSeconds) => update(row.key, { durationSeconds })}
+                  label={`Tiempo de la ${label}`}
+                  disabled={disabled}
+                />
+                {trackingType === 'duration_distance' ? (
+                  <NumericField
+                    value={row.distanceMeters === 0 ? '' : String(metersToKm(row.distanceMeters))}
+                    parse={parseKmInput}
+                    onCommit={(distanceMeters) => update(row.key, { distanceMeters })}
+                    label={`Distancia de la ${label}`}
+                    decimal
+                    disabled={disabled}
+                  />
+                ) : (
+                  <span />
+                )}
+              </>
+            )}
 
             <button
               type="button"

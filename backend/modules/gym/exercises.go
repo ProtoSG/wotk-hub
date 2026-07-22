@@ -19,7 +19,7 @@ const (
 
 func scanExercise(row interface{ Scan(...any) error }) (Exercise, error) {
 	var e Exercise
-	err := row.Scan(&e.ID, &e.Name, &e.Equipment, &e.PrimaryMuscle, &e.SecondaryMuscle, &e.Description, &e.MediaURL, &e.MediaType, &e.IsCustom)
+	err := row.Scan(&e.ID, &e.Name, &e.Equipment, &e.PrimaryMuscle, &e.SecondaryMuscle, &e.Description, &e.TrackingType, &e.MediaURL, &e.MediaType, &e.IsCustom)
 	return e, err
 }
 
@@ -70,7 +70,7 @@ func (h *handler) ListExercises(w http.ResponseWriter, r *http.Request) {
 	}
 
 	args = append(args, limit, offset)
-	query := `SELECT id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom
+	query := `SELECT id, name, equipment, primary_muscle, secondary_muscle, description, tracking_type, media_url, media_type, is_custom
 		FROM exercises` + where +
 		` ORDER BY name
 		  LIMIT $` + strconv.Itoa(len(args)-1) + ` OFFSET $` + strconv.Itoa(len(args))
@@ -180,12 +180,12 @@ func (h *handler) CreateExercise(w http.ResponseWriter, r *http.Request) {
 
 	userID, _, _ := middleware.UserFromContext(r.Context())
 	row := h.db.QueryRow(
-		`INSERT INTO exercises (name, equipment, primary_muscle, secondary_muscle, description, is_custom, created_by)
-		 VALUES ($1, $2, $3, $4, $5, true, $6)
-		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom`,
+		`INSERT INTO exercises (name, equipment, primary_muscle, secondary_muscle, description, tracking_type, is_custom, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, true, $7)
+		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, tracking_type, media_url, media_type, is_custom`,
 		strings.TrimSpace(req.Name), strings.TrimSpace(req.Equipment),
 		strings.TrimSpace(req.PrimaryMuscle), strings.TrimSpace(req.SecondaryMuscle),
-		strings.TrimSpace(req.Description), userID,
+		strings.TrimSpace(req.Description), defaultTo(req.TrackingType, TrackingWeightReps), userID,
 	)
 	exercise, err := scanExercise(row)
 	if pqErr, ok := err.(*pq.Error); ok && string(pqErr.Code) == exerciseUniqueViolation {
@@ -252,12 +252,13 @@ func (h *handler) UpdateExercise(w http.ResponseWriter, r *http.Request) {
 
 	row := h.db.QueryRow(
 		`UPDATE exercises
-		 SET name = $1, equipment = $2, primary_muscle = $3, secondary_muscle = $4, description = $5
-		 WHERE id = $6
-		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom`,
+		 SET name = $1, equipment = $2, primary_muscle = $3, secondary_muscle = $4, description = $5,
+		     tracking_type = $6
+		 WHERE id = $7
+		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, tracking_type, media_url, media_type, is_custom`,
 		strings.TrimSpace(req.Name), strings.TrimSpace(req.Equipment),
 		strings.TrimSpace(req.PrimaryMuscle), strings.TrimSpace(req.SecondaryMuscle),
-		strings.TrimSpace(req.Description), id,
+		strings.TrimSpace(req.Description), defaultTo(req.TrackingType, TrackingWeightReps), id,
 	)
 	exercise, err := scanExercise(row)
 	if pqErr, ok := err.(*pq.Error); ok && string(pqErr.Code) == exerciseUniqueViolation {
@@ -305,7 +306,7 @@ func (h *handler) UpdateExerciseDescription(w http.ResponseWriter, r *http.Reque
 
 	row := h.db.QueryRow(
 		`UPDATE exercises SET description = $1 WHERE id = $2
-		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, media_url, media_type, is_custom`,
+		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, tracking_type, media_url, media_type, is_custom`,
 		strings.TrimSpace(req.Description), id,
 	)
 	exercise, err := scanExercise(row)

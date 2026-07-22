@@ -461,7 +461,7 @@ func (h *handler) loadSession(id int64) (*Session, error) {
 
 	rows, err := h.db.Query(`
 		SELECT se.id, se.exercise_id, se.position, se.notes,
-		       e.name, e.equipment, e.primary_muscle, e.secondary_muscle, e.description, e.media_url, e.media_type, e.is_custom
+		       e.name, e.equipment, e.primary_muscle, e.secondary_muscle, e.description, e.tracking_type, e.media_url, e.media_type, e.is_custom
 		FROM session_exercises se
 		JOIN exercises e ON e.id = se.exercise_id
 		WHERE se.session_id = $1
@@ -478,7 +478,7 @@ func (h *handler) loadSession(id int64) (*Session, error) {
 		if err := rows.Scan(
 			&se.ID, &se.ExerciseID, &se.Position, &se.Notes,
 			&se.Exercise.Name, &se.Exercise.Equipment, &se.Exercise.PrimaryMuscle,
-			&se.Exercise.SecondaryMuscle, &se.Exercise.Description,
+			&se.Exercise.SecondaryMuscle, &se.Exercise.Description, &se.Exercise.TrackingType,
 			&se.Exercise.MediaURL, &se.Exercise.MediaType, &se.Exercise.IsCustom,
 		); err != nil {
 			return nil, err
@@ -496,7 +496,8 @@ func (h *handler) loadSession(id int64) (*Session, error) {
 	}
 
 	setRows, err := h.db.Query(`
-		SELECT st.session_exercise_id, st.id, st.set_number, st.reps, st.weight_grams, st.is_warmup, st.completed
+		SELECT st.session_exercise_id, st.id, st.set_number, st.reps, st.weight_grams,
+		       st.duration_seconds, st.distance_meters, st.is_warmup, st.completed
 		FROM exercise_sets st
 		JOIN session_exercises se ON se.id = st.session_exercise_id
 		WHERE se.session_id = $1
@@ -510,7 +511,8 @@ func (h *handler) loadSession(id int64) (*Session, error) {
 		var sessionExerciseID int64
 		var set ExerciseSet
 		if err := setRows.Scan(
-			&sessionExerciseID, &set.ID, &set.SetNumber, &set.Reps, &set.WeightGrams, &set.IsWarmup, &set.Completed,
+			&sessionExerciseID, &set.ID, &set.SetNumber, &set.Reps, &set.WeightGrams,
+			&set.DurationSeconds, &set.DistanceMeters, &set.IsWarmup, &set.Completed,
 		); err != nil {
 			return nil, err
 		}

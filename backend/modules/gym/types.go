@@ -2,6 +2,7 @@ package gym
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -22,6 +23,17 @@ const (
 	defaultRoutineIcon  = "dumbbell"
 )
 
+// How an exercise is logged. Most movements are weight x reps, but cardio is
+// distance and time, and an isometric hold is time alone — recording a plank
+// as "reps" stores a number that means nothing.
+const (
+	TrackingWeightReps       = "weight_reps"
+	TrackingDurationDistance = "duration_distance"
+	TrackingDuration         = "duration"
+)
+
+var trackingTypes = []string{TrackingWeightReps, TrackingDurationDistance, TrackingDuration}
+
 // Exercise is a catalog entry. Seeded rows (is_custom = false) come from the
 // bundled CSV; user-created ones are flagged is_custom = true so the seeder
 // never touches them.
@@ -33,9 +45,11 @@ type Exercise struct {
 	SecondaryMuscle string `json:"secondaryMuscle"`
 	// Spanish how-to text; empty until seeded or written in the app.
 	Description string `json:"description"`
-	MediaURL    string `json:"mediaUrl"`
-	MediaType   string `json:"mediaType"`
-	IsCustom    bool   `json:"isCustom"`
+	// One of weight_reps | duration_distance | duration.
+	TrackingType string `json:"trackingType"`
+	MediaURL     string `json:"mediaUrl"`
+	MediaType    string `json:"mediaType"`
+	IsCustom     bool   `json:"isCustom"`
 }
 
 type listExercisesResponse struct {
@@ -65,6 +79,9 @@ type exerciseRequest struct {
 	PrimaryMuscle   string `json:"primaryMuscle"`
 	SecondaryMuscle string `json:"secondaryMuscle"`
 	Description     string `json:"description"`
+	// Empty defaults to weight_reps, so an older client that doesn't know
+	// about tracking types still creates a usable exercise.
+	TrackingType string `json:"trackingType"`
 }
 
 func (r exerciseRequest) validate() error {
@@ -80,6 +97,9 @@ func (r exerciseRequest) validate() error {
 	}
 	if len([]rune(r.Description)) > maxExerciseDescriptionLength {
 		return fmt.Errorf("description is too long (max %d characters)", maxExerciseDescriptionLength)
+	}
+	if r.TrackingType != "" && !slices.Contains(trackingTypes, r.TrackingType) {
+		return fmt.Errorf("invalid trackingType: %s", r.TrackingType)
 	}
 	return nil
 }
@@ -105,8 +125,13 @@ type ExerciseSet struct {
 	SetNumber   int   `json:"setNumber"`
 	Reps        int   `json:"reps"`
 	WeightGrams int64 `json:"weightGrams"`
-	IsWarmup    bool  `json:"isWarmup"`
-	Completed   bool  `json:"completed"`
+	// Both stay 0 on a weight_reps set. They live here rather than in a
+	// separate cardio table so progress queries stay one path, and so hybrids
+	// (Farmers Walk, Sled Push) can carry weight and distance at once.
+	DurationSeconds int  `json:"durationSeconds"`
+	DistanceMeters  int  `json:"distanceMeters"`
+	IsWarmup        bool `json:"isWarmup"`
+	Completed       bool `json:"completed"`
 }
 
 // SessionExercise is one exercise performed in a session, with the catalog
@@ -272,6 +297,12 @@ type ProgressPoint struct {
 	TopSet           TopSet `json:"topSet"`
 	// Epley estimate from the top set: weight x (1 + reps/30).
 	Estimated1RMGrams int64 `json:"estimated1rmGrams"`
+	// Cardio and hold metrics. Volume and 1RM are meaningless for those, so
+	// the client charts these instead depending on the exercise's tracking
+	// type — see ProgressMetric on the frontend.
+	TotalDurationSeconds int64 `json:"totalDurationSeconds"`
+	TotalDistanceMeters  int64 `json:"totalDistanceMeters"`
+	MaxDurationSeconds   int64 `json:"maxDurationSeconds"`
 }
 
 type exerciseProgressResponse struct {
@@ -294,10 +325,12 @@ type sessionExerciseRequest struct {
 }
 
 type setInput struct {
-	Reps        int   `json:"reps"`
-	WeightGrams int64 `json:"weightGrams"`
-	IsWarmup    bool  `json:"isWarmup"`
-	Completed   bool  `json:"completed"`
+	Reps            int   `json:"reps"`
+	WeightGrams     int64 `json:"weightGrams"`
+	DurationSeconds int   `json:"durationSeconds"`
+	DistanceMeters  int   `json:"distanceMeters"`
+	IsWarmup        bool  `json:"isWarmup"`
+	Completed       bool  `json:"completed"`
 }
 
 type replaceSetsRequest struct {
@@ -316,6 +349,12 @@ func (r replaceSetsRequest) validate() error {
 		}
 		if s.WeightGrams < 0 {
 			return fmt.Errorf("set %d: weight cannot be negative", i+1)
+		}
+		if s.DurationSeconds < 0 {
+			return fmt.Errorf("set %d: duration cannot be negative", i+1)
+		}
+		if s.DistanceMeters < 0 {
+			return fmt.Errorf("set %d: distance cannot be negative", i+1)
 		}
 	}
 	return nil

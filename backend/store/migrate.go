@@ -253,6 +253,11 @@ func Migrate(db *sql.DB) error {
 		// Spanish how-to text, seeded from a companion CSV. Kept out of the
 		// source catalog file so re-importing that file never touches it.
 		`ALTER TABLE exercises ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`,
+		// How an exercise is logged. Most are weight x reps, but cardio is
+		// distance and time, and an isometric hold is time alone — forcing
+		// those into reps records a number that means nothing. Free TEXT
+		// rather than a CHECK, same reasoning as the muscle columns.
+		`ALTER TABLE exercises ADD COLUMN IF NOT EXISTS tracking_type TEXT NOT NULL DEFAULT 'weight_reps'`,
 		`CREATE INDEX IF NOT EXISTS idx_exercises_primary_muscle ON exercises (primary_muscle)`,
 		`CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercises (equipment)`,
 		`CREATE TABLE IF NOT EXISTS routines (
@@ -316,6 +321,16 @@ func Migrate(db *sql.DB) error {
 			completed           BOOLEAN NOT NULL DEFAULT true,
 			UNIQUE (session_exercise_id, set_number)
 		)`,
+		// Nullable in spirit, zero in practice: a weight_reps set leaves both
+		// at 0, and they live on exercise_sets rather than a separate cardio
+		// table so progress stays one query and hybrids (Farmers Walk carries
+		// weight AND distance, Sled Push too) have a home.
+		`ALTER TABLE exercise_sets ADD COLUMN IF NOT EXISTS duration_seconds INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE exercise_sets ADD COLUMN IF NOT EXISTS distance_meters INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE exercise_sets DROP CONSTRAINT IF EXISTS exercise_sets_duration_seconds_check`,
+		`ALTER TABLE exercise_sets ADD CONSTRAINT exercise_sets_duration_seconds_check CHECK (duration_seconds >= 0)`,
+		`ALTER TABLE exercise_sets DROP CONSTRAINT IF EXISTS exercise_sets_distance_meters_check`,
+		`ALTER TABLE exercise_sets ADD CONSTRAINT exercise_sets_distance_meters_check CHECK (distance_meters >= 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_exercise_sets_session_exercise_id ON exercise_sets (session_exercise_id)`,
 	}
 	for _, s := range stmts {

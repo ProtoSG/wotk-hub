@@ -21,15 +21,19 @@ export function toRows(sets: readonly ExerciseSet[]): SetRow[] {
     key: `saved-${set.id}`,
     reps: set.reps,
     weightGrams: set.weightGrams,
+    durationSeconds: set.durationSeconds,
+    distanceMeters: set.distanceMeters,
     isWarmup: set.isWarmup,
     completed: set.completed,
   }))
 }
 
 export function toInputs(rows: readonly SetRow[]): SetInput[] {
-  return rows.map(({ reps, weightGrams, isWarmup, completed }) => ({
+  return rows.map(({ reps, weightGrams, durationSeconds, distanceMeters, isWarmup, completed }) => ({
     reps,
     weightGrams,
+    durationSeconds,
+    distanceMeters,
     isWarmup,
     completed,
   }))
@@ -48,6 +52,8 @@ export function nextRow(rows: readonly SetRow[]): SetRow {
     key: `draft-${crypto.randomUUID()}`,
     reps: previous?.reps ?? 0,
     weightGrams: previous?.weightGrams ?? 0,
+    durationSeconds: previous?.durationSeconds ?? 0,
+    distanceMeters: previous?.distanceMeters ?? 0,
     isWarmup: false,
     completed: false,
   }
@@ -81,6 +87,8 @@ export function rowsEqual(a: readonly SetRow[], b: readonly SetRow[]): boolean {
     return (
       row.reps === other.reps &&
       row.weightGrams === other.weightGrams &&
+      row.durationSeconds === other.durationSeconds &&
+      row.distanceMeters === other.distanceMeters &&
       row.isWarmup === other.isWarmup &&
       row.completed === other.completed
     )

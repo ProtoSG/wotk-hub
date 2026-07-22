@@ -1,3 +1,9 @@
+/**
+ * How an exercise is logged. Cardio is distance and time, an isometric hold is
+ * time alone, and forcing either into reps records a meaningless number.
+ */
+export type TrackingType = 'weight_reps' | 'duration_distance' | 'duration'
+
 export interface Exercise {
   id: number
   name: string
@@ -8,6 +14,7 @@ export interface Exercise {
   secondaryMuscle: string
   /** Spanish how-to text; empty until seeded or written in the app. */
   description: string
+  trackingType: TrackingType
   mediaUrl: string
   mediaType: 'image' | 'video' | ''
   isCustom: boolean
@@ -19,6 +26,7 @@ export interface ExerciseInput {
   primaryMuscle: string
   secondaryMuscle: string
   description: string
+  trackingType: TrackingType
 }
 
 export interface ExerciseFilters {
@@ -46,6 +54,9 @@ export interface ExerciseSet {
   reps: number
   /** Integer grams — see lib/weight.ts for display conversion. */
   weightGrams: number
+  /** Both stay 0 on a weight_reps set. */
+  durationSeconds: number
+  distanceMeters: number
   isWarmup: boolean
   completed: boolean
 }
@@ -54,6 +65,8 @@ export interface ExerciseSet {
 export interface SetInput {
   reps: number
   weightGrams: number
+  durationSeconds: number
+  distanceMeters: number
   isWarmup: boolean
   completed: boolean
 }
@@ -165,6 +178,9 @@ export interface ProgressPoint {
   topSet: TopSet
   /** Epley estimate from the top set: weight x (1 + reps/30). */
   estimated1rmGrams: number
+  totalDurationSeconds: number
+  totalDistanceMeters: number
+  maxDurationSeconds: number
 }
 
 export interface ProgressSummary {
