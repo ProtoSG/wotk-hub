@@ -1,0 +1,2095 @@
+basePath: /api
+definitions:
+  auth.User:
+    properties:
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      role:
+        type: string
+    type: object
+  auth.adminUserView:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      role:
+        type: string
+    type: object
+  auth.apiKeyCreated:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      key:
+        type: string
+      name:
+        type: string
+    type: object
+  auth.apiKeyView:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      last_used_at:
+        type: string
+      name:
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  auth.createAPIKeyRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  auth.deleteUserResponse:
+    properties:
+      deleted:
+        type: boolean
+    type: object
+  auth.loginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  auth.registerRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+    type: object
+  auth.revokeAPIKeyResponse:
+    properties:
+      revoked:
+        type: boolean
+    type: object
+  couple.Date:
+    properties:
+      category:
+        type: string
+      costCents:
+        type: integer
+      createdAt:
+        type: string
+      id:
+        type: integer
+      notes:
+        type: string
+      occurredOn:
+        type: string
+      place:
+        type: string
+      rating:
+        type: integer
+      status:
+        type: string
+      tiktokUrl:
+        type: string
+    type: object
+  couple.dateRequest:
+    properties:
+      category:
+        type: string
+      costCents:
+        type: integer
+      notes:
+        type: string
+      occurredOn:
+        type: string
+      place:
+        type: string
+      rating:
+        type: integer
+      status:
+        type: string
+      tiktokUrl:
+        type: string
+    type: object
+  couple.listDatesResponse:
+    properties:
+      dates:
+        items:
+          $ref: '#/definitions/couple.Date'
+        type: array
+    type: object
+  db.ColumnInfo:
+    properties:
+      default:
+        type: string
+      isPrimaryKey:
+        type: boolean
+      name:
+        type: string
+      nullable:
+        type: boolean
+      type:
+        type: string
+    type: object
+  db.ForeignKey:
+    properties:
+      fromColumn:
+        type: string
+      fromTable:
+        type: string
+      toColumn:
+        type: string
+      toTable:
+        type: string
+    type: object
+  db.QueryResult:
+    properties:
+      columns:
+        items:
+          type: string
+        type: array
+      executionTimeMs:
+        type: integer
+      rowCount:
+        type: integer
+      rows:
+        items:
+          additionalProperties: {}
+          type: object
+        type: array
+      truncated:
+        type: boolean
+    type: object
+  dbmanager.connRequest:
+    properties:
+      database:
+        type: string
+      dialect:
+        type: string
+      host:
+        type: string
+      password:
+        type: string
+      port:
+        type: integer
+      user:
+        type: string
+    type: object
+  dbmanager.listRelationshipsResponse:
+    properties:
+      relationships:
+        items:
+          $ref: '#/definitions/db.ForeignKey'
+        type: array
+    type: object
+  dbmanager.listTablesResponse:
+    properties:
+      tables:
+        items:
+          type: string
+        type: array
+    type: object
+  dbmanager.queryRequest:
+    properties:
+      database:
+        type: string
+      dialect:
+        type: string
+      host:
+        type: string
+      password:
+        type: string
+      port:
+        type: integer
+      sql:
+        type: string
+      user:
+        type: string
+    type: object
+  dbmanager.tableSchemaResponse:
+    properties:
+      columns:
+        items:
+          $ref: '#/definitions/db.ColumnInfo'
+        type: array
+      table:
+        type: string
+    type: object
+  dbmanager.testConnectionResponse:
+    properties:
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  finances.Budget:
+    properties:
+      category:
+        type: string
+      id:
+        type: integer
+      monthlyLimitCents:
+        type: integer
+      spentCents:
+        type: integer
+    type: object
+  finances.Card:
+    properties:
+      balanceCents:
+        type: integer
+      bank:
+        type: string
+      color:
+        type: string
+      createdAt:
+        type: string
+      creditLimitCents:
+        type: integer
+      icon:
+        type: string
+      id:
+        type: integer
+      last4:
+        type: string
+      name:
+        type: string
+      usedCreditCents:
+        type: integer
+    type: object
+  finances.Category:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      kind:
+        type: string
+      label:
+        type: string
+      name:
+        type: string
+    type: object
+  finances.CategoryAmount:
+    properties:
+      amountCents:
+        type: integer
+      category:
+        type: string
+    type: object
+  finances.SavingsContribution:
+    properties:
+      amountCents:
+        type: integer
+      createdAt:
+        type: string
+      createdBy:
+        type: integer
+      date:
+        type: string
+      goalId:
+        type: integer
+      id:
+        type: integer
+      note:
+        type: string
+      transactionId:
+        type: integer
+    type: object
+  finances.SavingsGoal:
+    properties:
+      color:
+        type: string
+      createdAt:
+        type: string
+      createdBy:
+        type: integer
+      currentCents:
+        type: integer
+      deadline:
+        type: string
+      defaultCardId:
+        type: integer
+      icon:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      targetCents:
+        type: integer
+    type: object
+  finances.Subscription:
+    properties:
+      active:
+        type: boolean
+      amountCents:
+        type: integer
+      cardId:
+        type: integer
+      category:
+        type: string
+      createdAt:
+        type: string
+      frequency:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      nextBillingOn:
+        type: string
+    type: object
+  finances.Summary:
+    properties:
+      balanceCents:
+        type: integer
+      categoryBreakdown:
+        items:
+          $ref: '#/definitions/finances.CategoryAmount'
+        type: array
+      monthExpenseCents:
+        type: integer
+      monthIncomeCents:
+        type: integer
+      monthlyTrend:
+        items:
+          $ref: '#/definitions/finances.TrendPoint'
+        type: array
+    type: object
+  finances.Transaction:
+    properties:
+      amountCents:
+        type: integer
+      cardId:
+        type: integer
+      category:
+        type: string
+      createdAt:
+        type: string
+      date:
+        type: string
+      description:
+        type: string
+      fromCardId:
+        type: integer
+      id:
+        type: integer
+      toCardId:
+        type: integer
+      type:
+        type: string
+    type: object
+  finances.TrendPoint:
+    properties:
+      expenseCents:
+        type: integer
+      incomeCents:
+        type: integer
+      month:
+        type: string
+    type: object
+  finances.budgetRequest:
+    properties:
+      monthlyLimitCents:
+        type: integer
+    type: object
+  finances.cardRequest:
+    properties:
+      bank:
+        type: string
+      color:
+        type: string
+      creditLimitCents:
+        type: integer
+      icon:
+        type: string
+      initialBalanceCents:
+        type: integer
+      last4:
+        type: string
+      name:
+        type: string
+    type: object
+  finances.cardTransferRequest:
+    properties:
+      amountCents:
+        type: integer
+      date:
+        type: string
+      fromCardId:
+        type: integer
+      note:
+        type: string
+      toCardId:
+        type: integer
+    type: object
+  finances.categoryRequest:
+    properties:
+      kind:
+        type: string
+      label:
+        type: string
+      name:
+        type: string
+    type: object
+  finances.listBudgetsResponse:
+    properties:
+      budgets:
+        items:
+          $ref: '#/definitions/finances.Budget'
+        type: array
+    type: object
+  finances.listCardsResponse:
+    properties:
+      cards:
+        items:
+          $ref: '#/definitions/finances.Card'
+        type: array
+    type: object
+  finances.listCategoriesResponse:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/finances.Category'
+        type: array
+    type: object
+  finances.listContributionsResponse:
+    properties:
+      contributions:
+        items:
+          $ref: '#/definitions/finances.SavingsContribution'
+        type: array
+    type: object
+  finances.listGoalsResponse:
+    properties:
+      goals:
+        items:
+          $ref: '#/definitions/finances.SavingsGoal'
+        type: array
+    type: object
+  finances.listSubscriptionsResponse:
+    properties:
+      monthlyCommittedCents:
+        type: integer
+      subscriptions:
+        items:
+          $ref: '#/definitions/finances.Subscription'
+        type: array
+    type: object
+  finances.listTransactionsResponse:
+    properties:
+      transactions:
+        items:
+          $ref: '#/definitions/finances.Transaction'
+        type: array
+    type: object
+  finances.savingsContributionRequest:
+    properties:
+      amountCents:
+        type: integer
+      date:
+        type: string
+      note:
+        type: string
+    type: object
+  finances.savingsGoalRequest:
+    properties:
+      color:
+        type: string
+      deadline:
+        type: string
+      defaultCardId:
+        type: integer
+      icon:
+        type: string
+      name:
+        type: string
+      targetCents:
+        type: integer
+    type: object
+  finances.subscriptionRequest:
+    properties:
+      active:
+        type: boolean
+      amountCents:
+        type: integer
+      cardId:
+        type: integer
+      category:
+        type: string
+      frequency:
+        type: string
+      name:
+        type: string
+      nextBillingOn:
+        type: string
+    type: object
+  finances.transactionRequest:
+    properties:
+      amountCents:
+        type: integer
+      cardId:
+        type: integer
+      category:
+        type: string
+      date:
+        type: string
+      description:
+        type: string
+      type:
+        type: string
+    type: object
+  httpx.APIError:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  httpx.SuccessResponse:
+    properties:
+      success:
+        type: boolean
+    type: object
+  ytdlp.downloadRequest:
+    properties:
+      url:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Backend API for Work Hub — dashboard, DB manager, finances (PEN), and
+    couple modules.
+  title: Work Hub API
+  version: "1.0"
+paths:
+  /auth/keys:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/auth.apiKeyView'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List API keys
+      tags:
+      - auth
+    post:
+      consumes:
+      - application/json
+      description: Requires an active login session (cookie), not another API key
+        — you can't mint a key using a key. The "key" field is shown only once and
+        cannot be retrieved again.
+      parameters:
+      - description: Key details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.createAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.apiKeyCreated'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create an API key
+      tags:
+      - auth
+  /auth/keys/{id}:
+    delete:
+      parameters:
+      - description: API key ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.revokeAPIKeyResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Revoke an API key
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Public endpoint. Validates email/password and sets access_token/refresh_token
+        cookies.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: invalid email or password
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      summary: Log in
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+      security:
+      - CookieAuth: []
+      summary: Log out
+      tags:
+      - auth
+  /auth/logout-all:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Log out of all sessions
+      tags:
+      - auth
+  /auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.User'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get current user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      description: Public endpoint (relies on the refresh_token cookie, not JWT auth).
+        Atomically claims and rotates the refresh token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "401":
+          description: unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Public endpoint. Registration closes after 2 accounts exist; role
+        is server-assigned (first=admin, second=guest).
+      parameters:
+      - description: Registration details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.registerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "403":
+          description: registration is closed
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: email already registered
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      summary: Register a new user
+      tags:
+      - auth
+  /auth/users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/auth.adminUserView'
+            type: array
+      security:
+      - CookieAuth: []
+      summary: List users
+      tags:
+      - auth
+  /auth/users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.deleteUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a user
+      tags:
+      - auth
+  /cli/me:
+    get:
+      description: Only mounted when CLI_TOKEN is set. Intended for the workhubctl
+        CLI tool.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.User'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - BearerAuth: []
+      summary: Get the CLI-token user
+      tags:
+      - cli
+  /couple/dates:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/couple.listDatesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List couple dates
+      tags:
+      - couple
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Date details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/couple.dateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/couple.Date'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a couple date
+      tags:
+      - couple
+  /couple/dates/{id}:
+    delete:
+      parameters:
+      - description: Date ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a couple date
+      tags:
+      - couple
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Date ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Date details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/couple.dateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/couple.Date'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a couple date
+      tags:
+      - couple
+  /db/connect:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Connection credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dbmanager.connRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dbmanager.testConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Test a database connection
+      tags:
+      - dbmanager
+  /db/query:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Connection credentials and SQL statement
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dbmanager.queryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/db.QueryResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Run a SQL query
+      tags:
+      - dbmanager
+  /db/relationships:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Connection credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dbmanager.connRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dbmanager.listRelationshipsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List foreign key relationships
+      tags:
+      - dbmanager
+  /db/table/{name}/schema:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Table name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Connection credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dbmanager.connRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dbmanager.tableSchemaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get table schema
+      tags:
+      - dbmanager
+  /db/tables:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Connection credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dbmanager.connRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dbmanager.listTablesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List tables
+      tags:
+      - dbmanager
+  /finances/budgets:
+    get:
+      parameters:
+      - description: Month, YYYY-MM (defaults to current month)
+        in: query
+        name: month
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listBudgetsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List budgets
+      tags:
+      - finances
+  /finances/budgets/{category}:
+    delete:
+      parameters:
+      - description: Expense category
+        in: path
+        name: category
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a budget
+      tags:
+      - finances
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Expense category
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Budget details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.budgetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.Budget'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Upsert a budget
+      tags:
+      - finances
+  /finances/cards:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listCardsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List cards
+      tags:
+      - finances
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Card details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.cardRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.Card'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a card
+      tags:
+      - finances
+  /finances/cards/{id}:
+    delete:
+      parameters:
+      - description: Card ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: last active card
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a card
+      tags:
+      - finances
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Card ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Card details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.cardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.Card'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a card
+      tags:
+      - finances
+  /finances/cards/transfers:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Transfer details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.cardTransferRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.Transaction'
+        "400":
+          description: insufficient balance or invalid request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: card not found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Transfer between cards
+      tags:
+      - finances
+  /finances/categories:
+    get:
+      parameters:
+      - description: Filter by kind (income, expense)
+        in: query
+        name: kind
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listCategoriesResponse'
+      summary: List categories
+      tags:
+      - finances
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.categoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: category already exists
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a category
+      tags:
+      - finances
+  /finances/categories/{id}:
+    delete:
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: category is in use
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a category
+      tags:
+      - finances
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Category details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.categoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: category already exists
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a category
+      tags:
+      - finances
+  /finances/savings-goals:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listGoalsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List savings goals
+      tags:
+      - finances
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Goal details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.savingsGoalRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.SavingsGoal'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: card not found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a savings goal
+      tags:
+      - finances
+  /finances/savings-goals/{id}:
+    delete:
+      parameters:
+      - description: Goal ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a savings goal
+      tags:
+      - finances
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Goal ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Goal details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.savingsGoalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.SavingsGoal'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a savings goal
+      tags:
+      - finances
+  /finances/savings-goals/{id}/contributions:
+    get:
+      parameters:
+      - description: Goal ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listContributionsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: goal not found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List contributions to a savings goal
+      tags:
+      - finances
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Goal ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Contribution details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.savingsContributionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.SavingsContribution'
+        "400":
+          description: insufficient balance or invalid request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: goal not found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: goal's default card was archived
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Contribute to a savings goal
+      tags:
+      - finances
+  /finances/subscriptions:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listSubscriptionsResponse'
+      security:
+      - CookieAuth: []
+      summary: List subscriptions
+      tags:
+      - finances
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Subscription details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.subscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.Subscription'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: card not found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a subscription
+      tags:
+      - finances
+  /finances/subscriptions/{id}:
+    delete:
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a subscription
+      tags:
+      - finances
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Subscription details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.subscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.Subscription'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a subscription
+      tags:
+      - finances
+  /finances/summary:
+    get:
+      description: All-time balance, selected month income/expense, a 6-month trend,
+        and expense breakdown by category.
+      parameters:
+      - description: Month, YYYY-MM (defaults to current month)
+        in: query
+        name: month
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.Summary'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get financial summary
+      tags:
+      - finances
+  /finances/transactions:
+    get:
+      parameters:
+      - description: Filter by month, YYYY-MM
+        in: query
+        name: month
+        type: string
+      - description: Filter by type (income, expense, transfer)
+        in: query
+        name: type
+        type: string
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.listTransactionsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List transactions
+      tags:
+      - finances
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Transaction details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.transactionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.Transaction'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: card not found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a transaction
+      tags:
+      - finances
+  /finances/transactions/{id}:
+    delete:
+      parameters:
+      - description: Transaction ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a transaction
+      tags:
+      - finances
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Transaction ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Transaction details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/finances.transactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/finances.Transaction'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a transaction
+      tags:
+      - finances
+  /finances/transactions/{id}/refund:
+    post:
+      parameters:
+      - description: Transaction ID (must be an expense)
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/finances.Transaction'
+        "400":
+          description: not an expense
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Refund a transaction
+      tags:
+      - finances
+  /ytdlp/download:
+    post:
+      consumes:
+      - application/json
+      description: Downloads and converts a YouTube URL to MP3, streaming the file
+        back. youtube.com/youtu.be hosts only.
+      parameters:
+      - description: YouTube URL
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/ytdlp.downloadRequest'
+      produces:
+      - audio/mpeg
+      responses:
+        "200":
+          description: MP3 audio stream
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "429":
+          description: server busy
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "502":
+          description: download failed
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Download a YouTube video as MP3
+      tags:
+      - ytdlp
+  /ytdlp/public/download:
+    post:
+      consumes:
+      - application/json
+      description: 'Same as Download but gated by a shared-secret token instead of
+        JWT login — for sharing with someone without an account. Token travels as
+        ?token= or an Authorization: Bearer header. Only mounted when YTDLP_PUBLIC_TOKEN
+        is set.'
+      parameters:
+      - description: Shared-secret token (alternative to the Authorization header)
+        in: query
+        name: token
+        type: string
+      - description: YouTube URL
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/ytdlp.downloadRequest'
+      produces:
+      - audio/mpeg
+      responses:
+        "200":
+          description: MP3 audio stream
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "429":
+          description: server busy
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "502":
+          description: download failed
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - BearerAuth: []
+      summary: Download a YouTube video as MP3 (public, token-gated)
+      tags:
+      - ytdlp
+securityDefinitions:
+  BearerAuth:
+    description: Static token used by CLI and public share routes, sent as "Bearer
+      <token>".
+    in: header
+    name: Authorization
+    type: apiKey
+  CookieAuth:
+    description: JWT access token issued by /api/auth/login, sent as the access_token
+      cookie (not an Authorization header — see middleware.JWTAuth).
+    in: cookie
+    name: access_token
+    type: apiKey
+swagger: "2.0"

@@ -36,3 +36,9 @@ export function monthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number)
   return new Date(y, m - 1, 1).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })
 }
+
+/** Compact label for "YYYY-MM", e.g. "jul 2026" — narrow layouts (mobile MonthPicker). */
+export function monthLabelShort(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('es-PE', { month: 'short', year: 'numeric' })
+}

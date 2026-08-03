@@ -33,9 +33,9 @@ import { useCoupleApi } from '@/hooks/useCoupleApi'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
 import { DATE_CATEGORY_LABELS, type CoupleDate } from '@/types/couple.types'
+import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import CoupleCover from './CoupleCover'
 import DateForm from './DateForm'
-import FloatingActionButton from './FloatingActionButton'
 
 const UNDO_WINDOW_MS = 4500
 
@@ -270,65 +270,86 @@ export default function CouplePage() {
   const totalSpentCents = doneDates.reduce((sum, d) => sum + (d.costCents ?? 0), 0)
 
   return (
-    <div className="space-y-6 pb-24 sm:pb-0">
-      <CoupleCover
-        onNewDate={() => {
-          setEditing(null)
-          setFormOpen(true)
-        }}
-      />
+    <>
+      <div className="space-y-6 pb-24 sm:pb-0">
+        <CoupleCover
+          onNewDate={() => {
+            setEditing(null)
+            setFormOpen(true)
+          }}
+        />
 
-      {/* Constrained to a reading-column width (Day One's centered journal
-          feel) instead of stretching full viewport width — with only 1-3
-          entries, a full-bleed grid left a large dead void below the cards
-          that read as cold/unfinished. The cover above stays full width,
-          untouched. */}
-      <div className="mx-auto w-full max-w-4xl space-y-6">
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <CozyCard className="animate-card-in">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Citas registradas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{dates.length}</div>
-            </CardContent>
-          </CozyCard>
-          <CozyCard className="animate-card-in [animation-delay:60ms]">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Calificación promedio</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {avgRating != null ? (
-                <div className="text-2xl font-bold">{avgRating.toFixed(1)}</div>
-              ) : (
-                <Star className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
+        {/* Constrained to a reading-column width (Day One's centered journal
+            feel) instead of stretching full viewport width — with only 1-3
+            entries, a full-bleed grid left a large dead void below the cards
+            that read as cold/unfinished. The cover above stays full width,
+            untouched. */}
+        <div className="mx-auto w-full max-w-4xl space-y-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <CozyCard className="animate-card-in">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Citas registradas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{dates.length}</div>
+              </CardContent>
+            </CozyCard>
+            <CozyCard className="animate-card-in [animation-delay:60ms]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Calificación promedio</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {avgRating != null ? (
+                  <div className="text-2xl font-bold">{avgRating.toFixed(1)}</div>
+                ) : (
+                  <Star className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
+                )}
+              </CardContent>
+            </CozyCard>
+            <CozyCard className="col-span-2 animate-card-in [animation-delay:120ms] sm:col-span-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total invertido</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatPEN(totalSpentCents)}</div>
+              </CardContent>
+            </CozyCard>
+          </div>
+
+          {dates.length === 0 ? (
+            <CozyCard className="animate-card-in">
+              <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+                <Heart className="h-8 w-8 animate-pulse" />
+                <p>Todavía no registraste ninguna cita</p>
+              </CardContent>
+            </CozyCard>
+          ) : (
+            <>
+              {plannedDates.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-sm font-semibold text-muted-foreground">Planeadas</h2>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {plannedDates.map((d, i) => (
+                      <DateCard
+                        key={d.id}
+                        date={d}
+                        delay={Math.min(i * 40, 320)}
+                        onEdit={() => {
+                          setEditing(d)
+                          setFormOpen(true)
+                        }}
+                        onDelete={() => handleDelete(d)}
+                        onMarkDone={() => handleMarkDone(d)}
+                      />
+                    ))}
+                  </div>
+                </div>
               )}
-            </CardContent>
-          </CozyCard>
-          <CozyCard className="col-span-2 animate-card-in [animation-delay:120ms] sm:col-span-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total invertido</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatPEN(totalSpentCents)}</div>
-            </CardContent>
-          </CozyCard>
-        </div>
 
-        {dates.length === 0 ? (
-          <CozyCard className="animate-card-in">
-            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-              <Heart className="h-8 w-8 animate-pulse" />
-              <p>Todavía no registraste ninguna cita</p>
-            </CardContent>
-          </CozyCard>
-        ) : (
-          <>
-            {plannedDates.length > 0 && (
               <div className="space-y-3">
-                <h2 className="text-sm font-semibold text-muted-foreground">Planeadas</h2>
+                {plannedDates.length > 0 && <h2 className="text-sm font-semibold text-muted-foreground">Realizadas</h2>}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {plannedDates.map((d, i) => (
+                  {doneDates.map((d, i) => (
                     <DateCard
                       key={d.id}
                       date={d}
@@ -338,47 +359,28 @@ export default function CouplePage() {
                         setFormOpen(true)
                       }}
                       onDelete={() => handleDelete(d)}
-                      onMarkDone={() => handleMarkDone(d)}
                     />
                   ))}
+
+                  {dates.length < 4 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(null)
+                        setFormOpen(true)
+                      }}
+                      className="animate-card-in flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[var(--radius)] border-2 border-dashed border-muted-foreground/25 p-5 text-muted-foreground/70 transition-colors hover:border-primary/40 hover:text-primary"
+                      style={{ animationDelay: `${Math.min(doneDates.length * 40, 320)}ms` }}
+                    >
+                      <Plus className="h-5 w-5" />
+                      <span className="text-sm font-medium">Agregar otra cita</span>
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
-
-            <div className="space-y-3">
-              {plannedDates.length > 0 && <h2 className="text-sm font-semibold text-muted-foreground">Realizadas</h2>}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {doneDates.map((d, i) => (
-                  <DateCard
-                    key={d.id}
-                    date={d}
-                    delay={Math.min(i * 40, 320)}
-                    onEdit={() => {
-                      setEditing(d)
-                      setFormOpen(true)
-                    }}
-                    onDelete={() => handleDelete(d)}
-                  />
-                ))}
-
-                {dates.length < 4 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(null)
-                      setFormOpen(true)
-                    }}
-                    className="animate-card-in flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[var(--radius)] border-2 border-dashed border-muted-foreground/25 p-5 text-muted-foreground/70 transition-colors hover:border-primary/40 hover:text-primary"
-                    style={{ animationDelay: `${Math.min(doneDates.length * 40, 320)}ms` }}
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span className="text-sm font-medium">Agregar otra cita</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <FloatingActionButton
@@ -390,6 +392,6 @@ export default function CouplePage() {
       />
 
       <DateForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editing={editing} />
-    </div>
+    </>
   )
 }

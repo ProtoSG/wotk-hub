@@ -129,6 +129,15 @@ func monthlyCents(amountCents int64, frequency string) int64 {
 	}
 }
 
+// ListSubscriptions returns every subscription along with the total
+// monthly-normalized committed spend across active ones.
+//
+// @Summary List subscriptions
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} listSubscriptionsResponse
+// @Router /finances/subscriptions [get]
 func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(
 		`SELECT id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id
@@ -170,6 +179,18 @@ func (h *handler) subscriptionCardExists(cardID int64) error {
 	return h.db.QueryRow(`SELECT id FROM cards WHERE id = $1 AND deleted_at IS NULL`, cardID).Scan(&got)
 }
 
+// CreateSubscription creates a recurring subscription tied to a card.
+//
+// @Summary Create a subscription
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body subscriptionRequest true "Subscription details"
+// @Success 201 {object} Subscription
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError "card not found"
+// @Router /finances/subscriptions [post]
 func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	var req subscriptionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
@@ -215,6 +236,20 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, s)
 }
 
+// UpdateSubscription updates an existing subscription. Reactivating a
+// paused subscription skips missed billing periods without back-charging.
+//
+// @Summary Update a subscription
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Subscription ID"
+// @Param body body subscriptionRequest true "Subscription details"
+// @Success 200 {object} Subscription
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/subscriptions/{id} [put]
 func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
@@ -291,6 +326,17 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, s)
 }
 
+// DeleteSubscription hard-deletes a subscription.
+//
+// @Summary Delete a subscription
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Subscription ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/subscriptions/{id} [delete]
 func (h *handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {

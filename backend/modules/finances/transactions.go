@@ -89,6 +89,20 @@ func lockTransaction(tx *sql.Tx, id int64, role string, userID int64) (old Trans
 // ListTransactions scopes results by created_by for guests (their personal
 // ledger only). Admins see everything, including legacy pre-auth rows where
 // created_by is NULL.
+// ListTransactions returns transactions, scoped to the caller's own for
+// guests, everything for admins. Excludes transfers unless ?type=transfer.
+//
+// @Summary List transactions
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param month query string false "Filter by month, YYYY-MM"
+// @Param type query string false "Filter by type (income, expense, transfer)"
+// @Param category query string false "Filter by category"
+// @Success 200 {object} listTransactionsResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Router /finances/transactions [get]
 func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -154,6 +168,20 @@ func (h *handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 // side effect of CreateCard (seed), CreateContribution, or CreateCardTransfer —
 // the reload flow that used to write one was removed by the mandatory-card
 // model (see SPEC.md decision log).
+// CreateTransaction creates a new income or expense transaction tagged to a
+// card, stamping created_by from the authenticated user.
+//
+// @Summary Create a transaction
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body transactionRequest true "Transaction details"
+// @Success 201 {object} Transaction
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError "card not found"
+// @Router /finances/transactions [post]
 func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -237,6 +265,21 @@ func (h *handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 // (created_by != their id) rather than revealing it exists, and 404s an
 // attempt to edit a transfer row — those are only ever changed from their
 // originating flow (Tarjetas/Metas), not from Movimientos.
+// UpdateTransaction updates an existing income/expense transaction. Transfer
+// rows and transactions owned by another guest are rejected as 404.
+//
+// @Summary Update a transaction
+// @Tags finances
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Transaction ID"
+// @Param body body transactionRequest true "Transaction details"
+// @Success 200 {object} Transaction
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/transactions/{id} [put]
 func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -346,6 +389,19 @@ func (h *handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 // own, and 404s an attempt to delete a transfer row (see UpdateTransaction).
 // Soft delete: the row stays for history. Balance reflects the deletion
 // automatically the next time it's computed — there's nothing to reverse.
+// DeleteTransaction soft-deletes an income/expense transaction. Transfer
+// rows and transactions owned by another guest are rejected as 404.
+//
+// @Summary Delete a transaction
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Transaction ID"
+// @Success 200 {object} httpx.SuccessResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/transactions/{id} [delete]
 func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -407,6 +463,19 @@ func (h *handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 // RefundTransaction creates a new income transaction that reimburses an expense.
 // The original expense row is left unchanged. old.Type != "expense" already
 // rejects transfer rows here (a transfer is never "expense").
+// RefundTransaction creates a compensating income transaction that
+// reimburses an existing expense; the original expense row is unchanged.
+//
+// @Summary Refund a transaction
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param id path int true "Transaction ID (must be an expense)"
+// @Success 201 {object} Transaction
+// @Failure 400 {object} httpx.APIError "not an expense"
+// @Failure 401 {object} httpx.APIError
+// @Failure 404 {object} httpx.APIError
+// @Router /finances/transactions/{id}/refund [post]
 func (h *handler) RefundTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {

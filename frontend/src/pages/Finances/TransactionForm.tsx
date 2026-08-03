@@ -11,7 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { useCategories } from '@/hooks/useCategories'
+import { cn } from '@/lib/utils'
 import { solesToCents, centsToSoles } from '@/lib/currency'
+import { todayISO } from '@/lib/date'
 import type { Transaction, TransactionType, Card } from '@/types/finance.types'
 
 const schema = z.object({
@@ -30,9 +32,10 @@ interface Props {
   onClose: () => void
   onSaved: () => void
   editing?: Transaction | null
+  defaultCardId?: number | null
 }
 
-function defaults(editing?: Transaction | null): FormValues {
+function defaults(editing?: Transaction | null, defaultCardId?: number | null): Partial<FormValues> {
   return editing
     ? {
         // editing always comes from Movimientos, which never lists transfer
@@ -46,15 +49,16 @@ function defaults(editing?: Transaction | null): FormValues {
       }
     : {
         type: 'expense',
-        amount: 0,
         category: 'comida',
-        date: new Date().toISOString().slice(0, 10),
+        // Not user-editable on create — the date field is only shown when
+        // `editing`, so a new transaction always dates to today.
+        date: todayISO(),
         description: '',
-        cardId: '',
+        cardId: defaultCardId != null ? String(defaultCardId) : '',
       }
 }
 
-export default function TransactionForm({ open, onClose, onSaved, editing }: Props) {
+export default function TransactionForm({ open, onClose, onSaved, editing, defaultCardId }: Props) {
   const [saving, setSaving] = useState(false)
   const [cards, setCards] = useState<Card[]>([])
   const { createTransaction, updateTransaction, listCards } = useFinanceApi()
@@ -80,8 +84,8 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
   }, [open])
 
   useEffect(() => {
-    if (open) reset(defaults(editing))
-  }, [open, editing, reset])
+    if (open) reset(defaults(editing, defaultCardId))
+  }, [open, editing, defaultCardId, reset])
 
   const type = watch('type')
   const category = watch('category')
@@ -143,31 +147,39 @@ export default function TransactionForm({ open, onClose, onSaved, editing }: Pro
             </div>
             <div className="min-w-0 space-y-1">
               <Label>Monto (S/)</Label>
-              <Input type="number" step="0.01" min="0" {...register('amount', { valueAsNumber: true })} />
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                {...register('amount', { valueAsNumber: true })}
+              />
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Categoría</Label>
-            <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
-              <SelectTrigger>
-                <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.name}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>Fecha</Label>
-            <div className="w-1/2">
-              <Input type="date" {...register('date')} />
+          <div className={cn('grid gap-2', editing ? 'grid-cols-2' : 'grid-cols-1')}>
+            <div className="min-w-0 space-y-1">
+              <Label>Categoría</Label>
+              <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+            {editing && (
+              <div className="min-w-0 space-y-1">
+                <Label>Fecha</Label>
+                <Input type="date" {...register('date')} />
+                {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <Label>Descripción</Label>

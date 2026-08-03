@@ -28,6 +28,19 @@ func connFromBody(w http.ResponseWriter, r *http.Request) (db.ConnectionConfig, 
 	return cfg, true
 }
 
+// Connect tests a connection to an external database with the given
+// credentials. Admin only.
+//
+// @Summary Test a database connection
+// @Tags dbmanager
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body connRequest true "Connection credentials"
+// @Success 200 {object} testConnectionResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 500 {object} httpx.APIError
+// @Router /db/connect [post]
 func Connect(w http.ResponseWriter, r *http.Request) {
 	var req connRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
@@ -55,6 +68,18 @@ func Connect(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, testConnectionResponse{Success: true, Message: "Connection successful"})
 }
 
+// Tables lists the tables in the connected external database. Admin only.
+//
+// @Summary List tables
+// @Tags dbmanager
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body connRequest true "Connection credentials"
+// @Success 200 {object} listTablesResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 500 {object} httpx.APIError
+// @Router /db/tables [post]
 func Tables(w http.ResponseWriter, r *http.Request) {
 	cfg, ok := connFromBody(w, r)
 	if !ok {
@@ -79,6 +104,20 @@ func Tables(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, listTablesResponse{Tables: tables})
 }
 
+// Schema returns column info for one table in the connected external
+// database. Admin only.
+//
+// @Summary Get table schema
+// @Tags dbmanager
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param name path string true "Table name"
+// @Param body body connRequest true "Connection credentials"
+// @Success 200 {object} tableSchemaResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 500 {object} httpx.APIError
+// @Router /db/table/{name}/schema [post]
 func Schema(w http.ResponseWriter, r *http.Request) {
 	cfg, ok := connFromBody(w, r)
 	if !ok {
@@ -104,6 +143,19 @@ func Schema(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, tableSchemaResponse{Table: table, Columns: cols})
 }
 
+// Query runs an arbitrary SQL statement against the connected external
+// database and returns the raw result. Admin only.
+//
+// @Summary Run a SQL query
+// @Tags dbmanager
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body queryRequest true "Connection credentials and SQL statement"
+// @Success 200 {object} db.QueryResult
+// @Failure 400 {object} httpx.APIError
+// @Failure 500 {object} httpx.APIError
+// @Router /db/query [post]
 func Query(w http.ResponseWriter, r *http.Request) {
 	var req queryRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
@@ -139,6 +191,19 @@ func Query(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, result)
 }
 
+// Relationships lists foreign keys across the connected external database.
+// Admin only.
+//
+// @Summary List foreign key relationships
+// @Tags dbmanager
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body connRequest true "Connection credentials"
+// @Success 200 {object} listRelationshipsResponse
+// @Failure 400 {object} httpx.APIError
+// @Failure 500 {object} httpx.APIError
+// @Router /db/relationships [post]
 func Relationships(w http.ResponseWriter, r *http.Request) {
 	cfg, ok := connFromBody(w, r)
 	if !ok {

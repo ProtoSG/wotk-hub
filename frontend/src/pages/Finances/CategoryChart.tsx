@@ -90,10 +90,18 @@ export default function CategoryChart({ data }: Props) {
     categoryLabelMap[c.name] = c.label
   }
 
-  const chartData = foldIntoOtros(data).map((c) => ({
-    name: categoryLabelMap[c.category] ?? c.category,
-    value: c.amountCents,
-  }))
+  // Two different category slugs can resolve to the same display label
+  // (labels are free-text, not unique) — most commonly a real "otros"-named
+  // category colliding with the synthetic overflow slice above. Recharts
+  // keys its internal Pie/Legend entries off `name`, so a collision here
+  // produces duplicate-key React warnings and undefined render behavior.
+  // Merge by label instead of trusting slugs to be 1:1 with labels.
+  const byLabel = new Map<string, number>()
+  for (const c of foldIntoOtros(data)) {
+    const label = categoryLabelMap[c.category] ?? c.category
+    byLabel.set(label, (byLabel.get(label) ?? 0) + c.amountCents)
+  }
+  const chartData = [...byLabel.entries()].map(([name, value]) => ({ name, value }))
 
   return (
     <CozyCard className="animate-card-in [animation-delay:60ms]">

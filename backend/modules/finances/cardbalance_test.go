@@ -16,10 +16,10 @@ func TestCardBalance_Case(t *testing.T) {
 	resetFinanceTables(t, db)
 
 	var cardX, cardC int64
-	if err := db.QueryRow(`INSERT INTO cards (name,type,bank,created_by) VALUES ('X','debito','t',1) RETURNING id`).Scan(&cardX); err != nil {
+	if err := db.QueryRow(`INSERT INTO cards (name,bank,created_by) VALUES ('X','t',1) RETURNING id`).Scan(&cardX); err != nil {
 		t.Fatalf("insert X: %v", err)
 	}
-	if err := db.QueryRow(`INSERT INTO cards (name,type,bank,created_by) VALUES ('C','credito','t',1) RETURNING id`).Scan(&cardC); err != nil {
+	if err := db.QueryRow(`INSERT INTO cards (name,bank,credit_limit_cents,created_by) VALUES ('C','t',1000000,1) RETURNING id`).Scan(&cardC); err != nil {
 		t.Fatalf("insert C: %v", err)
 	}
 

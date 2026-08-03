@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Download, Loader2, Heart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,52 +6,16 @@ import { CozyCard } from '@/components/ui/cozy-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { usePublicYtdlpApi } from '@/hooks/usePublicYtdlpApi'
-import { LOVE_MESSAGES, MESSAGE_INTERVAL_MS } from './loveMessages'
+import { LOVE_MESSAGES } from './loveMessages'
+import { useYtDlpDownload } from './useYtDlpDownload'
 
 export default function PublicYtDlpPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
-  const [url, setUrl] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [messageIndex, setMessageIndex] = useState(() => Math.floor(Math.random() * LOVE_MESSAGES.length))
   const { downloadMp3 } = usePublicYtdlpApi()
-  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
-
-  useEffect(() => {
-    if (!loading) {
-      clearInterval(intervalRef.current)
-      return
-    }
-    intervalRef.current = setInterval(() => {
-      setMessageIndex((i) => (i + 1) % LOVE_MESSAGES.length)
-    }, MESSAGE_INTERVAL_MS)
-    return () => clearInterval(intervalRef.current)
-  }, [loading])
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!url.trim() || loading) return
-
-    setLoading(true)
-    setError(null)
-    try {
-      const { blob, filename } = await downloadMp3(url.trim(), token)
-      const objectUrl = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(objectUrl)
-      setUrl('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo descargar el audio')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { url, setUrl, loading, error, messageIndex, handleSubmit } = useYtDlpDownload({
+    download: (url) => downloadMp3(url, token),
+  })
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">

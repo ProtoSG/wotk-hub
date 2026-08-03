@@ -5,6 +5,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 
+frontend_preview=false
+for arg in "$@"; do
+  case "$arg" in
+    --preview) frontend_preview=true ;;
+  esac
+done
+
 pids=()
 
 cleanup() {
@@ -35,8 +42,15 @@ echo "==> Starting backend (go run .)"
 (cd "$BACKEND_DIR" && go run .) &
 pids+=($!)
 
-echo "==> Starting frontend (bun run dev)"
-(cd "$FRONTEND_DIR" && bun run dev) &
+if [ "$frontend_preview" = true ]; then
+  echo "==> Building frontend (bun run build)"
+  (cd "$FRONTEND_DIR" && bun run build)
+  echo "==> Starting frontend (bun run preview) — production build, closer to what Lighthouse sees deployed"
+  (cd "$FRONTEND_DIR" && bun run preview) &
+else
+  echo "==> Starting frontend (bun run dev)"
+  (cd "$FRONTEND_DIR" && bun run dev) &
+fi
 pids+=($!)
 
 wait

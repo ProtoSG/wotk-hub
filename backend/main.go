@@ -17,11 +17,16 @@ import (
 	"workhub/modules/dbmanager"
 	"workhub/modules/finances"
 	"workhub/modules/games"
+	"workhub/modules/gym"
 	"workhub/modules/ytdlp"
 	"workhub/store"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
+
+	_ "workhub/docs"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // subscriptionsPollInterval controls how often due subscriptions are charged
@@ -32,6 +37,18 @@ const subscriptionsPollInterval = 5 * time.Minute
 // requests to finish before forcing close.
 const shutdownTimeout = 10 * time.Second
 
+// @title Work Hub API
+// @version 1.0
+// @description Backend API for Work Hub — dashboard, DB manager, finances (PEN), and couple modules.
+// @BasePath /api
+// @securityDefinitions.apikey CookieAuth
+// @in cookie
+// @name access_token
+// @description JWT access token issued by /api/auth/login, sent as the access_token cookie (not an Authorization header — see middleware.JWTAuth).
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Static token used by CLI and public share routes, sent as "Bearer <token>".
 func main() {
 	godotenv.Load()
 	cfg := config.Load()
@@ -54,6 +71,12 @@ func main() {
 		log.Fatalf("games seed: %v", err)
 	}
 
+	// Idempotent, so it runs on every boot alongside Migrate. Fatal on
+	// failure: an empty exercise catalog makes the gym module unusable.
+	if err := gym.SeedExercises(appDB); err != nil {
+		log.Fatalf("seed exercises: %v", err)
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recovery)
 	r.Use(middleware.Logger)
@@ -64,11 +87,23 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Unauthenticated by design, same as /health above — this is a personal/
+	// small project with no dev-only gating mechanism in place, so the docs
+	// UI is just always reachable rather than gated behind a flag.
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
 	// Auth's own router handles the public/protected split internally
 	// (Register/Login/Refresh are public, Me/Logout require JWTAuth) since
 	// chi doesn't let a parent r.Use exempt specific paths.
 	r.Mount("/api/auth", auth.Routes(appDB, cfg.JWTSecret, cfg.CookieSecure))
 
+	// Finances handles its own public/protected split internally (GET
+	// /categories is public), same reasoning as auth.Routes above.
+	r.Mount("/api/finances", finances.Routes(appDB, cfg.JWTSecret))
+
+	// /api/db is raw SQL access — kept on cookie-only JWTAuth (not
+	// RequireAuth) so a leaked long-lived API key can never reach it, even
+	// for an admin account.
 	r.Group(func(pr chi.Router) {
 		pr.Use(middleware.JWTAuth(cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
@@ -76,6 +111,7 @@ func main() {
 		pr.Mount("/api/games", games.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
 	})
 
 	// Unauthenticated by design (token-gated, not JWT) — for sharing with

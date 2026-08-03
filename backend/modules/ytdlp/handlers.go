@@ -129,6 +129,20 @@ func rfc5987Encode(s string) string {
 
 // Download is the authenticated entry point (JWT + admin/guest role, see
 // main.go) — the UserFromContext check is defense-in-depth on top of that.
+//
+// @Summary Download a YouTube video as MP3
+// @Description Downloads and converts a YouTube URL to MP3, streaming the file back. youtube.com/youtu.be hosts only.
+// @Tags ytdlp
+// @Accept json
+// @Produce audio/mpeg
+// @Security CookieAuth
+// @Param body body downloadRequest true "YouTube URL"
+// @Success 200 {file} file "MP3 audio stream"
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 429 {object} httpx.APIError "server busy"
+// @Failure 502 {object} httpx.APIError "download failed"
+// @Router /ytdlp/download [post]
 func (h *handler) Download(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := middleware.UserFromContext(r.Context()); !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
@@ -139,6 +153,21 @@ func (h *handler) Download(w http.ResponseWriter, r *http.Request) {
 
 // PublicDownload is the token-gated entry point (see requireToken in
 // routes.go) — no user session involved, so it skips straight to doDownload.
+//
+// @Summary Download a YouTube video as MP3 (public, token-gated)
+// @Description Same as Download but gated by a shared-secret token instead of JWT login — for sharing with someone without an account. Token travels as ?token= or an Authorization: Bearer header. Only mounted when YTDLP_PUBLIC_TOKEN is set.
+// @Tags ytdlp
+// @Accept json
+// @Produce audio/mpeg
+// @Security BearerAuth
+// @Param token query string false "Shared-secret token (alternative to the Authorization header)"
+// @Param body body downloadRequest true "YouTube URL"
+// @Success 200 {file} file "MP3 audio stream"
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Failure 429 {object} httpx.APIError "server busy"
+// @Failure 502 {object} httpx.APIError "download failed"
+// @Router /ytdlp/public/download [post]
 func (h *handler) PublicDownload(w http.ResponseWriter, r *http.Request) {
 	h.doDownload(w, r)
 }

@@ -11,6 +11,16 @@ import (
 // (see scopeToOwner), so a guest only ever sees totals over their own
 // transactions. Admins see everything unscoped, including legacy pre-auth
 // rows where created_by is NULL.
+// @Summary Get financial summary
+// @Description All-time balance, selected month income/expense, a 6-month trend, and expense breakdown by category.
+// @Tags finances
+// @Produce json
+// @Security CookieAuth
+// @Param month query string false "Month, YYYY-MM (defaults to current month)"
+// @Success 200 {object} Summary
+// @Failure 400 {object} httpx.APIError
+// @Failure 401 {object} httpx.APIError
+// @Router /finances/summary [get]
 func (h *handler) Summary(w http.ResponseWriter, r *http.Request) {
 	userID, role, ok := middleware.UserFromContext(r.Context())
 	if !ok {

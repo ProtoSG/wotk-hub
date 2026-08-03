@@ -42,6 +42,20 @@ func newRefreshToken() (raw string, hash string, err error) {
 	return raw, hashToken(raw), nil
 }
 
+// newAPIKey returns a random opaque API key (the raw value shown to the user
+// exactly once) and its SHA-256 hash (the only form ever persisted, in
+// api_keys.key_hash). The "wh_" prefix makes keys visually identifiable and
+// greppable in logs/configs; the hash is computed over the full prefixed
+// string.
+func newAPIKey() (raw string, hash string, err error) {
+	buf := make([]byte, 32)
+	if _, err = rand.Read(buf); err != nil {
+		return "", "", err
+	}
+	raw = "wh_" + hex.EncodeToString(buf)
+	return raw, hashToken(raw), nil
+}
+
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

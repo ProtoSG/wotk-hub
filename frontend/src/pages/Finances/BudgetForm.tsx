@@ -87,29 +87,31 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
           <DialogTitle>{editing ? 'Editar presupuesto' : 'Nuevo presupuesto'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1">
-            <Label>Categoría</Label>
-            <Select
-              value={category}
-              onValueChange={(v) => setValue('category', v)}
-              disabled={!!editing || categoriesLoading}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
-              </SelectTrigger>
-              <SelectContent>
-                {available.map((c) => (
-                  <SelectItem key={c.id} value={c.name}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>Límite mensual (S/)</Label>
-            <Input type="number" step="0.01" min="0" {...register('limit', { valueAsNumber: true })} />
-            {errors.limit && <p className="text-xs text-destructive">{errors.limit.message}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="min-w-0 space-y-1">
+              <Label>Categoría</Label>
+              <Select
+                value={category}
+                onValueChange={(v) => setValue('category', v)}
+                disabled={!!editing || categoriesLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
+                </SelectTrigger>
+                <SelectContent>
+                  {available.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label>Límite mensual (S/)</Label>
+              <Input type="number" step="0.01" min="0" {...register('limit', { valueAsNumber: true })} />
+              {errors.limit && <p className="text-xs text-destructive">{errors.limit.message}</p>}
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>

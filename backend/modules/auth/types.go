@@ -43,6 +43,36 @@ func (r registerRequest) validate() error {
 	return nil
 }
 
+// createAPIKeyRequest is the body for POST /auth/keys. Name is optional —
+// it's just a label to tell keys apart later, defaults to ”.
+type createAPIKeyRequest struct {
+	Name string `json:"name"`
+}
+
+// apiKeyCreated is the response for POST /auth/keys. Key is the raw,
+// unhashed value — it is returned only this once and cannot be recovered
+// later, since only its hash is persisted.
+type apiKeyCreated struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Key       string `json:"key"`
+	CreatedAt string `json:"created_at"`
+}
+
+// apiKeyView is the row shape GET /auth/keys returns — never the hash or
+// the raw key, only enough to identify and manage a key.
+type apiKeyView struct {
+	ID         int64   `json:"id"`
+	Name       string  `json:"name"`
+	CreatedAt  string  `json:"created_at"`
+	LastUsedAt *string `json:"last_used_at"`
+	RevokedAt  *string `json:"revoked_at"`
+}
+
+type revokeAPIKeyResponse struct {
+	Revoked bool `json:"revoked"`
+}
+
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`

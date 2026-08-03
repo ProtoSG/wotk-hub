@@ -11,6 +11,7 @@ import {
   CategoriesPage,
   CouplePage,
   GamesPage,
+  GymPage,
   YtdlpPage,
   PublicYtdlpPage,
   ConfigurationPage,
@@ -92,6 +93,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<RouteFallback />}>
             <GamesPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'gym',
+        element: (
+          <Suspense fallback={<RouteFallback />}>
+            <GymPage />
           </Suspense>
         ),
       },
