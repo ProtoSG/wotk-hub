@@ -16,6 +16,7 @@ import (
 	"workhub/modules/couple"
 	"workhub/modules/dbmanager"
 	"workhub/modules/finances"
+	"workhub/modules/games"
 	"workhub/modules/ytdlp"
 	"workhub/store"
 
@@ -49,6 +50,9 @@ func main() {
 	if err := store.Migrate(appDB); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
+	if err := games.Seed(appDB); err != nil {
+		log.Fatalf("games seed: %v", err)
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recovery)
@@ -69,6 +73,7 @@ func main() {
 		pr.Use(middleware.JWTAuth(cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
 		pr.Mount("/api/finances", finances.Routes(appDB))
+		pr.Mount("/api/games", games.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
 	})
