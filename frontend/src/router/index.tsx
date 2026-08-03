@@ -10,6 +10,7 @@ import {
   FinancesPage,
   CategoriesPage,
   CouplePage,
+  GamesPage,
   GymPage,
   YtdlpPage,
   PublicYtdlpPage,
@@ -84,6 +85,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<RouteFallback />}>
             <CouplePage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'juegos',
+        element: (
+          <Suspense fallback={<RouteFallback />}>
+            <GamesPage />
           </Suspense>
         ),
       },

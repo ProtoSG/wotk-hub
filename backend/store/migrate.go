@@ -332,6 +332,28 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE exercise_sets DROP CONSTRAINT IF EXISTS exercise_sets_distance_meters_check`,
 		`ALTER TABLE exercise_sets ADD CONSTRAINT exercise_sets_distance_meters_check CHECK (distance_meters >= 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_exercise_sets_session_exercise_id ON exercise_sets (session_exercise_id)`,
+		// Emoji Movie Game — see modules/games/.
+		`CREATE TABLE IF NOT EXISTS emoji_movies (
+			id         BIGSERIAL PRIMARY KEY,
+			emoji_str  TEXT NOT NULL,
+			answer     TEXT NOT NULL,
+			difficulty TEXT NOT NULL CHECK (difficulty IN ('easy','medium','hard')),
+			created_by BIGINT REFERENCES users(id),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS emoji_game_sessions (
+			id             BIGSERIAL PRIMARY KEY,
+			player1_id     BIGINT NOT NULL REFERENCES users(id),
+			player2_id     BIGINT REFERENCES users(id),
+			p1_score       INT    NOT NULL DEFAULT 0,
+			p2_score       INT    NOT NULL DEFAULT 0,
+			current_emoji  TEXT   NOT NULL DEFAULT '',
+			current_answer TEXT   NOT NULL DEFAULT '',
+			status         TEXT   NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting','active','finished')),
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_emoji_game_sessions_player1_id ON emoji_game_sessions (player1_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_emoji_game_sessions_player2_id ON emoji_game_sessions (player2_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
