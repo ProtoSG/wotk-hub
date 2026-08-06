@@ -38,6 +38,16 @@ const subscriptionsPollInterval = 5 * time.Minute
 // requests to finish before forcing close.
 const shutdownTimeout = 10 * time.Second
 
+// requestTimeout bounds how long the server gives a single request to read
+// its body and write its response. Was 15s, sized for the JSON-only API this
+// started as — too short once couple photo uploads landed: decode, EXIF
+// correction, two resizes, and two MinIO uploads is real work, not a fast
+// JSON round trip, and can run close to that on a modest VPS for one large
+// photo. Raised past the frontend's own 120s upload timeout (see
+// useCoupleApi.uploadPhoto) so the client's timeout fires first with a clear
+// message, instead of the server silently dropping the connection first.
+const requestTimeout = 130 * time.Second
+
 // @title Work Hub API
 // @version 1.0
 // @description Backend API for Work Hub — dashboard, DB manager, finances (PEN), and couple modules.
@@ -151,8 +161,8 @@ func main() {
 	srv := &http.Server{
 		Addr:         addr,
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  requestTimeout,
+		WriteTimeout: requestTimeout,
 		IdleTimeout:  60 * time.Second,
 	}
 
