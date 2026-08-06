@@ -379,6 +379,19 @@ func Migrate(db *sql.DB) error {
 			created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_couple_date_photos_date_id ON couple_date_photos (date_id)`,
+		// Server-generated thumbnail variant, added alongside the existing
+		// full-size object_key (see couple/photos.go UploadPhoto). Nullable,
+		// no default: rows inserted before this change have NULL here, and
+		// ListPhotos falls back to presigning object_key itself as the
+		// thumbnail for those. This is a clean, permanent addition — no
+		// paired DROP anywhere in this file. See the comment above the
+		// `cards.credit_limit_cents` ALTER for why that matters: an
+		// ADD-then-DROP pair for the same column, both in this statement
+		// list, silently burns a permanent attnum slot on every boot
+		// (migrate has no version tracking and re-runs every statement on
+		// every boot) until the table hits Postgres's 1600-column hard
+		// limit — that took prod down once already.
+		`ALTER TABLE couple_date_photos ADD COLUMN IF NOT EXISTS thumbnail_object_key TEXT`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

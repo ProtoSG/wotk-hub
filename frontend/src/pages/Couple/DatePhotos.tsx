@@ -109,7 +109,7 @@ export default function DatePhotos({ dateId }: Props) {
           {photos.map((p) => (
             <div key={p.id} className="group relative aspect-square overflow-hidden rounded-md border">
               <button type="button" className="h-full w-full" onClick={() => setPreview(p)}>
-                <img src={p.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                <img src={p.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
               </button>
               <button
                 type="button"

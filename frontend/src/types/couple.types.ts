@@ -50,6 +50,7 @@ export interface CoupleDateInput {
 
 export interface CoupleDatePhoto {
   id: number
-  url: string // freshly presigned MinIO GET URL, expires — don't cache long-term
+  url: string // freshly presigned MinIO GET URL (full-size), expires — don't cache long-term
+  thumbnailUrl: string // freshly presigned MinIO GET URL (resized thumbnail), expires — don't cache long-term
   createdAt: string
 }
