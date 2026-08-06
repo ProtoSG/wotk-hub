@@ -50,6 +50,24 @@ type listPhotosResponse struct {
 	Photos []Photo `json:"photos"`
 }
 
+// GalleryPhoto is a photo plus enough of its parent date to group/label it in
+// a cross-date gallery view — see ListGalleryPhotos. Grouping by DateID is
+// left to the client, same as CouplePage already groups dates by status
+// client-side, rather than nesting the response server-side.
+type GalleryPhoto struct {
+	ID             int64  `json:"id"`
+	URL            string `json:"url"`
+	ThumbnailURL   string `json:"thumbnailUrl"`
+	CreatedAt      string `json:"createdAt"`
+	DateID         int64  `json:"dateId"`
+	DateOccurredOn string `json:"dateOccurredOn"`
+	DatePlace      string `json:"datePlace"`
+}
+
+type listGalleryPhotosResponse struct {
+	Photos []GalleryPhoto `json:"photos"`
+}
+
 type dateRequest struct {
 	OccurredOn string `json:"occurredOn"`
 	Place      string `json:"place"`

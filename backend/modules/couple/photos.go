@@ -250,6 +250,78 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, listPhotosResponse{Photos: photos})
 }
 
+// ListGalleryPhotos lists every photo across every couple date in one query
+// — a join instead of the client calling ListPhotos once per date (would be
+// an N+1 fetch for a gallery spanning many dates). Grouping by date is done
+// client-side from this flat, date-sorted list.
+//
+// @Summary List every couple-date photo, across all dates
+// @Tags couple
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} listGalleryPhotosResponse
+// @Failure 503 {object} httpx.APIError
+// @Router /couple/photos [get]
+func (h *handler) ListGalleryPhotos(w http.ResponseWriter, r *http.Request) {
+	if h.storage == nil {
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "photo storage not configured")
+		return
+	}
+	rows, err := h.db.Query(
+		`SELECT p.id, p.object_key, p.thumbnail_object_key, p.created_at, d.id, d.occurred_on, d.place
+		 FROM couple_date_photos p
+		 JOIN couple_dates d ON d.id = p.date_id
+		 ORDER BY d.occurred_on DESC, p.created_at DESC`,
+	)
+	if err != nil {
+		log.Printf("couple: list gallery photos failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer rows.Close()
+
+	photos := []GalleryPhoto{}
+	for rows.Next() {
+		var id, dateID int64
+		var objectKey, datePlace string
+		var thumbnailObjectKey sql.NullString
+		var createdAt, dateOccurredOn time.Time
+		if err := rows.Scan(&id, &objectKey, &thumbnailObjectKey, &createdAt, &dateID, &dateOccurredOn, &datePlace); err != nil {
+			log.Printf("couple: scan gallery photo failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		url, err := h.storage.PresignedGetURL(r.Context(), objectKey)
+		if err != nil {
+			log.Printf("couple: presign gallery photo failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		// Same NULL-thumbnail fallback as ListPhotos — rows from before
+		// thumbnails existed still render, just without the size savings.
+		thumbKey := objectKey
+		if thumbnailObjectKey.Valid {
+			thumbKey = thumbnailObjectKey.String
+		}
+		thumbnailURL, err := h.storage.PresignedGetURL(r.Context(), thumbKey)
+		if err != nil {
+			log.Printf("couple: presign gallery thumbnail failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		photos = append(photos, GalleryPhoto{
+			ID:             id,
+			URL:            url,
+			ThumbnailURL:   thumbnailURL,
+			CreatedAt:      createdAt.Format(time.RFC3339),
+			DateID:         dateID,
+			DateOccurredOn: dateOccurredOn.Format(dateLayout),
+			DatePlace:      datePlace,
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, listGalleryPhotosResponse{Photos: photos})
+}
+
 // DeletePhoto deletes a photo attached to a couple date.
 //
 // Policy: the MinIO object is deleted first; if that fails, the DB row is
