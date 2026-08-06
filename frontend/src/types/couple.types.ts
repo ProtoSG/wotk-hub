@@ -54,3 +54,11 @@ export interface CoupleDatePhoto {
   thumbnailUrl: string // freshly presigned MinIO GET URL (resized thumbnail), expires — don't cache long-term
   createdAt: string
 }
+
+// A photo plus enough of its parent date to group/label it in the
+// cross-date Galería tab — see useCoupleApi.listGallery.
+export interface GalleryPhoto extends CoupleDatePhoto {
+  dateId: number
+  dateOccurredOn: string // YYYY-MM-DD
+  datePlace: string
+}

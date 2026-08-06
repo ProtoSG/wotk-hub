@@ -6,6 +6,7 @@ import {
   Star,
   MoreVertical,
   Heart,
+  Images,
   Link as LinkIcon,
   Plus,
   Check,
@@ -29,6 +30,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import MobileTabNav from '@/components/MobileTabNav'
+import { useActiveTab } from '@/hooks/useActiveTab'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
@@ -36,8 +40,17 @@ import { DATE_CATEGORY_LABELS, type CoupleDate } from '@/types/couple.types'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import CoupleCover from './CoupleCover'
 import DateForm from './DateForm'
+import GaleriaTab from './GaleriaTab'
 
 const UNDO_WINDOW_MS = 4500
+
+const TABS = [
+  { value: 'citas', label: 'Citas', icon: Heart },
+  { value: 'galeria', label: 'Galería', icon: Images },
+]
+
+const TAB_CONTENT_CLASS =
+  'mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95'
 
 // Small warm-toned family per category, all derived from tokens already
 // established elsewhere in the app (brand terracotta, sage --success, and
@@ -184,6 +197,8 @@ export default function CouplePage() {
   const [editing, setEditing] = useState<CoupleDate | null>(null)
   const { listDates, updateDate, deleteDate } = useCoupleApi()
   const pendingDeletes = useRef(new Map<number, number>())
+  const { tab, setSearchParams } = useActiveTab(TABS, 'citas')
+  const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 
   const load = useCallback(async () => {
     try {
@@ -272,6 +287,16 @@ export default function CouplePage() {
   return (
     <>
       <div className="space-y-6 pb-24 sm:pb-0">
+        <Tabs value={tab} onValueChange={goToTab}>
+          <TabsList className="hidden sm:inline-flex">
+            {TABS.map((t) => (
+              <TabsTrigger key={t.value} value={t.value}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <TabsContent value="citas" className={TAB_CONTENT_CLASS}>
         <CoupleCover
           onNewDate={() => {
             setEditing(null)
@@ -381,15 +406,25 @@ export default function CouplePage() {
             </>
           )}
         </div>
+          </TabsContent>
+
+          <TabsContent value="galeria" className={TAB_CONTENT_CLASS}>
+            <GaleriaTab />
+          </TabsContent>
+        </Tabs>
       </div>
 
-      <FloatingActionButton
-        label="Nueva cita"
-        onClick={() => {
-          setEditing(null)
-          setFormOpen(true)
-        }}
-      />
+      {tab === 'citas' && (
+        <FloatingActionButton
+          label="Nueva cita"
+          onClick={() => {
+            setEditing(null)
+            setFormOpen(true)
+          }}
+        />
+      )}
+
+      <MobileTabNav tabs={TABS} activeTab={tab} onChange={goToTab} fabVisible={tab === 'citas'} />
 
       <DateForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editing={editing} />
     </>
