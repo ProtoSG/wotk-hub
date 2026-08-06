@@ -20,8 +20,15 @@ services:
   # any other project's MinIO (own container, own volume, own credentials).
   # MINIO_ROOT_PASSWORD below is a local-dev placeholder only; override it
   # via MINIO_SECRET_KEY/real env in any real deploy.
+  #
+  # pgsty/minio, not minio/minio: MinIO Inc. stopped publishing Docker
+  # images in October 2025 and archived the official repo in February 2026
+  # (frozen at RELEASE.2025-09-07T16-13-09Z, no CVE fixes). pgsty/minio is
+  # the actively maintained community fork — same env vars, same `server`
+  # command, same on-disk format, drop-in. Pinned (not :latest) to match
+  # the exact version the Dokploy template deploys in production.
   minio:
-    image: minio/minio:latest
+    image: pgsty/minio:RELEASE.2026-06-18T00-00-00Z
     container_name: workhub-minio
     environment:
       MINIO_ROOT_USER: workhub
