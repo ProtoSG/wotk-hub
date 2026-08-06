@@ -10,7 +10,7 @@ const navItems: { to: string; label: string; icon: typeof LayoutDashboard; roles
   { to: '/citas', label: 'Citas', icon: Heart },
   { to: '/juegos', label: 'Juegos', icon: Gamepad2 },
   { to: '/gym', label: 'Gimnasio', icon: Dumbbell },
-  { to: '/ytdlp', label: 'YouTube a MP3', icon: Music },}
+  { to: '/ytdlp', label: 'YouTube a MP3', icon: Music },
   { to: '/configuration', label: 'Configuración', icon: Settings },
 ]
 
