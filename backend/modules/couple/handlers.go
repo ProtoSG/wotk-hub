@@ -176,6 +176,15 @@ func (h *handler) DeleteDate(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
+
+	// Delete each photo's MinIO object before the SQL DELETE below cascades
+	// away the couple_date_photos rows — ON DELETE CASCADE only reaches the
+	// DB, so skipping this would orphan objects in MinIO forever with
+	// nothing left pointing at them.
+	if h.storage != nil {
+		h.deletePhotoObjectsForDate(r.Context(), id)
+	}
+
 	res, err := h.db.Exec(`DELETE FROM couple_dates WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("couple: delete date failed: %v", err)

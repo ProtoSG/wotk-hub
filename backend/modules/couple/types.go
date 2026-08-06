@@ -33,6 +33,19 @@ type listDatesResponse struct {
 	Dates []Date `json:"dates"`
 }
 
+// Photo is the API shape for a couple-date photo. URL is a freshly generated
+// presigned MinIO GET URL (see storage.Client.PresignedGetURL) — it expires,
+// so it's never persisted; only object_key is durable in the DB.
+type Photo struct {
+	ID        int64  `json:"id"`
+	URL       string `json:"url"`
+	CreatedAt string `json:"createdAt"`
+}
+
+type listPhotosResponse struct {
+	Photos []Photo `json:"photos"`
+}
+
 type dateRequest struct {
 	OccurredOn string `json:"occurredOn"`
 	Place      string `json:"place"`

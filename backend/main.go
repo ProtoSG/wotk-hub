@@ -19,6 +19,7 @@ import (
 	"workhub/modules/games"
 	"workhub/modules/gym"
 	"workhub/modules/ytdlp"
+	"workhub/storage"
 	"workhub/store"
 
 	"github.com/go-chi/chi/v5"
@@ -77,6 +78,26 @@ func main() {
 		log.Fatalf("seed exercises: %v", err)
 	}
 
+	// Couple-photos storage is a nice-to-have, not core to the app — unlike
+	// DatabaseURL/JWTSecret above, MinIO connectivity issues only warn and
+	// leave photoStorage nil, never log.Fatalf. couple.Routes handles a nil
+	// client by returning 503 from the photo endpoints instead of mounting
+	// nothing, so the rest of the couple module keeps working.
+	var photoStorage *storage.Client
+	if cfg.MinioEndpoint != "" {
+		photoStorage, err = storage.New(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucket, cfg.MinioUseSSL)
+		if err != nil {
+			log.Printf("minio: client init failed, couple photo uploads disabled: %v", err)
+			photoStorage = nil
+		} else {
+			ensureCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := photoStorage.EnsureBucket(ensureCtx); err != nil {
+				log.Printf("minio: bucket ensure failed, couple photo uploads may not work: %v", err)
+			}
+			cancel()
+		}
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recovery)
 	r.Use(middleware.Logger)
@@ -108,7 +129,7 @@ func main() {
 		pr.Use(middleware.JWTAuth(cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
 		pr.Mount("/api/games", games.Routes(appDB))
-		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB, photoStorage))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
 	})

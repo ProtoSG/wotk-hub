@@ -47,3 +47,9 @@ export interface CoupleDateInput {
   tiktokUrl: string
   status: DateStatus
 }
+
+export interface CoupleDatePhoto {
+  id: number
+  url: string // freshly presigned MinIO GET URL, expires — don't cache long-term
+  createdAt: string
+}

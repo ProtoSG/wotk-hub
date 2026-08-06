@@ -15,3 +15,11 @@ func parseID(r *http.Request) (int64, error) {
 	}
 	return id, nil
 }
+
+func parsePhotoID(r *http.Request) (int64, error) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "photoId"), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("invalid photo id")
+	}
+	return id, nil
+}
