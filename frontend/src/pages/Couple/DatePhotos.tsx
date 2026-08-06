@@ -21,7 +21,7 @@ interface Props {
 export default function DatePhotos({ dateId }: Props) {
   const [photos, setPhotos] = useState<CoupleDatePhoto[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [preview, setPreview] = useState<CoupleDatePhoto | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -44,18 +44,42 @@ export default function DatePhotos({ dateId }: Props) {
     load()
   }, [load])
 
+  // Multiple files upload concurrently rather than one-at-a-time — each is
+  // an independent POST, so a slow/failing file doesn't block the rest.
+  // Progress is a simple done/total counter rather than per-file percentage;
+  // good enough for the handful of photos someone picks from a gallery at
+  // once, and much simpler than tracking individual upload progress events.
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!file) return
-    setUploading(true)
-    try {
-      const photo = await uploadPhoto(dateId, file)
-      setPhotos((prev) => [photo, ...prev])
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo subir la foto')
-    } finally {
-      setUploading(false)
+    if (files.length === 0) return
+
+    setUploadProgress({ done: 0, total: files.length })
+    const results = await Promise.allSettled(
+      files.map((file) =>
+        uploadPhoto(dateId, file).then((photo) => {
+          setPhotos((prev) => [photo, ...prev])
+          setUploadProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
+          return photo
+        })
+      )
+    )
+    setUploadProgress(null)
+
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed > 0) {
+      const detail =
+        failed === 1 && results.length === 1 && results[0].status === 'rejected'
+          ? results[0].reason instanceof Error
+            ? results[0].reason.message
+            : undefined
+          : undefined
+      toast.error(
+        detail ??
+          (failed === results.length
+            ? 'No se pudo subir ninguna foto'
+            : `${failed} de ${results.length} fotos no se pudieron subir`)
+      )
     }
   }
 
@@ -80,16 +104,17 @@ export default function DatePhotos({ dateId }: Props) {
           type="button"
           variant="ghost"
           size="sm"
-          disabled={uploading}
+          disabled={uploadProgress != null}
           onClick={() => fileInputRef.current?.click()}
         >
-          {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload className="h-4 w-4" />}
-          {uploading ? 'Subiendo…' : 'Agregar foto'}
+          {uploadProgress != null ? <Loader2 size={14} className="animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploadProgress != null ? `Subiendo ${uploadProgress.done}/${uploadProgress.total}…` : 'Agregar fotos'}
         </Button>
         <input
           ref={fileInputRef}
           type="file"
           accept={ACCEPTED_TYPES}
+          multiple
           className="hidden"
           onChange={handleFileChange}
         />
