@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 import AppLayout from '@/layouts/AppLayout'
 import AuthGuard from './AuthGuard'
+import DefaultRedirect from './DefaultRedirect'
 import RequireRole from './RequireRole'
 import RouteFallback from './RouteFallback'
 import {
@@ -45,13 +46,15 @@ export const router = createBrowserRouter([
       </AuthGuard>
     ),
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { index: true, element: <DefaultRedirect /> },
       {
         path: 'dashboard',
         element: (
-          <Suspense fallback={<RouteFallback />}>
-            <DashboardPage />
-          </Suspense>
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<RouteFallback />}>
+              <DashboardPage />
+            </Suspense>
+          </RequireRole>
         ),
       },
       {
@@ -123,12 +126,14 @@ export const router = createBrowserRouter([
       {
         path: 'configuration',
         element: (
-          <Suspense fallback={<RouteFallback />}>
-            <ConfigurationPage />
-          </Suspense>
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<RouteFallback />}>
+              <ConfigurationPage />
+            </Suspense>
+          </RequireRole>
         ),
       },
-      { path: '*', element: <Navigate to="/dashboard" replace /> },
+      { path: '*', element: <DefaultRedirect /> },
     ],
   },
 ])
