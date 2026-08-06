@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -109,15 +110,29 @@ func (h *handler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode once, derive both resized variants from the same in-memory
-	// image.Image — no decode/encode round-trip through MinIO. Bounded by
-	// maxPhotoUploadBytes (15MB) above, so decoding fully into memory is
-	// fine at this scale.
-	img, err := decodeImage(file, contentType)
+	// Read fully into memory first — EXIF orientation and pixel decoding
+	// each need their own read of the same bytes, and an http.FormFile isn't
+	// seekable. Bounded by maxPhotoUploadBytes (15MB) above, so this is fine
+	// at this scale.
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		log.Printf("couple: read uploaded photo failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	img, err := decodeImage(bytes.NewReader(raw), contentType)
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid image file")
 		return
 	}
+	// Phone cameras record pixels in the sensor's native orientation and
+	// store which way to rotate for display as separate EXIF metadata
+	// instead of rotating the pixels themselves. resizeToJPEG's output never
+	// carries EXIF (image/jpeg.Encode doesn't write any), so without this
+	// correction the photo comes out sideways/upside-down whenever it wasn't
+	// shot in that native orientation — see applyOrientation.
+	img = applyOrientation(img, exifOrientation(raw))
 
 	fullBytes, err := resizeToJPEG(img, fullMaxDim)
 	if err != nil {
