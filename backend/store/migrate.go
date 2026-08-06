@@ -1,6 +1,10 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+)
 
 // Migrate runs the app schema at startup. There is no migration tool:
 // schema changes are appended as new idempotent statements
@@ -355,10 +359,20 @@ func Migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_emoji_game_sessions_player1_id ON emoji_game_sessions (player1_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_emoji_game_sessions_player2_id ON emoji_game_sessions (player2_id)`,
 	}
-	for _, s := range stmts {
+	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
-			return err
+			return fmt.Errorf("statement %d (%s...): %w", i, firstLine(s), err)
 		}
 	}
 	return nil
+}
+
+// firstLine returns the first line of a statement, for error context — enough
+// to name the table/operation without dumping the whole (often multi-line)
+// statement into the log.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i != -1 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }
