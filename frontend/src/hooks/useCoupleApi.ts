@@ -29,7 +29,11 @@ export function useCoupleApi() {
   async function uploadPhoto(dateId: number, file: File): Promise<CoupleDatePhoto> {
     const formData = new FormData()
     formData.append('photo', file)
-    const res = await api.post<CoupleDatePhoto>(`/api/couple/dates/${dateId}/photos`, formData)
+    // Longer than the client's 30s default: the backend decodes, corrects
+    // EXIF orientation, resizes two variants, and uploads both to MinIO
+    // before responding — real work, not a typical fast JSON round trip,
+    // and can run close to 30s on a modest VPS for a single large photo.
+    const res = await api.post<CoupleDatePhoto>(`/api/couple/dates/${dateId}/photos`, formData, { timeout: 120000 })
     return res.data
   }
 
