@@ -12,6 +12,7 @@ import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { useAuthApi } from '@/hooks/useAuthApi'
 import { useAuthStore } from '@/store/authStore'
+import { defaultRouteFor } from '@/router/defaultRoute'
 
 const schema = z.object({
   email: z.string().min(1, 'Requerido'),
@@ -54,7 +55,7 @@ export default function LoginPage() {
       const user = await login(withDefaultDomain(values.email), values.password)
       setUser(user)
       setHasHydrated(true)
-      navigate('/dashboard', { replace: true })
+      navigate(defaultRouteFor(user.role), { replace: true })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo iniciar sesión')
     } finally {
