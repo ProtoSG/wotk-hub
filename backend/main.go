@@ -107,7 +107,6 @@ func main() {
 	r.Group(func(pr chi.Router) {
 		pr.Use(middleware.JWTAuth(cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
-		pr.Mount("/api/finances", finances.Routes(appDB, cfg.JWTSecret))
 		pr.Mount("/api/games", games.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
