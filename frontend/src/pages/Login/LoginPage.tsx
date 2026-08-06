@@ -14,11 +14,22 @@ import { useAuthApi } from '@/hooks/useAuthApi'
 import { useAuthStore } from '@/store/authStore'
 
 const schema = z.object({
-  email: z.string().min(1, 'Requerido').email('Email inválido'),
+  email: z.string().min(1, 'Requerido'),
   password: z.string().min(1, 'Requerido'),
 })
 
 type FormValues = z.infer<typeof schema>
+
+// Users can log in with just their username ("jadet.perez") — no need to
+// type the full email every time. Only a bare username gets the domain
+// appended; anything with an '@' already is assumed to be a full email and
+// is sent through untouched.
+const defaultEmailDomain = 'workhub.com'
+
+function withDefaultDomain(email: string): string {
+  const trimmed = email.trim()
+  return trimmed.includes('@') ? trimmed : `${trimmed}@${defaultEmailDomain}`
+}
 
 export default function LoginPage() {
   const [signingIn, setSigningIn] = useState(false)
@@ -40,7 +51,7 @@ export default function LoginPage() {
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     setSigningIn(true)
     try {
-      const user = await login(values.email, values.password)
+      const user = await login(withDefaultDomain(values.email), values.password)
       setUser(user)
       setHasHydrated(true)
       navigate('/dashboard', { replace: true })
@@ -61,7 +72,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1">
               <Label>Email</Label>
-              <Input type="email" autoComplete="email" {...register('email')} />
+              <Input type="text" autoComplete="username" {...register('email')} />
               {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
             </div>
             <div className="space-y-1">
