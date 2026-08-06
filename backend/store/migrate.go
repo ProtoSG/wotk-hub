@@ -109,9 +109,17 @@ func Migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_card_reloads_card_id ON card_reloads (card_id)`,
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_id BIGINT REFERENCES cards(id)`,
 		`CREATE INDEX IF NOT EXISTS idx_transactions_card_id ON transactions (card_id)`,
-		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS initial_balance_cents BIGINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS credit_limit_cents BIGINT NOT NULL DEFAULT 0`,
-		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS used_credit_cents BIGINT NOT NULL DEFAULT 0`,
+		// initial_balance_cents and used_credit_cents used to be added here
+		// too, but both are dropped further down (see "Card balance/used-
+		// credit stop being stored" below) — on every boot (migrate has no
+		// version tracking, see the package comment) that made this an
+		// unconditional add-then-drop, permanently burning a column slot on
+		// `cards` each run since Postgres never reclaims a dropped column's
+		// attnum. Enough boots (redeploys, restarts, crash loops) exhausted
+		// the 1600-column-per-table hard limit. Removed rather than left as
+		// a no-op ADD, since the later DROP ... IF EXISTS already handles a
+		// database that still has them from before this fix.
 		`CREATE TABLE IF NOT EXISTS savings_goals (
 			id            BIGSERIAL PRIMARY KEY,
 			name          TEXT   NOT NULL,
