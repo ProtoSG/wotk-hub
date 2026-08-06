@@ -6,11 +6,11 @@ import { useAuthStore, type Role } from '@/store/authStore'
 const navItems: { to: string; label: string; icon: typeof LayoutDashboard; roles?: readonly Role[] }[] = [
   { to: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
   { to: '/db-manager', label: 'DB Manager', icon: Database, roles: ['admin'] },
-  { to: '/finances', label: 'Finanzas', icon: Wallet },
+  { to: '/finances', label: 'Finanzas', icon: Wallet, roles: ['admin'] },
   { to: '/citas', label: 'Citas', icon: Heart },
   { to: '/juegos', label: 'Juegos', icon: Gamepad2 },
-  { to: '/gym', label: 'Gimnasio', icon: Dumbbell },
-  { to: '/ytdlp', label: 'YouTube a MP3', icon: Music },
+  { to: '/gym', label: 'Gimnasio', icon: Dumbbell, roles: ['admin'] },
+  { to: '/ytdlp', label: 'YouTube a MP3', icon: Music, roles: ['admin'] },
   { to: '/configuration', label: 'Configuración', icon: Settings },
 ]
 
