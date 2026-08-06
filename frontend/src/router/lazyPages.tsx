@@ -7,7 +7,7 @@ export const CategoriesPage = lazy(() => import('@/pages/Finances/CategoriesPage
 export const CouplePage = lazy(() => import('@/pages/Couple/CouplePage'))
 export const GamesPage = lazy(() => import('@/pages/Games/GamesPage'))
 export const GymPage = lazy(() => import('@/pages/Gym/GymPage'))
-export const YtdlpPage = lazy(() => import('@/pages/YtDlp/YtdlpPage'))
+export const YtdlpPage = lazy(() => import('@/pages/YtDlp/YtDlpPage'))
 export const PublicYtdlpPage = lazy(() => import('@/pages/YtDlp/PublicYtDlpPage'))
 export const ConfigurationPage = lazy(() => import('@/pages/Configuration/ConfigurationPage'))
 export const LoginPage = lazy(() => import('@/pages/Login/LoginPage'))
