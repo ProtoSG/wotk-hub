@@ -1,6 +1,7 @@
 package couple
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -19,24 +20,33 @@ import (
 // staying small.
 const maxPhotoUploadBytes int64 = 15 << 20 // 15MB
 
-// allowedPhotoTypes maps accepted Content-Type values to a file extension
-// for the generated object key. Anything else is rejected with 400.
-var allowedPhotoTypes = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/webp": ".webp",
-	"image/gif":  ".gif",
+// allowedPhotoTypes is the set of accepted upload Content-Type values.
+// Anything else is rejected with 400. Every accepted format is decoded (see
+// decodeImage) and re-encoded as JPEG on upload — see image_resize.go — so,
+// unlike before, this no longer needs to carry a file extension: both stored
+// variants are always ".jpg" regardless of the original upload format.
+var allowedPhotoTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+	"image/gif":  true,
 }
 
-// newObjectKey generates a server-side object key — never trust a client
-// filename. crypto/rand + hex instead of a UUID lib since the project has no
-// existing UUID dependency to reuse.
-func newObjectKey(dateID int64, ext string) (string, error) {
+// newPhotoObjectKeys generates a fresh random ID — never trust a client
+// filename — and returns the two object keys derived from it: the full-size
+// variant and the thumbnail variant. Both live under the same dateID folder
+// and share the same random ID, so a photo's two stored objects are visibly
+// paired when browsing the bucket directly. crypto/rand + hex instead of a
+// UUID lib since the project has no existing UUID dependency to reuse.
+func newPhotoObjectKeys(dateID int64) (fullKey, thumbKey string, err error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return fmt.Sprintf("couple-dates/%d/%s%s", dateID, hex.EncodeToString(buf), ext), nil
+	id := hex.EncodeToString(buf)
+	return fmt.Sprintf("couple-dates/%d/%s.jpg", dateID, id),
+		fmt.Sprintf("couple-dates/%d/%s-thumb.jpg", dateID, id),
+		nil
 }
 
 // UploadPhoto uploads a photo attached to a couple date.
@@ -94,21 +104,48 @@ func (h *handler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	contentType := header.Header.Get("Content-Type")
-	ext, ok := allowedPhotoTypes[contentType]
-	if !ok {
+	if !allowedPhotoTypes[contentType] {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "unsupported image type")
 		return
 	}
 
-	key, err := newObjectKey(dateID, ext)
+	// Decode once, derive both resized variants from the same in-memory
+	// image.Image — no decode/encode round-trip through MinIO. Bounded by
+	// maxPhotoUploadBytes (15MB) above, so decoding fully into memory is
+	// fine at this scale.
+	img, err := decodeImage(file, contentType)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid image file")
+		return
+	}
+
+	fullBytes, err := resizeToJPEG(img, fullMaxDim)
+	if err != nil {
+		log.Printf("couple: full-size resize failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	thumbBytes, err := resizeToJPEG(img, thumbMaxDim)
+	if err != nil {
+		log.Printf("couple: thumbnail resize failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	fullKey, thumbKey, err := newPhotoObjectKeys(dateID)
 	if err != nil {
 		log.Printf("couple: object key generation failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
-	if err := h.storage.Upload(r.Context(), key, file, header.Size, contentType); err != nil {
-		log.Printf("couple: photo upload to storage failed: %v", err)
+	if err := h.storage.Upload(r.Context(), fullKey, bytes.NewReader(fullBytes), int64(len(fullBytes)), "image/jpeg"); err != nil {
+		log.Printf("couple: full-size photo upload to storage failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if err := h.storage.Upload(r.Context(), thumbKey, bytes.NewReader(thumbBytes), int64(len(thumbBytes)), "image/jpeg"); err != nil {
+		log.Printf("couple: thumbnail photo upload to storage failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
@@ -116,9 +153,9 @@ func (h *handler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	var createdAt time.Time
 	err = h.db.QueryRow(
-		`INSERT INTO couple_date_photos (date_id, object_key, created_by) VALUES ($1, $2, $3)
+		`INSERT INTO couple_date_photos (date_id, object_key, thumbnail_object_key, created_by) VALUES ($1, $2, $3, $4)
 		 RETURNING id, created_at`,
-		dateID, key, userID,
+		dateID, fullKey, thumbKey, userID,
 	).Scan(&id, &createdAt)
 	if err != nil {
 		log.Printf("couple: insert photo row failed: %v", err)
@@ -126,14 +163,20 @@ func (h *handler) UploadPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := h.storage.PresignedGetURL(r.Context(), key)
+	url, err := h.storage.PresignedGetURL(r.Context(), fullKey)
 	if err != nil {
 		log.Printf("couple: presign after upload failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
+	thumbnailURL, err := h.storage.PresignedGetURL(r.Context(), thumbKey)
+	if err != nil {
+		log.Printf("couple: presign thumbnail after upload failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
 
-	httpx.WriteJSON(w, http.StatusCreated, Photo{ID: id, URL: url, CreatedAt: createdAt.Format(time.RFC3339)})
+	httpx.WriteJSON(w, http.StatusCreated, Photo{ID: id, URL: url, ThumbnailURL: thumbnailURL, CreatedAt: createdAt.Format(time.RFC3339)})
 }
 
 // ListPhotos lists photos attached to a couple date, generating a fresh
@@ -161,7 +204,7 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(
-		`SELECT id, object_key, created_at FROM couple_date_photos WHERE date_id = $1 ORDER BY created_at DESC, id DESC`,
+		`SELECT id, object_key, thumbnail_object_key, created_at FROM couple_date_photos WHERE date_id = $1 ORDER BY created_at DESC, id DESC`,
 		dateID,
 	)
 	if err != nil {
@@ -175,8 +218,9 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id int64
 		var objectKey string
+		var thumbnailObjectKey sql.NullString
 		var createdAt time.Time
-		if err := rows.Scan(&id, &objectKey, &createdAt); err != nil {
+		if err := rows.Scan(&id, &objectKey, &thumbnailObjectKey, &createdAt); err != nil {
 			log.Printf("couple: scan photo failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
@@ -187,7 +231,21 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
-		photos = append(photos, Photo{ID: id, URL: url, CreatedAt: createdAt.Format(time.RFC3339)})
+		// Rows created before thumbnail_object_key existed have NULL here —
+		// fall back to presigning the main object as the thumbnail too, so
+		// old rows still render (just without the size savings) instead of
+		// erroring or showing a broken image.
+		thumbKey := objectKey
+		if thumbnailObjectKey.Valid {
+			thumbKey = thumbnailObjectKey.String
+		}
+		thumbnailURL, err := h.storage.PresignedGetURL(r.Context(), thumbKey)
+		if err != nil {
+			log.Printf("couple: presign thumbnail failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		photos = append(photos, Photo{ID: id, URL: url, ThumbnailURL: thumbnailURL, CreatedAt: createdAt.Format(time.RFC3339)})
 	}
 	httpx.WriteJSON(w, http.StatusOK, listPhotosResponse{Photos: photos})
 }
@@ -228,7 +286,8 @@ func (h *handler) DeletePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var objectKey string
-	err = h.db.QueryRow(`SELECT object_key FROM couple_date_photos WHERE id = $1 AND date_id = $2`, photoID, dateID).Scan(&objectKey)
+	var thumbnailObjectKey sql.NullString
+	err = h.db.QueryRow(`SELECT object_key, thumbnail_object_key FROM couple_date_photos WHERE id = $1 AND date_id = $2`, photoID, dateID).Scan(&objectKey, &thumbnailObjectKey)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "photo not found")
 		return
@@ -241,6 +300,13 @@ func (h *handler) DeletePhoto(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.storage.Delete(r.Context(), objectKey); err != nil {
 		log.Printf("couple: minio delete failed for object %q, deleting DB row anyway (orphan left in storage): %v", objectKey, err)
+	}
+	// thumbnail_object_key is NULL for rows created before thumbnails
+	// existed — nothing to delete for those.
+	if thumbnailObjectKey.Valid {
+		if err := h.storage.Delete(r.Context(), thumbnailObjectKey.String); err != nil {
+			log.Printf("couple: minio delete failed for thumbnail object %q, deleting DB row anyway (orphan left in storage): %v", thumbnailObjectKey.String, err)
+		}
 	}
 
 	if _, err := h.db.Exec(`DELETE FROM couple_date_photos WHERE id = $1`, photoID); err != nil {
@@ -256,7 +322,7 @@ func (h *handler) DeletePhoto(w http.ResponseWriter, r *http.Request) {
 // couple_date_photos rows away. Logs and continues on failure — a failed
 // storage delete shouldn't block the user from deleting the date itself.
 func (h *handler) deletePhotoObjectsForDate(ctx context.Context, dateID int64) {
-	rows, err := h.db.Query(`SELECT object_key FROM couple_date_photos WHERE date_id = $1`, dateID)
+	rows, err := h.db.Query(`SELECT object_key, thumbnail_object_key FROM couple_date_photos WHERE date_id = $1`, dateID)
 	if err != nil {
 		log.Printf("couple: list photo objects for date delete failed: %v", err)
 		return
@@ -264,11 +330,17 @@ func (h *handler) deletePhotoObjectsForDate(ctx context.Context, dateID int64) {
 	var keys []string
 	for rows.Next() {
 		var key string
-		if err := rows.Scan(&key); err != nil {
+		var thumbKey sql.NullString
+		if err := rows.Scan(&key, &thumbKey); err != nil {
 			log.Printf("couple: scan photo object key for date delete failed: %v", err)
 			continue
 		}
 		keys = append(keys, key)
+		// thumbnail_object_key is NULL for rows created before thumbnails
+		// existed — nothing to delete for those.
+		if thumbKey.Valid {
+			keys = append(keys, thumbKey.String)
+		}
 	}
 	rows.Close()
 

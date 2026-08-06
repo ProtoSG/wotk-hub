@@ -33,13 +33,17 @@ type listDatesResponse struct {
 	Dates []Date `json:"dates"`
 }
 
-// Photo is the API shape for a couple-date photo. URL is a freshly generated
-// presigned MinIO GET URL (see storage.Client.PresignedGetURL) — it expires,
-// so it's never persisted; only object_key is durable in the DB.
+// Photo is the API shape for a couple-date photo. URL and ThumbnailURL are
+// freshly generated presigned MinIO GET URLs (see
+// storage.Client.PresignedGetURL) — they expire, so neither is ever
+// persisted; only the object keys are durable in the DB. ThumbnailURL always
+// points somewhere renderable: for rows created before thumbnails existed,
+// the handler falls back to presigning the full object_key (see ListPhotos).
 type Photo struct {
-	ID        int64  `json:"id"`
-	URL       string `json:"url"`
-	CreatedAt string `json:"createdAt"`
+	ID           int64  `json:"id"`
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	CreatedAt    string `json:"createdAt"`
 }
 
 type listPhotosResponse struct {
