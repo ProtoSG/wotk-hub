@@ -43,10 +43,10 @@ func findMarker(t *testing.T, img image.Image) (int, int) {
 // Orientation semantics (see applyOrientation's doc comment).
 func TestApplyOrientation(t *testing.T) {
 	cases := []struct {
-		name          string
-		orientation   int
-		wantW, wantH  int
-		wantX, wantY  int
+		name         string
+		orientation  int
+		wantW, wantH int
+		wantX, wantY int
 	}{
 		{"1 normal", 1, 3, 2, 0, 0},
 		{"2 mirror horizontal", 2, 3, 2, 2, 0},
