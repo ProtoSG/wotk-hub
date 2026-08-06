@@ -67,17 +67,21 @@ export const router = createBrowserRouter([
       {
         path: 'finances',
         element: (
-          <Suspense fallback={<RouteFallback />}>
-            <FinancesPage />
-          </Suspense>
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<RouteFallback />}>
+              <FinancesPage />
+            </Suspense>
+          </RequireRole>
         ),
       },
       {
         path: 'finances/categories',
         element: (
-          <Suspense fallback={<RouteFallback />}>
-            <CategoriesPage />
-          </Suspense>
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<RouteFallback />}>
+              <CategoriesPage />
+            </Suspense>
+          </RequireRole>
         ),
       },
       {
@@ -99,17 +103,21 @@ export const router = createBrowserRouter([
       {
         path: 'gym',
         element: (
-          <Suspense fallback={<RouteFallback />}>
-            <GymPage />
-          </Suspense>
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<RouteFallback />}>
+              <GymPage />
+            </Suspense>
+          </RequireRole>
         ),
       },
       {
         path: 'ytdlp',
         element: (
-          <Suspense fallback={<RouteFallback />}>
-            <YtdlpPage />
-          </Suspense>
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<RouteFallback />}>
+              <YtdlpPage />
+            </Suspense>
+          </RequireRole>
         ),
       },
       {

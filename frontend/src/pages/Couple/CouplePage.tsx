@@ -34,6 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import MobileTabNav from '@/components/MobileTabNav'
 import { useActiveTab } from '@/hooks/useActiveTab'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
+import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
 import { DATE_CATEGORY_LABELS, type CoupleDate } from '@/types/couple.types'
@@ -114,9 +115,13 @@ interface DateCardProps {
   onEdit: () => void
   onDelete: () => void
   onMarkDone?: () => void
+  // guest role: view-only — no edit/delete/mark-done actions, no price.
+  // Frontend-only gate for now, not backend-enforced.
+  canManage: boolean
+  canSeePrice: boolean
 }
 
-function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone }: DateCardProps) {
+function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone, canManage, canSeePrice }: DateCardProps) {
   return (
     <CozyCard className="relative animate-card-in" style={{ animationDelay: `${delay}ms` }}>
       <HankoAccent />
@@ -129,30 +134,32 @@ function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone }: DateCardProp
               <div className="text-xs text-muted-foreground">{d.occurredOn}</div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {onMarkDone && (
-              <Button variant="ghost" size="icon" aria-label="Marcar como realizada" onClick={onMarkDone}>
-                <Check className="h-4 w-4" />
-              </Button>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Más acciones">
-                  <MoreVertical className="h-4 w-4" />
+          {canManage && (
+            <div className="flex shrink-0 items-center gap-1">
+              {onMarkDone && (
+                <Button variant="ghost" size="icon" aria-label="Marcar como realizada" onClick={onMarkDone}>
+                  <Check className="h-4 w-4" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="h-4 w-4" />
-                  Editar
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                  Eliminar
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Más acciones">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={onEdit}>
+                    <Pencil className="h-4 w-4" />
+                    Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pl-11">
@@ -168,7 +175,7 @@ function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone }: DateCardProp
               ))}
             </div>
           )}
-          {d.costCents != null && (
+          {canSeePrice && d.costCents != null && (
             <span className="ml-auto text-xs font-medium text-muted-foreground">{formatPEN(d.costCents)}</span>
           )}
         </div>
@@ -196,6 +203,7 @@ export default function CouplePage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CoupleDate | null>(null)
   const { listDates, updateDate, deleteDate } = useCoupleApi()
+  const role = useAuthStore((s) => s.user?.role)
   const pendingDeletes = useRef(new Map<number, number>())
   const { tab, setSearchParams } = useActiveTab(TABS, 'citas')
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
@@ -284,6 +292,10 @@ export default function CouplePage() {
     : null
   const totalSpentCents = doneDates.reduce((sum, d) => sum + (d.costCents ?? 0), 0)
 
+  // guest: view-only citas, no prices. Frontend-only for now.
+  const canManage = role === 'admin'
+  const canSeePrice = role === 'admin'
+
   return (
     <>
       <div className="space-y-6 pb-24 sm:pb-0">
@@ -298,10 +310,14 @@ export default function CouplePage() {
 
           <TabsContent value="citas" className={TAB_CONTENT_CLASS}>
         <CoupleCover
-          onNewDate={() => {
-            setEditing(null)
-            setFormOpen(true)
-          }}
+          onNewDate={
+            canManage
+              ? () => {
+                  setEditing(null)
+                  setFormOpen(true)
+                }
+              : undefined
+          }
         />
 
         {/* Constrained to a reading-column width (Day One's centered journal
@@ -310,7 +326,7 @@ export default function CouplePage() {
             that read as cold/unfinished. The cover above stays full width,
             untouched. */}
         <div className="mx-auto w-full max-w-4xl space-y-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className={cn('grid grid-cols-2 gap-4', canSeePrice && 'sm:grid-cols-3')}>
             <CozyCard className="animate-card-in">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Citas registradas</CardTitle>
@@ -331,14 +347,16 @@ export default function CouplePage() {
                 )}
               </CardContent>
             </CozyCard>
-            <CozyCard className="col-span-2 animate-card-in [animation-delay:120ms] sm:col-span-1">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total invertido</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatPEN(totalSpentCents)}</div>
-              </CardContent>
-            </CozyCard>
+            {canSeePrice && (
+              <CozyCard className="col-span-2 animate-card-in [animation-delay:120ms] sm:col-span-1">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Total invertido</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{formatPEN(totalSpentCents)}</div>
+                </CardContent>
+              </CozyCard>
+            )}
           </div>
 
           {dates.length === 0 ? (
@@ -359,6 +377,8 @@ export default function CouplePage() {
                         key={d.id}
                         date={d}
                         delay={Math.min(i * 40, 320)}
+                        canManage={canManage}
+                        canSeePrice={canSeePrice}
                         onEdit={() => {
                           setEditing(d)
                           setFormOpen(true)
@@ -379,6 +399,8 @@ export default function CouplePage() {
                       key={d.id}
                       date={d}
                       delay={Math.min(i * 40, 320)}
+                      canManage={canManage}
+                      canSeePrice={canSeePrice}
                       onEdit={() => {
                         setEditing(d)
                         setFormOpen(true)
@@ -387,7 +409,7 @@ export default function CouplePage() {
                     />
                   ))}
 
-                  {dates.length < 4 && (
+                  {canManage && dates.length < 4 && (
                     <button
                       type="button"
                       onClick={() => {
@@ -414,7 +436,7 @@ export default function CouplePage() {
         </Tabs>
       </div>
 
-      {tab === 'citas' && (
+      {tab === 'citas' && canManage && (
         <FloatingActionButton
           label="Nueva cita"
           onClick={() => {
@@ -424,7 +446,7 @@ export default function CouplePage() {
         />
       )}
 
-      <MobileTabNav tabs={TABS} activeTab={tab} onChange={goToTab} fabVisible={tab === 'citas'} />
+      <MobileTabNav tabs={TABS} activeTab={tab} onChange={goToTab} fabVisible={tab === 'citas' && canManage} />
 
       <DateForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editing={editing} />
     </>

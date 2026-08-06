@@ -2,7 +2,8 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface CoupleCoverProps {
-  onNewDate: () => void
+  // Omitted for a view-only role (guest) — no "Nueva cita" button rendered.
+  onNewDate?: () => void
 }
 
 /**
@@ -123,12 +124,14 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
           >
             Citas
           </h1>
-          <div className="hidden sm:block">
-            <Button onClick={onNewDate}>
-              <Plus size={14} />
-              Nueva cita
-            </Button>
-          </div>
+          {onNewDate && (
+            <div className="hidden sm:block">
+              <Button onClick={onNewDate}>
+                <Plus size={14} />
+                Nueva cita
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
