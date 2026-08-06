@@ -14,6 +14,7 @@ import { useCoupleApi } from '@/hooks/useCoupleApi'
 import { solesToCents, centsToSoles } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { DATE_CATEGORIES, DATE_CATEGORY_LABELS, type CoupleDate, type DateStatus } from '@/types/couple.types'
+import DatePhotos from './DatePhotos'
 
 const schema = z.object({
   occurredOn: z.string().min(1, 'Requerido'),
@@ -227,6 +228,10 @@ export default function DateForm({ open, onClose, onSaved, editing }: Props) {
             <Label>Notas</Label>
             <Textarea placeholder="¿Cómo la pasaron?" {...register('notes')} />
           </div>
+          {/* Photos only make sense once the date exists (needs an id to
+              attach uploads to) — a brand-new, unsaved date has nothing to
+              attach photos to yet. */}
+          {editing && <DatePhotos dateId={editing.id} />}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancelar

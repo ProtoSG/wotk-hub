@@ -366,6 +366,19 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_emoji_game_sessions_player1_id ON emoji_game_sessions (player1_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_emoji_game_sessions_player2_id ON emoji_game_sessions (player2_id)`,
+		// object_key is the durable pointer into MinIO; ON DELETE CASCADE
+		// only reaches this row when its couple_dates parent is deleted, not
+		// the actual MinIO object — SQL can't reach into object storage, so
+		// the couple DeleteDate handler deletes each photo's MinIO object
+		// itself before the SQL delete cascades these rows away.
+		`CREATE TABLE IF NOT EXISTS couple_date_photos (
+			id          BIGSERIAL PRIMARY KEY,
+			date_id     BIGINT NOT NULL REFERENCES couple_dates(id) ON DELETE CASCADE,
+			object_key  TEXT NOT NULL,
+			created_by  BIGINT REFERENCES users(id),
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_date_photos_date_id ON couple_date_photos (date_id)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

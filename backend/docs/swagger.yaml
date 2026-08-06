@@ -102,6 +102,15 @@ definitions:
       tiktokUrl:
         type: string
     type: object
+  couple.Photo:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      url:
+        type: string
+    type: object
   couple.dateRequest:
     properties:
       category:
@@ -126,6 +135,13 @@ definitions:
       dates:
         items:
           $ref: '#/definitions/couple.Date'
+        type: array
+    type: object
+  couple.listPhotosResponse:
+    properties:
+      photos:
+        items:
+          $ref: '#/definitions/couple.Photo'
         type: array
     type: object
   db.ColumnInfo:
@@ -549,6 +565,365 @@ definitions:
       type:
         type: string
     type: object
+  gym.Exercise:
+    properties:
+      description:
+        description: Spanish how-to text; empty until seeded or written in the app.
+        type: string
+      equipment:
+        type: string
+      id:
+        type: integer
+      isCustom:
+        type: boolean
+      mediaType:
+        type: string
+      mediaUrl:
+        type: string
+      name:
+        type: string
+      primaryMuscle:
+        type: string
+      secondaryMuscle:
+        type: string
+      trackingType:
+        description: One of weight_reps | duration_distance | duration.
+        type: string
+    type: object
+  gym.ExerciseSet:
+    properties:
+      completed:
+        type: boolean
+      distanceMeters:
+        type: integer
+      durationSeconds:
+        description: |-
+          Both stay 0 on a weight_reps set. They live here rather than in a
+          separate cardio table so progress queries stay one path, and so hybrids
+          (Farmers Walk, Sled Push) can carry weight and distance at once.
+        type: integer
+      id:
+        type: integer
+      isWarmup:
+        type: boolean
+      reps:
+        type: integer
+      setNumber:
+        type: integer
+      weightGrams:
+        type: integer
+    type: object
+  gym.ProgressPoint:
+    properties:
+      estimated1rmGrams:
+        description: 'Epley estimate from the top set: weight x (1 + reps/30).'
+        type: integer
+      maxDurationSeconds:
+        type: integer
+      maxWeightGrams:
+        type: integer
+      occurredOn:
+        type: string
+      sessionId:
+        type: integer
+      topSet:
+        $ref: '#/definitions/gym.TopSet'
+      totalDistanceMeters:
+        type: integer
+      totalDurationSeconds:
+        description: |-
+          Cardio and hold metrics. Volume and 1RM are meaningless for those, so
+          the client charts these instead depending on the exercise's tracking
+          type — see ProgressMetric on the frontend.
+        type: integer
+      totalReps:
+        type: integer
+      totalVolumeGrams:
+        type: integer
+    type: object
+  gym.ProgressSummaryResponse:
+    properties:
+      sessionsThisMonth:
+        type: integer
+      topMuscle:
+        description: Empty when nothing has been logged in the trailing 90 days.
+        type: string
+      volumeThisMonthGrams:
+        type: integer
+      weekStreak:
+        description: |-
+          Consecutive weeks with at least one session — weeks, not days, because
+          rest days are part of training.
+        type: integer
+    type: object
+  gym.Routine:
+    properties:
+      archived:
+        type: boolean
+      color:
+        type: string
+      exercises:
+        items:
+          $ref: '#/definitions/gym.RoutineExercise'
+        type: array
+      icon:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      notes:
+        type: string
+    type: object
+  gym.RoutineExercise:
+    properties:
+      exercise:
+        $ref: '#/definitions/gym.Exercise'
+      exerciseId:
+        type: integer
+      id:
+        type: integer
+      notes:
+        type: string
+      position:
+        type: integer
+      targetReps:
+        type: integer
+      targetSets:
+        type: integer
+    type: object
+  gym.RoutineSummary:
+    properties:
+      archived:
+        type: boolean
+      color:
+        type: string
+      exerciseCount:
+        type: integer
+      icon:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      notes:
+        type: string
+    type: object
+  gym.Session:
+    properties:
+      exercises:
+        items:
+          $ref: '#/definitions/gym.SessionExercise'
+        type: array
+      finishedAt:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      notes:
+        type: string
+      occurredOn:
+        type: string
+      routineId:
+        type: integer
+      startedAt:
+        type: string
+    type: object
+  gym.SessionExercise:
+    properties:
+      exercise:
+        $ref: '#/definitions/gym.Exercise'
+      exerciseId:
+        type: integer
+      id:
+        type: integer
+      notes:
+        type: string
+      position:
+        type: integer
+      sets:
+        items:
+          $ref: '#/definitions/gym.ExerciseSet'
+        type: array
+    type: object
+  gym.SessionSummary:
+    properties:
+      exerciseCount:
+        type: integer
+      finishedAt:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      notes:
+        type: string
+      occurredOn:
+        type: string
+      routineId:
+        type: integer
+      startedAt:
+        type: string
+      totalReps:
+        type: integer
+      totalVolumeGrams:
+        type: integer
+    type: object
+  gym.TopSet:
+    properties:
+      reps:
+        type: integer
+      weightGrams:
+        type: integer
+    type: object
+  gym.activeSessionResponse:
+    properties:
+      session:
+        $ref: '#/definitions/gym.Session'
+    type: object
+  gym.descriptionRequest:
+    properties:
+      description:
+        type: string
+    type: object
+  gym.exerciseFiltersResponse:
+    properties:
+      equipment:
+        items:
+          type: string
+        type: array
+      muscles:
+        items:
+          type: string
+        type: array
+    type: object
+  gym.exerciseProgressResponse:
+    properties:
+      points:
+        items:
+          $ref: '#/definitions/gym.ProgressPoint'
+        type: array
+    type: object
+  gym.exerciseRequest:
+    properties:
+      description:
+        type: string
+      equipment:
+        type: string
+      name:
+        type: string
+      primaryMuscle:
+        type: string
+      secondaryMuscle:
+        type: string
+      trackingType:
+        description: |-
+          Empty defaults to weight_reps, so an older client that doesn't know
+          about tracking types still creates a usable exercise.
+        type: string
+    type: object
+  gym.lastSetsResponse:
+    properties:
+      occurredOn:
+        description: Date of the session the sets came from. Empty when there are
+          none.
+        type: string
+      sets:
+        items:
+          $ref: '#/definitions/gym.ExerciseSet'
+        type: array
+    type: object
+  gym.listExercisesResponse:
+    properties:
+      exercises:
+        items:
+          $ref: '#/definitions/gym.Exercise'
+        type: array
+      total:
+        type: integer
+    type: object
+  gym.listRoutinesResponse:
+    properties:
+      routines:
+        items:
+          $ref: '#/definitions/gym.RoutineSummary'
+        type: array
+    type: object
+  gym.listSessionsResponse:
+    properties:
+      sessions:
+        items:
+          $ref: '#/definitions/gym.SessionSummary'
+        type: array
+    type: object
+  gym.replaceSetsRequest:
+    properties:
+      sets:
+        items:
+          $ref: '#/definitions/gym.setInput'
+        type: array
+    type: object
+  gym.routineExerciseInput:
+    properties:
+      exerciseId:
+        type: integer
+      notes:
+        type: string
+      targetReps:
+        type: integer
+      targetSets:
+        type: integer
+    type: object
+  gym.routineRequest:
+    properties:
+      color:
+        type: string
+      exercises:
+        items:
+          $ref: '#/definitions/gym.routineExerciseInput'
+        type: array
+      icon:
+        type: string
+      name:
+        type: string
+      notes:
+        type: string
+    type: object
+  gym.sessionExerciseRequest:
+    properties:
+      exerciseId:
+        type: integer
+      notes:
+        type: string
+    type: object
+  gym.sessionRequest:
+    properties:
+      name:
+        type: string
+      notes:
+        type: string
+      occurredOn:
+        type: string
+      routineId:
+        description: 'Optional: when set, the session is materialized from that template.'
+        type: integer
+    type: object
+  gym.setInput:
+    properties:
+      completed:
+        type: boolean
+      distanceMeters:
+        type: integer
+      durationSeconds:
+        type: integer
+      isWarmup:
+        type: boolean
+      reps:
+        type: integer
+      weightGrams:
+        type: integer
+    type: object
   httpx.APIError:
     properties:
       code:
@@ -965,6 +1340,113 @@ paths:
       security:
       - CookieAuth: []
       summary: Update a couple date
+      tags:
+      - couple
+  /couple/dates/{id}/photos:
+    get:
+      parameters:
+      - description: Date ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/couple.listPhotosResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List photos for a couple date
+      tags:
+      - couple
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Date ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Photo file (jpeg, png, webp or gif)
+        in: formData
+        name: photo
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/couple.Photo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Upload a photo for a couple date
+      tags:
+      - couple
+  /couple/dates/{id}/photos/{photoId}:
+    delete:
+      parameters:
+      - description: Date ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Photo ID
+        in: path
+        name: photoId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a photo from a couple date
       tags:
       - couple
   /db/connect:
@@ -1991,6 +2473,681 @@ paths:
       summary: Refund a transaction
       tags:
       - finances
+  /gym/exercises:
+    get:
+      parameters:
+      - description: Filter by name (case-insensitive substring)
+        in: query
+        name: q
+        type: string
+      - description: Filter by primary muscle
+        in: query
+        name: muscle
+        type: string
+      - description: Filter by equipment
+        in: query
+        name: equipment
+        type: string
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.listExercisesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List exercises
+      tags:
+      - gym
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Exercise details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.exerciseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/gym.Exercise'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: an exercise with that name already exists
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a custom exercise
+      tags:
+      - gym
+  /gym/exercises/{id}:
+    delete:
+      parameters:
+      - description: Exercise ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: the exercise is seeded or still in use
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a custom exercise
+      tags:
+      - gym
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Exercise ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exercise details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.exerciseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Exercise'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a custom exercise
+      tags:
+      - gym
+  /gym/exercises/{id}/description:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Exercise ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Description
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.descriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Exercise'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update an exercise's description
+      tags:
+      - gym
+  /gym/exercises/{id}/last-sets:
+    get:
+      parameters:
+      - description: Exercise ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.lastSetsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get an exercise's most recent sets
+      tags:
+      - gym
+  /gym/exercises/filters:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.exerciseFiltersResponse'
+      security:
+      - CookieAuth: []
+      summary: List exercise filter values
+      tags:
+      - gym
+  /gym/progress/exercises:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.listExercisesResponse'
+      security:
+      - CookieAuth: []
+      summary: List exercises with logged sets
+      tags:
+      - gym
+  /gym/progress/exercises/{id}:
+    get:
+      parameters:
+      - description: Exercise ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Earliest date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: Latest date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.exerciseProgressResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get an exercise's progress over time
+      tags:
+      - gym
+  /gym/progress/summary:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.ProgressSummaryResponse'
+      security:
+      - CookieAuth: []
+      summary: Get training summary
+      tags:
+      - gym
+  /gym/routines:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.listRoutinesResponse'
+      security:
+      - CookieAuth: []
+      summary: List routines
+      tags:
+      - gym
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Routine details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.routineRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/gym.Routine'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Create a routine
+      tags:
+      - gym
+  /gym/routines/{id}:
+    delete:
+      parameters:
+      - description: Routine ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a routine
+      tags:
+      - gym
+    get:
+      parameters:
+      - description: Routine ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Routine'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get a routine
+      tags:
+      - gym
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Routine ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Routine details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.routineRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Routine'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a routine
+      tags:
+      - gym
+  /gym/sessions:
+    get:
+      parameters:
+      - description: Earliest date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: Latest date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.listSessionsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: List workout sessions
+      tags:
+      - gym
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.sessionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "409":
+          description: a session is already in progress
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Start a workout session
+      tags:
+      - gym
+  /gym/sessions/{id}:
+    delete:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Delete a workout session
+      tags:
+      - gym
+    get:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Get a workout session
+      tags:
+      - gym
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Session details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.sessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Update a workout session
+      tags:
+      - gym
+  /gym/sessions/{id}/exercises:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exercise to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.sessionExerciseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Add an exercise to a session
+      tags:
+      - gym
+  /gym/sessions/{id}/exercises/{exerciseId}:
+    delete:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Session exercise ID
+        in: path
+        name: exerciseId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Remove an exercise from a session
+      tags:
+      - gym
+  /gym/sessions/{id}/exercises/{exerciseId}/sets:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Session exercise ID
+        in: path
+        name: exerciseId
+        required: true
+        type: integer
+      - description: The full set list
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym.replaceSetsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Replace an exercise's sets
+      tags:
+      - gym
+  /gym/sessions/{id}/finish:
+    post:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.Session'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpx.APIError'
+      security:
+      - CookieAuth: []
+      summary: Finish a workout session
+      tags:
+      - gym
+  /gym/sessions/active:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym.activeSessionResponse'
+      security:
+      - CookieAuth: []
+      summary: Get the in-progress session
+      tags:
+      - gym
   /ytdlp/download:
     post:
       consumes:

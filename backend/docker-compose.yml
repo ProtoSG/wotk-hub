@@ -16,5 +16,29 @@ services:
       timeout: 3s
       retries: 5
 
+  # Dedicated MinIO instance for couple-date photo uploads — separate from
+  # any other project's MinIO (own container, own volume, own credentials).
+  # MINIO_ROOT_PASSWORD below is a local-dev placeholder only; override it
+  # via MINIO_SECRET_KEY/real env in any real deploy.
+  minio:
+    image: minio/minio:latest
+    container_name: workhub-minio
+    environment:
+      MINIO_ROOT_USER: workhub
+      MINIO_ROOT_PASSWORD: workhub-minio-dev-secret
+    volumes:
+      - workhub_minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   workhub_pgdata:
+  workhub_minio_data:
