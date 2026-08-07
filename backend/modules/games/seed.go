@@ -218,7 +218,8 @@ func SeedRiddles(db *sql.DB) error {
 	for _, r := range riddles {
 		if _, err := db.Exec(
 			`INSERT INTO daily_riddles (question, answer, hint, difficulty, published_on)
-			 VALUES ($1, $2, $3, $4, '2025-01-01')`,
+			 VALUES ($1, $2, $3, $4, '2025-01-01')
+			 ON CONFLICT DO NOTHING`,
 			r.question, r.answer, r.hint, r.difficulty,
 		); err != nil {
 			return err
