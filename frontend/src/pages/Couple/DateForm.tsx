@@ -3,7 +3,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, Star } from 'lucide-react'
+import { Loader2, Heart } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -197,16 +197,16 @@ export default function DateForm({ open, onClose, onSaved, editing }: Props) {
                   <button
                     key={n}
                     type="button"
-                    aria-label={`${n} estrellas`}
+                    aria-label={`${n} corazón${n > 1 ? 'es' : ''}`}
                     onClick={() => setValue('rating', rating === n ? null : n, { shouldDirty: true })}
                     className="p-2 transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
                   >
-                    <Star
+                    <Heart
                       size={18}
                       className={cn(
                         'transition-colors duration-150',
                         rating != null && n <= rating
-                          ? 'fill-yellow-400 text-yellow-400'
+                          ? 'fill-primary text-primary'
                           : 'text-muted-foreground'
                       )}
                     />

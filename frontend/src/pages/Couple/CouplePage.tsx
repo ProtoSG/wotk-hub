@@ -3,9 +3,8 @@ import { toast } from 'sonner'
 import {
   Pencil,
   Trash2,
-  Star,
-  MoreVertical,
   Heart,
+  MoreVertical,
   Images,
   Link as LinkIcon,
   Plus,
@@ -167,10 +166,10 @@ function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone, canManage, can
           {d.rating != null && (
             <div className="flex items-center gap-0.5">
               {[1, 2, 3, 4, 5].map((n) => (
-                <Star
+                <Heart
                   key={n}
                   size={12}
-                  className={cn(n <= (d.rating ?? 0) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground')}
+                  className={cn(n <= (d.rating ?? 0) ? 'fill-primary text-primary' : 'text-muted-foreground')}
                 />
               ))}
             </div>
@@ -343,7 +342,7 @@ export default function CouplePage() {
                 {avgRating != null ? (
                   <div className="text-2xl font-bold">{avgRating.toFixed(1)}</div>
                 ) : (
-                  <Star className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
+                  <Heart className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
                 )}
               </CardContent>
             </CozyCard>
