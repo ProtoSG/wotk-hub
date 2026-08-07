@@ -5,6 +5,10 @@ import type {
   GuessResult,
   MovieDifficulty,
   RevealResult,
+  DailyRiddle,
+  RiddleGameSession,
+  RiddleGuessResult,
+  RiddleHistoryItem,
 } from '@/types/games.types'
 
 export function useGamesApi() {
@@ -47,5 +51,39 @@ export function useGamesApi() {
     return res.data.sessions
   }
 
-  return { randomMovie, createSession, getSession, joinSession, guess, reveal, activeSessions }
+  // ─── Riddle Game ─────────────────────────────────────────────────────────────
+
+  async function getRiddleToday(): Promise<{ riddle: DailyRiddle | null }> {
+    const res = await api.get<{ riddle: DailyRiddle | null }>('/api/games/riddle/today')
+    return res.data
+  }
+
+  async function getRiddleSession(): Promise<{ session: RiddleGameSession | null }> {
+    const res = await api.get<{ session: RiddleGameSession | null }>('/api/games/riddle/session')
+    return res.data
+  }
+
+  async function submitRiddleGuess(guess: string): Promise<RiddleGuessResult> {
+    const res = await api.post<RiddleGuessResult>('/api/games/riddle/guess', { guess })
+    return res.data
+  }
+
+  async function getRiddleHistory(): Promise<{ history: RiddleHistoryItem[] }> {
+    const res = await api.get<{ history: RiddleHistoryItem[] }>('/api/games/riddle/history')
+    return res.data
+  }
+
+  return {
+    randomMovie,
+    createSession,
+    getSession,
+    joinSession,
+    guess,
+    reveal,
+    activeSessions,
+    getRiddleToday,
+    getRiddleSession,
+    submitRiddleGuess,
+    getRiddleHistory,
+  }
 }
