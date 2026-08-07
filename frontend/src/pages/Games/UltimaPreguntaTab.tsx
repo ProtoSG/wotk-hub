@@ -71,6 +71,9 @@ export default function UltimaPreguntaTab() {
   const [view, setView] = useState<'play' | 'history'>('play')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Must be called before any early returns — hooks can't be conditional
+  const countdown = useCountdown(riddle?.publishedOn ?? new Date().toISOString().split('T')[0])
+
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current)
@@ -106,7 +109,7 @@ export default function UltimaPreguntaTab() {
         if (!s || s.status === 'active') {
           startPolling()
         }
-      } catch (err) {
+      } catch {
         toast.error('No se pudo cargar el juego')
       }
     })()
@@ -171,7 +174,7 @@ export default function UltimaPreguntaTab() {
       const { history: h } = await getRiddleHistory()
       setHistory(h)
       setView('history')
-    } catch (err) {
+    } catch {
       toast.error('No se pudo cargar el historial')
     }
   }
@@ -318,7 +321,6 @@ export default function UltimaPreguntaTab() {
 
   // Active daily riddle
   const isP1 = userId === session.teamId
-  const countdown = useCountdown(riddle?.publishedOn ?? new Date().toISOString().split('T')[0])
 
   return (
     <Card className="mx-auto max-w-md">
