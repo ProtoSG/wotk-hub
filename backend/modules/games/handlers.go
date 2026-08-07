@@ -398,11 +398,18 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 		 ON CONFLICT DO NOTHING
 		 RETURNING id`,
 		userID, today).Scan(&sessionID)
+
 	if err == sql.ErrNoRows {
-		// No row returned — session already exists, fetch it
+		// No row returned — either no riddle exists for today, or session already exists.
+		// Check if session already exists.
 		err = h.db.QueryRow(
 			`SELECT id FROM riddle_game_sessions WHERE team_id = $1 ORDER BY id DESC LIMIT 1`,
 			userID).Scan(&sessionID)
+		if err == sql.ErrNoRows {
+			// No session and no riddle for today — return a clear "no riddle today" response.
+			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "no riddle available for today")
+			return
+		}
 	}
 	if err != nil {
 		log.Printf("games: get riddle session failed: %v", err)
