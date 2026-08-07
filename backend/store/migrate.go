@@ -392,6 +392,11 @@ func Migrate(db *sql.DB) error {
 		// every boot) until the table hits Postgres's 1600-column hard
 		// limit — that took prod down once already.
 		`ALTER TABLE couple_date_photos ADD COLUMN IF NOT EXISTS thumbnail_object_key TEXT`,
+		// External URL override for couple_date_photos — when set, takes
+		// precedence over MinIO presigned URLs (thumbnailUrl/full URL).
+		// Allows users to supply a direct image URL without going through
+		// the MinIO upload pipeline.
+		`ALTER TABLE couple_date_photos ADD COLUMN IF NOT EXISTS external_url TEXT`,
 		// La Última Pregunta — daily riddle game for couples.
 		`CREATE TABLE IF NOT EXISTS daily_riddles (
 			id            BIGSERIAL PRIMARY KEY,
