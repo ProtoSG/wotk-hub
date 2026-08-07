@@ -81,6 +81,9 @@ func main() {
 	if err := games.Seed(appDB); err != nil {
 		log.Fatalf("games seed: %v", err)
 	}
+	if err := games.SeedRiddles(appDB); err != nil {
+		log.Fatalf("games seed riddles: %v", err)
+	}
 
 	// Idempotent, so it runs on every boot alongside Migrate. Fatal on
 	// failure: an empty exercise catalog makes the gym module unusable.
