@@ -390,21 +390,24 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	// Upsert session for this team. team_id = userID's "team" (treated as userID
 	// for now — the couple relationship is out of scope, so each user is their own team).
 	// partner_id = same user (placeholder until couple module provides the link).
-	row := h.db.QueryRow(
+	var sessionID int64
+	err := h.db.QueryRow(
 		`INSERT INTO riddle_game_sessions (team_id, partner_id, current_riddle_id, status)
 		 SELECT $1, $1, id, 'active'
 		 FROM daily_riddles WHERE published_on = $2
 		 ON CONFLICT DO NOTHING
 		 RETURNING id`,
-		userID, today)
-	var sessionID int64
-	if err := row.Scan(&sessionID); err != nil {
-		// Already exists — fetch it
-	}
-	if sessionID == 0 {
-		h.db.QueryRow(
+		userID, today).Scan(&sessionID)
+	if err == sql.ErrNoRows {
+		// No row returned — session already exists, fetch it
+		err = h.db.QueryRow(
 			`SELECT id FROM riddle_game_sessions WHERE team_id = $1 ORDER BY id DESC LIMIT 1`,
 			userID).Scan(&sessionID)
+	}
+	if err != nil {
+		log.Printf("games: get riddle session failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
 	}
 
 	// Load full session
@@ -415,7 +418,7 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	var s RiddleGameSession
 	var currentRiddleID sql.NullInt64
 	var createdAt time.Time
-	err := srow.Scan(&s.ID, &s.TeamID, &s.PartnerID, &s.LivesRemaining, &s.P1Score, &s.P2Score,
+	err = srow.Scan(&s.ID, &s.TeamID, &s.PartnerID, &s.LivesRemaining, &s.P1Score, &s.P2Score,
 		&currentRiddleID, &s.Status, &createdAt)
 	if err != nil {
 		log.Printf("games: get riddle session failed: %v", err)
