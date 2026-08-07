@@ -392,6 +392,37 @@ func Migrate(db *sql.DB) error {
 		// every boot) until the table hits Postgres's 1600-column hard
 		// limit — that took prod down once already.
 		`ALTER TABLE couple_date_photos ADD COLUMN IF NOT EXISTS thumbnail_object_key TEXT`,
+		// La Última Pregunta — daily riddle game for couples.
+		`CREATE TABLE IF NOT EXISTS daily_riddles (
+			id            BIGSERIAL PRIMARY KEY,
+			question      TEXT    NOT NULL,
+			answer        TEXT    NOT NULL,
+			hint          TEXT    NOT NULL DEFAULT '',
+			difficulty    TEXT    NOT NULL CHECK (difficulty IN ('easy','medium','hard')),
+			published_on  DATE    NOT NULL UNIQUE,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS riddle_game_sessions (
+			id                BIGSERIAL PRIMARY KEY,
+			team_id           BIGINT  NOT NULL REFERENCES users(id),
+			partner_id        BIGINT  NOT NULL REFERENCES users(id),
+			lives_remaining   INT     NOT NULL DEFAULT 3 CHECK (lives_remaining >= 0),
+			p1_score          INT     NOT NULL DEFAULT 0,
+			p2_score          INT     NOT NULL DEFAULT 0,
+			current_riddle_id BIGINT REFERENCES daily_riddles(id),
+			status            TEXT    NOT NULL DEFAULT 'active',
+			created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS riddle_attempts (
+			id            BIGSERIAL PRIMARY KEY,
+			session_id    BIGINT  NOT NULL REFERENCES riddle_game_sessions(id),
+			riddle_id     BIGINT  NOT NULL REFERENCES daily_riddles(id),
+			solver_id     BIGINT  NOT NULL REFERENCES users(id),
+			solved_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+			points_earned INT     NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_riddle_game_sessions_team_id ON riddle_game_sessions (team_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_riddle_attempts_session_id ON riddle_attempts (session_id)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

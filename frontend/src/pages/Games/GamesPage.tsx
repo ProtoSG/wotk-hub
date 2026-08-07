@@ -1,6 +1,7 @@
 import { Gamepad2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import EmojiMoviesTab from './EmojiMoviesTab'
+import UltimaPreguntaTab from './UltimaPreguntaTab'
 
 export default function GamesPage() {
   return (
@@ -10,10 +11,14 @@ export default function GamesPage() {
         <h1 className="text-2xl font-bold text-foreground">Juegos</h1>
       </div>
 
-      <Tabs defaultValue="emoji-movies">
+      <Tabs defaultValue="ultima-pregunta">
         <TabsList>
+          <TabsTrigger value="ultima-pregunta">La Última Pregunta</TabsTrigger>
           <TabsTrigger value="emoji-movies">Emoji Movies</TabsTrigger>
         </TabsList>
+        <TabsContent value="ultima-pregunta" className="mt-4">
+          <UltimaPreguntaTab />
+        </TabsContent>
         <TabsContent value="emoji-movies" className="mt-4">
           <EmojiMoviesTab />
         </TabsContent>

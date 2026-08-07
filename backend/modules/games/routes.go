@@ -26,5 +26,10 @@ func Routes(db *sql.DB) http.Handler {
 	r.Post("/sessions/{id}/guess", h.Guess)
 	r.Post("/sessions/{id}/reveal", h.Reveal)
 
+	r.Get("/riddle/today", h.GetRiddleToday)
+	r.Get("/riddle/session", h.GetRiddleSession)
+	r.Post("/riddle/guess", h.SubmitRiddleGuess)
+	r.Get("/riddle/history", h.GetRiddleHistory)
+
 	return r
 }
