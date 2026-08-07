@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 	"workhub/httpx"
 	"workhub/middleware"
 )
@@ -329,6 +330,243 @@ func (h *handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, revealResponse{Answer: answer, Session: updated})
+}
+
+// ─── Riddle Game Handlers ─────────────────────────────────────────────────────
+
+// scoring windows in hours → points
+var scoringWindows = []struct {
+	hoursMax int
+	points   int
+}{
+	{1, 100},
+	{6, 75},
+	{12, 60},
+	{24, 50},
+}
+
+func calcPoints(elapsedHours float64) int {
+	for _, w := range scoringWindows {
+		if elapsedHours < float64(w.hoursMax) {
+			return w.points
+		}
+	}
+	return 0
+}
+
+// GetRiddleToday returns today's riddle (question, hint, difficulty only).
+func (h *handler) GetRiddleToday(w http.ResponseWriter, r *http.Request) {
+	today := time.Now().Format("2006-01-02")
+	row := h.db.QueryRow(
+		`SELECT id, question, hint, difficulty, published_on, created_at
+		 FROM daily_riddles WHERE published_on = $1`, today)
+	var rid DailyRiddle
+	var publishedOn string
+	var createdAt time.Time
+	err := row.Scan(&rid.ID, &rid.Question, &rid.Hint, &rid.Difficulty, &publishedOn, &createdAt)
+	if err == sql.ErrNoRows {
+		httpx.WriteJSON(w, http.StatusOK, riddleTodayResponse{Riddle: nil})
+		return
+	}
+	if err != nil {
+		log.Printf("games: get riddle today failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	rid.PublishedOn = publishedOn
+	rid.CreatedAt = createdAt.Format(time.RFC3339)
+	httpx.WriteJSON(w, http.StatusOK, riddleTodayResponse{Riddle: &rid})
+}
+
+// GetRiddleSession returns (or creates) the current team's riddle session.
+func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	today := time.Now().Format("2006-01-02")
+
+	// Upsert session for this team. team_id = userID's "team" (treated as userID
+	// for now — the couple relationship is out of scope, so each user is their own team).
+	// partner_id = same user (placeholder until couple module provides the link).
+	row := h.db.QueryRow(
+		`INSERT INTO riddle_game_sessions (team_id, partner_id, current_riddle_id, status)
+		 SELECT $1, $1, id, 'active'
+		 FROM daily_riddles WHERE published_on = $2
+		 ON CONFLICT DO NOTHING
+		 RETURNING id`,
+		userID, today)
+	var sessionID int64
+	if err := row.Scan(&sessionID); err != nil {
+		// Already exists — fetch it
+	}
+	if sessionID == 0 {
+		h.db.QueryRow(
+			`SELECT id FROM riddle_game_sessions WHERE team_id = $1 ORDER BY id DESC LIMIT 1`,
+			userID).Scan(&sessionID)
+	}
+
+	// Load full session
+	srow := h.db.QueryRow(
+		`SELECT id, team_id, partner_id, lives_remaining, p1_score, p2_score,
+		        current_riddle_id, status, created_at
+		 FROM riddle_game_sessions WHERE id = $1`, sessionID)
+	var s RiddleGameSession
+	var currentRiddleID sql.NullInt64
+	var createdAt time.Time
+	err := srow.Scan(&s.ID, &s.TeamID, &s.PartnerID, &s.LivesRemaining, &s.P1Score, &s.P2Score,
+		&currentRiddleID, &s.Status, &createdAt)
+	if err != nil {
+		log.Printf("games: get riddle session failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if currentRiddleID.Valid {
+		s.CurrentRiddleID = &currentRiddleID.Int64
+	}
+	s.CreatedAt = createdAt.Format(time.RFC3339)
+	httpx.WriteJSON(w, http.StatusOK, riddleSessionResponse{Session: &s})
+}
+
+// SubmitRiddleGuess checks a guess against today's riddle.
+func (h *handler) SubmitRiddleGuess(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	var req riddleGuessRequest
+	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	guess := strings.TrimSpace(req.Guess)
+	if guess == "" {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "guess is required")
+		return
+	}
+
+	today := time.Now().Format("2006-01-02")
+
+	// Get session
+	var s RiddleGameSession
+	var currentRiddleID sql.NullInt64
+	var createdAt time.Time
+	err := h.db.QueryRow(
+		`SELECT id, team_id, partner_id, lives_remaining, p1_score, p2_score,
+		        current_riddle_id, status, created_at
+		 FROM riddle_game_sessions WHERE team_id = $1 AND status = 'active'
+		 ORDER BY id DESC LIMIT 1`,
+		userID).Scan(&s.ID, &s.TeamID, &s.PartnerID, &s.LivesRemaining, &s.P1Score, &s.P2Score,
+		&currentRiddleID, &s.Status, &createdAt)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "no active session")
+		return
+	}
+	if err != nil {
+		log.Printf("games: submit guess session lookup failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if currentRiddleID.Valid {
+		s.CurrentRiddleID = &currentRiddleID.Int64
+	}
+	s.CreatedAt = createdAt.Format(time.RFC3339)
+
+	if s.Status != "active" {
+		httpx.WriteJSON(w, http.StatusOK, riddleGuessResponse{Correct: false, PointsEarned: 0, Session: s})
+		return
+	}
+
+	// Get today's riddle answer
+	var rid DailyRiddle
+	var publishedOn string
+	err = h.db.QueryRow(
+		`SELECT id, question, answer, hint, difficulty, published_on
+		 FROM daily_riddles WHERE published_on = $1`, today).
+		Scan(&rid.ID, &rid.Question, &rid.Answer, &rid.Hint, &rid.Difficulty, &publishedOn)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "no riddle for today")
+		return
+	}
+	if err != nil {
+		log.Printf("games: submit guess riddle lookup failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	if !strings.EqualFold(guess, rid.Answer) {
+		httpx.WriteJSON(w, http.StatusOK, riddleGuessResponse{Correct: false, PointsEarned: 0, Session: s})
+		return
+	}
+
+	// Correct! Calculate points based on elapsed time since riddle was published
+	// (published at midnight, so elapsed = hours since midnight)
+	publishedTime, _ := time.Parse("2006-01-02", publishedOn)
+	elapsedHours := time.Since(publishedTime).Hours()
+	points := calcPoints(elapsedHours)
+
+	// Determine who solved (team has p1 and p2 — caller is whichever matches)
+	isP1 := userID == s.TeamID
+	if isP1 {
+		s.P1Score += points
+	} else {
+		s.P2Score += points
+	}
+
+	// Record attempt and update session to solved
+	h.db.Exec(
+		`INSERT INTO riddle_attempts (session_id, riddle_id, solver_id, points_earned)
+		 VALUES ($1, $2, $3, $4)`,
+		s.ID, rid.ID, userID, points)
+	h.db.Exec(
+		`UPDATE riddle_game_sessions SET status = 'solved', p1_score = $1, p2_score = $2 WHERE id = $3`,
+		s.P1Score, s.P2Score, s.ID)
+	s.Status = "solved"
+
+	httpx.WriteJSON(w, http.StatusOK, riddleGuessResponse{Correct: true, PointsEarned: points, Session: s})
+}
+
+// GetRiddleHistory returns past solved/expired rounds for the team.
+func (h *handler) GetRiddleHistory(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	rows, err := h.db.Query(
+		`SELECT ra.riddle_id, dr.question, dr.answer, u.name, ra.solved_at, ra.points_earned
+		 FROM riddle_attempts ra
+		 JOIN riddle_game_sessions rs ON ra.session_id = rs.id
+		 JOIN daily_riddles dr ON ra.riddle_id = dr.id
+		 JOIN users u ON ra.solver_id = u.id
+		 WHERE rs.team_id = $1
+		 ORDER BY ra.solved_at DESC
+		 LIMIT 30`, userID)
+	if err != nil {
+		log.Printf("games: get riddle history failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer rows.Close()
+
+	var history []riddleHistoryItem
+	for rows.Next() {
+		var h riddleHistoryItem
+		var solvedAt time.Time
+		if err := rows.Scan(&h.RiddleID, &h.Question, &h.Answer, &h.SolvedBy, &solvedAt, &h.PointsEarned); err != nil {
+			log.Printf("games: scan riddle history row failed: %v", err)
+			continue
+		}
+		h.SolvedAt = solvedAt.Format(time.RFC3339)
+		h.Expired = false
+		history = append(history, h)
+	}
+	if history == nil {
+		history = []riddleHistoryItem{}
+	}
+	httpx.WriteJSON(w, http.StatusOK, riddleHistoryResponse{History: history})
 }
 
 func (h *handler) ActiveSessions(w http.ResponseWriter, r *http.Request) {
