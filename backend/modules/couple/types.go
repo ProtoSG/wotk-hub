@@ -39,14 +39,11 @@ type listDatesResponse struct {
 // persisted; only the object keys are durable in the DB. ThumbnailURL always
 // points somewhere renderable: for rows created before thumbnails existed,
 // the handler falls back to presigning the full object_key (see ListPhotos).
-// ExternalURL, when set, takes precedence over the MinIO presigned URLs and
-// is returned as-is (caller is responsible for it being a valid image URL).
 type Photo struct {
-	ID            int64  `json:"id"`
-	URL           string `json:"url"`
-	ThumbnailURL  string `json:"thumbnailUrl"`
-	ExternalURL   string `json:"externalUrl,omitempty"`
-	CreatedAt     string `json:"createdAt"`
+	ID           int64  `json:"id"`
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	CreatedAt    string `json:"createdAt"`
 }
 
 type listPhotosResponse struct {
@@ -61,15 +58,10 @@ type GalleryPhoto struct {
 	ID             int64  `json:"id"`
 	URL            string `json:"url"`
 	ThumbnailURL   string `json:"thumbnailUrl"`
-	ExternalURL   string `json:"externalUrl,omitempty"`
 	CreatedAt      string `json:"createdAt"`
 	DateID         int64  `json:"dateId"`
 	DateOccurredOn string `json:"dateOccurredOn"`
 	DatePlace      string `json:"datePlace"`
-}
-
-type updatePhotoRequest struct {
-	ImageURL string `json:"imageUrl"`
 }
 
 type listGalleryPhotosResponse struct {

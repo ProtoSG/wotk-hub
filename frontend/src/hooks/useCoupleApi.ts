@@ -41,15 +41,10 @@ export function useCoupleApi() {
     await api.delete(`/api/couple/dates/${dateId}/photos/${photoId}`)
   }
 
-  async function updatePhoto(dateId: number, photoId: number, imageUrl: string): Promise<CoupleDatePhoto> {
-    const res = await api.put<CoupleDatePhoto>(`/api/couple/dates/${dateId}/photos/${photoId}`, { imageUrl })
-    return res.data
-  }
-
   async function listGallery(): Promise<GalleryPhoto[]> {
     const res = await api.get<{ photos: GalleryPhoto[] }>('/api/couple/photos')
     return res.data.photos
   }
 
-  return { listDates, createDate, updateDate, deleteDate, listPhotos, uploadPhoto, deletePhoto, updatePhoto, listGallery }
+  return { listDates, createDate, updateDate, deleteDate, listPhotos, uploadPhoto, deletePhoto, listGallery }
 }

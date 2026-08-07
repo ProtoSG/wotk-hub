@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Trash2, Upload, ImageOff, MoreVertical } from 'lucide-react'
+import { Loader2, Trash2, Upload, ImageOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import type { CoupleDatePhoto } from '@/types/couple.types'
@@ -32,11 +24,8 @@ export default function DatePhotos({ dateId }: Props) {
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [preview, setPreview] = useState<CoupleDatePhoto | null>(null)
-  const [editingPhoto, setEditingPhoto] = useState<CoupleDatePhoto | null>(null)
-  const [imageUrlInput, setImageUrlInput] = useState('')
-  const [savingUrl, setSavingUrl] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { listPhotos, uploadPhoto, deletePhoto, updatePhoto } = useCoupleApi()
+  const { listPhotos, uploadPhoto, deletePhoto } = useCoupleApi()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -107,33 +96,6 @@ export default function DatePhotos({ dateId }: Props) {
     }
   }
 
-  function openImageUrlDialog(photo: CoupleDatePhoto) {
-    // Show externalUrl if set, otherwise the current thumbnailUrl as the default.
-    setImageUrlInput(photo.externalUrl ?? photo.thumbnailUrl)
-    setEditingPhoto(photo)
-  }
-
-  function closeImageUrlDialog() {
-    setEditingPhoto(null)
-    setImageUrlInput('')
-  }
-
-  async function handleSaveImageUrl() {
-    if (!editingPhoto) return
-    setSavingUrl(true)
-    try {
-      const updated = await updatePhoto(dateId, editingPhoto.id, imageUrlInput.trim())
-      setPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
-      setPreview((prev) => (prev?.id === updated.id ? updated : prev))
-      toast.success('Imagen actualizada')
-      closeImageUrlDialog()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar la imagen')
-    } finally {
-      setSavingUrl(false)
-    }
-  }
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -172,89 +134,27 @@ export default function DatePhotos({ dateId }: Props) {
           {photos.map((p) => (
             <div key={p.id} className="group relative aspect-square overflow-hidden rounded-md border">
               <button type="button" className="h-full w-full" onClick={() => setPreview(p)}>
-                <img
-                  src={p.externalUrl ?? p.thumbnailUrl}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
+                <img src={p.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
               </button>
-              <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-full bg-black/60 p-0 text-white hover:bg-black/70 hover:text-white"
-                      aria-label="Más opciones"
-                    >
-                      <MoreVertical size={14} />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openImageUrlDialog(p)}>
-                      Cambiar imagen
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleDelete(p)}
-                      className="text-destructive focus:text-destructive"
-                      disabled={deletingId === p.id}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <button
+                type="button"
+                aria-label="Eliminar foto"
+                disabled={deletingId === p.id}
+                onClick={() => handleDelete(p)}
+                className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
+              >
+                {deletingId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Full-size preview dialog */}
       <Dialog open={preview != null} onOpenChange={(v) => !v && setPreview(null)}>
         <DialogContent className="sm:max-w-2xl">
           {preview && (
             <img src={preview.url} alt="" className="max-h-[70vh] w-full rounded-md object-contain" />
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Change image URL dialog */}
-      <Dialog open={editingPhoto != null} onOpenChange={(v) => !v && closeImageUrlDialog()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cambiar imagen</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="image-url">URL de imagen</Label>
-            <Input
-              id="image-url"
-              type="url"
-              placeholder="https://..."
-              value={imageUrlInput}
-              onChange={(e) => setImageUrlInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleSaveImageUrl()
-                }
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              Ingresá una URL directa a una imagen (jpg, png, webp, gif). La imagen se muestra
-              tal cual es — asegurate de que sea accesible públicamente.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeImageUrlDialog} disabled={savingUrl}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveImageUrl} disabled={savingUrl}>
-              {savingUrl && <Loader2 size={14} className="animate-spin" />}
-              {savingUrl ? 'Guardando…' : 'Guardar'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

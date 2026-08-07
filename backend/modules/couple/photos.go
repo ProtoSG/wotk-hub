@@ -219,7 +219,7 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(
-		`SELECT id, object_key, thumbnail_object_key, created_at, external_url FROM couple_date_photos WHERE date_id = $1 ORDER BY created_at DESC, id DESC`,
+		`SELECT id, object_key, thumbnail_object_key, created_at FROM couple_date_photos WHERE date_id = $1 ORDER BY created_at DESC, id DESC`,
 		dateID,
 	)
 	if err != nil {
@@ -235,8 +235,7 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 		var objectKey string
 		var thumbnailObjectKey sql.NullString
 		var createdAt time.Time
-		var externalURLNull sql.NullString
-		if err := rows.Scan(&id, &objectKey, &thumbnailObjectKey, &createdAt, &externalURLNull); err != nil {
+		if err := rows.Scan(&id, &objectKey, &thumbnailObjectKey, &createdAt); err != nil {
 			log.Printf("couple: scan photo failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
@@ -261,13 +260,7 @@ func (h *handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
-		// external_url is NULL for rows inserted before this column existed —
-		// leave it as empty string, which omits it from JSON via omitempty.
-		var externalURL string
-		if externalURLNull.Valid {
-			externalURL = externalURLNull.String
-		}
-		photos = append(photos, Photo{ID: id, URL: url, ThumbnailURL: thumbnailURL, ExternalURL: externalURL, CreatedAt: createdAt.Format(time.RFC3339)})
+		photos = append(photos, Photo{ID: id, URL: url, ThumbnailURL: thumbnailURL, CreatedAt: createdAt.Format(time.RFC3339)})
 	}
 	httpx.WriteJSON(w, http.StatusOK, listPhotosResponse{Photos: photos})
 }
@@ -290,7 +283,7 @@ func (h *handler) ListGalleryPhotos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.db.Query(
-		`SELECT p.id, p.object_key, p.thumbnail_object_key, p.created_at, p.external_url, d.id, d.occurred_on, d.place
+		`SELECT p.id, p.object_key, p.thumbnail_object_key, p.created_at, d.id, d.occurred_on, d.place
 		 FROM couple_date_photos p
 		 JOIN couple_dates d ON d.id = p.date_id
 		 ORDER BY d.occurred_on DESC, p.created_at DESC`,
@@ -308,8 +301,7 @@ func (h *handler) ListGalleryPhotos(w http.ResponseWriter, r *http.Request) {
 		var objectKey, datePlace string
 		var thumbnailObjectKey sql.NullString
 		var createdAt, dateOccurredOn time.Time
-		var externalURLNull sql.NullString
-		if err := rows.Scan(&id, &objectKey, &thumbnailObjectKey, &createdAt, &externalURLNull, &dateID, &dateOccurredOn, &datePlace); err != nil {
+		if err := rows.Scan(&id, &objectKey, &thumbnailObjectKey, &createdAt, &dateID, &dateOccurredOn, &datePlace); err != nil {
 			log.Printf("couple: scan gallery photo failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
@@ -332,15 +324,10 @@ func (h *handler) ListGalleryPhotos(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
 		}
-		var externalURL string
-		if externalURLNull.Valid {
-			externalURL = externalURLNull.String
-		}
 		photos = append(photos, GalleryPhoto{
 			ID:             id,
 			URL:            url,
 			ThumbnailURL:   thumbnailURL,
-			ExternalURL:    externalURL,
 			CreatedAt:      createdAt.Format(time.RFC3339),
 			DateID:         dateID,
 			DateOccurredOn: dateOccurredOn.Format(dateLayout),
@@ -348,115 +335,6 @@ func (h *handler) ListGalleryPhotos(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, listGalleryPhotosResponse{Photos: photos})
-}
-
-// UpdatePhoto updates the external URL for a couple date photo. The MinIO
-// object_key is left untouched — only the external_url column is updated.
-// Clearing imageUrl (empty string) removes the override and reverts to the
-// MinIO presigned URL on the next list response.
-//
-// @Summary Update a couple date photo's image URL
-// @Tags couple
-// @Accept json
-// @Produce json
-// @Security CookieAuth
-// @Param id path int true "Date ID"
-// @Param photoId path int true "Photo ID"
-// @Param body body updatePhotoRequest true "New image URL"
-// @Success 200 {object} Photo
-// @Failure 400 {object} httpx.APIError
-// @Failure 404 {object} httpx.APIError
-// @Failure 503 {object} httpx.APIError
-// @Router /couple/dates/{id}/photos/{photoId} [put]
-func (h *handler) UpdatePhoto(w http.ResponseWriter, r *http.Request) {
-	if h.storage == nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "photo storage not configured")
-		return
-	}
-	dateID, err := parseID(r)
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-		return
-	}
-	photoID, err := parsePhotoID(r)
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
-		return
-	}
-	var req updatePhotoRequest
-	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
-		return
-	}
-	// Accept any non-empty URL; validation is intentionally loose — the caller
-	// owns whatever they pass in.
-	if req.ImageURL != "" {
-		if len(req.ImageURL) > 2000 {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "imageUrl too long (max 2000 chars)")
-			return
-		}
-	}
-	// Upsert: UPDATE if external_url already set, INSERT otherwise. Using
-	// COALESCE so an empty string clears the override (NULL in DB).
-	newURL := req.ImageURL
-	if newURL == "" {
-		// Passing NULL directly via sql.NullString{Valid: false}.
-		_, err = h.db.Exec(`UPDATE couple_date_photos SET external_url = NULL WHERE id = $1 AND date_id = $2`, photoID, dateID)
-	} else {
-		_, err = h.db.Exec(`UPDATE couple_date_photos SET external_url = $1 WHERE id = $2 AND date_id = $3`, newURL, photoID, dateID)
-	}
-	if err != nil {
-		log.Printf("couple: update photo external_url failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-		return
-	}
-	// Re-fetch the full photo row and return a fresh Photo with freshly
-	// presigned MinIO URLs (and the external_url if set).
-	var id int64
-	var objectKey string
-	var thumbnailObjectKey sql.NullString
-	var externalURLNull sql.NullString
-	var createdAt time.Time
-	err = h.db.QueryRow(
-		`SELECT id, object_key, thumbnail_object_key, external_url, created_at FROM couple_date_photos WHERE id = $1 AND date_id = $2`,
-		photoID, dateID,
-	).Scan(&id, &objectKey, &thumbnailObjectKey, &externalURLNull, &createdAt)
-	if err == sql.ErrNoRows {
-		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "photo not found")
-		return
-	}
-	if err != nil {
-		log.Printf("couple: re-fetch photo after update failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-		return
-	}
-	url, err := h.storage.PresignedGetURL(r.Context(), objectKey)
-	if err != nil {
-		log.Printf("couple: presign photo failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-		return
-	}
-	thumbKey := objectKey
-	if thumbnailObjectKey.Valid {
-		thumbKey = thumbnailObjectKey.String
-	}
-	thumbnailURL, err := h.storage.PresignedGetURL(r.Context(), thumbKey)
-	if err != nil {
-		log.Printf("couple: presign thumbnail failed: %v", err)
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
-		return
-	}
-	var externalURL string
-	if externalURLNull.Valid {
-		externalURL = externalURLNull.String
-	}
-	httpx.WriteJSON(w, http.StatusOK, Photo{
-		ID:           id,
-		URL:          url,
-		ThumbnailURL: thumbnailURL,
-		ExternalURL:  externalURL,
-		CreatedAt:    createdAt.Format(time.RFC3339),
-	})
 }
 
 // DeletePhoto deletes a photo attached to a couple date.

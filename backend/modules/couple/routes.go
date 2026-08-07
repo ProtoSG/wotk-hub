@@ -30,7 +30,6 @@ func Routes(db *sql.DB, photoStorage *storage.Client) http.Handler {
 
 	r.Post("/dates/{id}/photos", h.UploadPhoto)
 	r.Get("/dates/{id}/photos", h.ListPhotos)
-	r.Put("/dates/{id}/photos/{photoId}", h.UpdatePhoto)
 	r.Delete("/dates/{id}/photos/{photoId}", h.DeletePhoto)
 	r.Get("/photos", h.ListGalleryPhotos)
 
