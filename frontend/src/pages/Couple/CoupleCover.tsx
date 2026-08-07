@@ -1,5 +1,22 @@
-import { Plus } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, MoreHorizontal, Images } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+
+const STORAGE_KEY = 'couple-cover-image-url'
 
 interface CoupleCoverProps {
   // Omitted for a view-only role (guest) — no "Nueva cita" button rendered.
@@ -36,8 +53,37 @@ function Blossom({ cx, cy, scale = 1 }: { cx: number; cy: number; scale?: number
 }
 
 export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
+  const [imageUrl, setImageUrl] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+
+  function openImageDialog() {
+    setUrlInput(imageUrl)
+    setDialogOpen(true)
+  }
+
+  function saveImageUrl() {
+    const trimmed = urlInput.trim()
+    setImageUrl(trimmed)
+    if (trimmed) {
+      localStorage.setItem(STORAGE_KEY, trimmed)
+    } else {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+    setDialogOpen(false)
+  }
+
   return (
     <div className="relative h-[170px] w-full overflow-hidden rounded-[var(--radius)] sm:h-[210px] lg:h-[250px]">
+      {/* Optional background image */}
+      {imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt="Portada de citas"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
       <svg
         viewBox="0 0 1200 400"
         preserveAspectRatio="xMidYMax slice"
@@ -124,16 +170,76 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
           >
             Citas
           </h1>
-          {onNewDate && (
-            <div className="hidden sm:block">
-              <Button onClick={onNewDate}>
-                <Plus size={14} />
-                Nueva cita
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Más opciones de portada"
+                  className="h-9 w-9"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={openImageDialog}>
+                  <Images className="h-4 w-4" />
+                  Cambiar imagen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {onNewDate && (
+              <div className="hidden sm:block">
+                <Button onClick={onNewDate}>
+                  <Plus size={14} />
+                  Nueva cita
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar imagen de portada</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <label htmlFor="cover-image-url" className="text-sm font-medium">
+              URL de la imagen
+            </label>
+            <Input
+              id="cover-image-url"
+              placeholder="https://example.com/imagen.jpg"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveImageUrl()
+              }}
+            />
+            {urlInput && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={urlInput}
+                alt="Vista previa"
+                className="h-32 w-full rounded-[var(--radius)] border object-cover"
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).src = ''
+                  ;(e.target as HTMLImageElement).classList.add('hidden')
+                }}
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={saveImageUrl}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
