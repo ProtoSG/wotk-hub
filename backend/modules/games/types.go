@@ -70,13 +70,13 @@ type revealResponse struct {
 // DailyRiddle is the seeded puzzle shown to both partners each day. Answer is
 // never serialised to the client (json:"-").
 type DailyRiddle struct {
-	ID         int64  `json:"id"`
-	Question   string `json:"question"`
-	Answer     string `json:"-"`
-	Hint       string `json:"hint"`
-	Difficulty string `json:"difficulty"`
+	ID          int64  `json:"id"`
+	Question    string `json:"question"`
+	Answer      string `json:"-"`
+	Hint        string `json:"hint"`
+	Difficulty  string `json:"difficulty"`
 	PublishedOn string `json:"publishedOn"`
-	CreatedAt  string `json:"createdAt"`
+	CreatedAt   string `json:"createdAt"`
 }
 
 // RiddleGameSession holds the shared state for a team's daily riddle round.
@@ -95,12 +95,12 @@ type RiddleGameSession struct {
 
 // RiddleAttempt records a correct solve.
 type RiddleAttempt struct {
-	ID            int64  `json:"id"`
-	SessionID     int64  `json:"sessionId"`
-	RiddleID      int64  `json:"riddleId"`
-	SolverID      int64  `json:"solverId"`
-	SolvedAt      string `json:"solvedAt"`
-	PointsEarned  int    `json:"pointsEarned"`
+	ID           int64  `json:"id"`
+	SessionID    int64  `json:"sessionId"`
+	RiddleID     int64  `json:"riddleId"`
+	SolverID     int64  `json:"solverId"`
+	SolvedAt     string `json:"solvedAt"`
+	PointsEarned int    `json:"pointsEarned"`
 }
 
 type riddleTodayResponse struct {
