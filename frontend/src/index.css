@@ -9,6 +9,14 @@
    this cuts that to 1. */
 @import "@fontsource-variable/nunito";
 
+/* Pixel/bitmap font — used only for the pet mascot's care-action labels
+   (Games/MascotaTab), not a second body font. Self-hosted like Nunito
+   above, but unlike Nunito this DOES load on every page (global
+   stylesheet @import isn't scoped to where it's used) — acceptable
+   tradeoff for one small single-weight file, not worth a lazy-load setup
+   for this one label. */
+@import "@fontsource/vt323";
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -49,6 +57,12 @@
      directly rather than routed through a :root custom property. */
   --font-sans:
     'Nunito', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  /* Pixel/bitmap font for the pet mascot's care-action labels only — see
+     the @import above. VT323 over the more iconic Press Start 2P: PS2P's
+     characters are notoriously wide, and words like "Alimentar" would
+     overflow a narrow icon button; VT323 reads just as retro-pixel at a
+     legible size for a real word, not just 1-2 characters. */
+  --font-pixel: 'VT323', monospace;
 }
 
 :root {
@@ -245,6 +259,23 @@
 
 @theme inline {
   --animate-card-in: card-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Pet mascot (Couple/MascotaTab) — idle float is the resting state;
+     pop replaces it for a beat right after a care action lands, then the
+     component switches back to float. Never combined on the same element
+     (one animation property, mutually exclusive), so there's no keyframe
+     conflict to reconcile. */
+  --animate-pet-float: pet-float 3s ease-in-out infinite;
+  --animate-pet-pop: pet-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-pet-flicker: pet-flicker 2s ease-in-out infinite;
+  /* Ground shadow under the sprite — same 3s ease-in-out timing as
+     pet-float so the two stay in lockstep with no JS coordination, just
+     inverted (shrinks/fades exactly when pet-float lifts the sprite). */
+  --animate-pet-shadow-pulse: pet-shadow-pulse 3s ease-in-out infinite;
+  /* Care-action toast (Games/MascotaTab only) — a small overshoot-and-settle
+     entrance, game-HUD-notification style rather than the app's usual flat
+     slide-in toasts. Scoped to that one feature via toast.custom(), not a
+     change to the shared Toaster. */
+  --animate-pet-toast-in: pet-toast-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 @keyframes card-in {
@@ -255,5 +286,67 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes pet-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pet-shadow-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.32;
+  }
+  50% {
+    transform: scale(0.7);
+    opacity: 0.14;
+  }
+}
+
+@keyframes pet-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pet-toast-in {
+  0% {
+    transform: scale(0.4) translateY(6px) rotate(-6deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08) translateY(-2px) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Subtle brightness pulse — it's a fire spirit, a flat static glow reads
+   dead. Kept gentle (1 -> 1.08) so it doesn't fight the restrained
+   direction the rest of the app holds to. */
+@keyframes pet-flicker {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.08);
   }
 }

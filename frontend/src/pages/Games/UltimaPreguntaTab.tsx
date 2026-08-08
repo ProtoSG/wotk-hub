@@ -501,7 +501,7 @@ export default function UltimaPreguntaTab() {
                     className="rounded-[var(--radius)] p-3 text-sm text-warning"
                     style={{ backgroundColor: 'color-mix(in oklch, var(--warning) 12%, var(--card))' }}
                   >
-                    💡 {riddle.hint}
+                    {riddle.hint}
                   </p>
                 )}
               </div>
