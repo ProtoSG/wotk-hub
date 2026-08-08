@@ -1,4 +1,4 @@
-import { Pencil, Trash2, RotateCcw, ArrowLeftRight } from 'lucide-react'
+import { Pencil, Trash2, RotateCcw, ArrowLeftRight, MoreVertical } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -6,6 +6,7 @@ import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { formatPEN } from '@/lib/currency'
 import type { Card, Transaction } from '@/types/finance.types'
 
@@ -115,33 +116,30 @@ export default function TransactionsTable({
                     {formatPEN(t.amountCents)}
                   </TableCell>
                   <TableCell>
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Editar movimiento"
-                        onClick={() => onEdit(t)}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Eliminar movimiento"
-                        onClick={() => onDelete(t)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                      {t.type === 'expense' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Marcar como reembolsado"
-                          onClick={() => onRefund(t)}
-                        >
-                          <RotateCcw size={14} />
-                        </Button>
-                      )}
+                    <div className="flex justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" aria-label="Más acciones">
+                            <MoreVertical size={14} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onEdit(t)}>
+                            <Pencil className="h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+                          {t.type === 'expense' && (
+                            <DropdownMenuItem onClick={() => onRefund(t)}>
+                              <RotateCcw className="h-4 w-4" />
+                              Marcar como reembolsado
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => onDelete(t)} className="text-destructive focus:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
