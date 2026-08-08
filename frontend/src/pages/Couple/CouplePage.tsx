@@ -18,6 +18,8 @@ import {
   PartyPopper,
   Sparkles,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,7 +38,7 @@ import { useActiveTab } from '@/hooks/useActiveTab'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
-import { formatPEN } from '@/lib/currency'
+import { formatPEN, monthLabel } from '@/lib/currency'
 import { DATE_CATEGORY_LABELS, type CoupleDate } from '@/types/couple.types'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import CoupleCover from './CoupleCover'
@@ -204,6 +206,14 @@ export default function CouplePage() {
   const [dates, setDates] = useState<CoupleDate[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CoupleDate | null>(null)
+  // Steps "Realizadas" one month+year at a time (e.g. "agosto 2026") instead
+  // of dumping the whole history in one grid — same MonthPicker arrows
+  // pattern as Finanzas. '' means "not explicitly set yet"; the effective
+  // month below falls back to the most recent one with data, so this never
+  // needs an effect to sync an initial value against data that loads async.
+  // "Planeadas" stays unfiltered: it's forward-looking and naturally small,
+  // not the section that gets crowded over time.
+  const [monthFilter, setMonthFilter] = useState('')
   const { listDates, updateDate, deleteDate } = useCoupleApi()
   const role = useAuthStore((s) => s.user?.role)
   const pendingDeletes = useRef(new Map<number, number>())
@@ -295,6 +305,22 @@ export default function CouplePage() {
     .filter((d) => d.status === 'planned')
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
 
+  // Distinct YYYY-MM present among done dates, oldest first (so "next"
+  // moves forward in time, matching MonthPicker's arrow direction) — only
+  // months that actually have something in them are steppable.
+  const monthOptions = [...new Set(doneDates.map((d) => d.occurredOn.slice(0, 7)))].sort((a, b) =>
+    a.localeCompare(b)
+  )
+  const monthIndex = monthFilter ? monthOptions.indexOf(monthFilter) : -1
+  // Falls back to the most recent month whenever monthFilter is unset or no
+  // longer valid (e.g. its last date got deleted) — always a real month
+  // with data, or '' if there's no done date at all yet.
+  const effectiveMonthIndex = monthIndex >= 0 ? monthIndex : monthOptions.length - 1
+  const effectiveMonth = monthOptions[effectiveMonthIndex] ?? ''
+  const filteredDoneDates = effectiveMonth
+    ? doneDates.filter((d) => d.occurredOn.startsWith(effectiveMonth))
+    : doneDates
+
   // guest: view-only citas, no prices. Frontend-only for now.
   const canSeePrice = role === 'admin'
 
@@ -356,38 +382,78 @@ export default function CouplePage() {
               )}
 
               <div className="space-y-3">
-                {plannedDates.length > 0 && <h2 className="text-sm font-semibold text-muted-foreground">Realizadas</h2>}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {doneDates.map((d, i) => (
-                    <DateCard
-                      key={d.id}
-                      date={d}
-                      delay={Math.min(i * 40, 320)}
-                      canManage={canManage}
-                      canSeePrice={canSeePrice}
-                      onEdit={() => {
-                        setEditing(d)
-                        setFormOpen(true)
-                      }}
-                      onDelete={() => handleDelete(d)}
-                    />
-                  ))}
-
-                  {canManage && dates.length < 4 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(null)
-                        setFormOpen(true)
-                      }}
-                      className="animate-card-in flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[var(--radius)] border-2 border-dashed border-muted-foreground/25 p-5 text-muted-foreground/70 transition-colors hover:border-primary/40 hover:text-primary"
-                      style={{ animationDelay: `${Math.min(doneDates.length * 40, 320)}ms` }}
-                    >
-                      <Plus className="h-5 w-5" />
-                      <span className="text-sm font-medium">Agregar otra cita</span>
-                    </button>
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  {plannedDates.length > 0 && (
+                    <h2 className="text-sm font-semibold text-muted-foreground">Realizadas</h2>
+                  )}
+                  {monthOptions.length > 1 && (
+                    // Same arrows-either-side-of-a-label pattern as
+                    // Finanzas/MonthPicker — steps through months that
+                    // actually have data, oldest at index 0.
+                    <div className="ml-auto flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setMonthFilter(monthOptions[effectiveMonthIndex - 1])}
+                        disabled={effectiveMonthIndex <= 0}
+                        aria-label="Mes anterior"
+                      >
+                        <ChevronLeft size={16} />
+                      </Button>
+                      <span className="min-w-28 text-center text-sm font-medium capitalize">
+                        {monthLabel(effectiveMonth)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setMonthFilter(monthOptions[effectiveMonthIndex + 1])}
+                        disabled={effectiveMonthIndex >= monthOptions.length - 1}
+                        aria-label="Mes siguiente"
+                      >
+                        <ChevronRight size={16} />
+                      </Button>
+                    </div>
                   )}
                 </div>
+                {filteredDoneDates.length === 0 ? (
+                  // Only reachable when there are no done dates at all —
+                  // monthOptions only ever lists months that have data, so
+                  // any effectiveMonth picked from it always matches
+                  // something.
+                  <p className="py-8 text-center text-sm text-muted-foreground">Todavía no hay citas realizadas</p>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredDoneDates.map((d, i) => (
+                      <DateCard
+                        key={d.id}
+                        date={d}
+                        delay={Math.min(i * 40, 320)}
+                        canManage={canManage}
+                        canSeePrice={canSeePrice}
+                        onEdit={() => {
+                          setEditing(d)
+                          setFormOpen(true)
+                        }}
+                        onDelete={() => handleDelete(d)}
+                      />
+                    ))}
+
+                    {canManage && dates.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(null)
+                          setFormOpen(true)
+                        }}
+                        className="animate-card-in flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[var(--radius)] border-2 border-dashed border-muted-foreground/25 p-5 text-muted-foreground/70 transition-colors hover:border-primary/40 hover:text-primary"
+                        style={{ animationDelay: `${Math.min(filteredDoneDates.length * 40, 320)}ms` }}
+                      >
+                        <Plus className="h-5 w-5" />
+                        <span className="text-sm font-medium">Agregar otra cita</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}

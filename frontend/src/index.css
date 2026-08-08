@@ -98,20 +98,29 @@
   --warning: oklch(0.72 0.17 70);
   /* Categorical chart palette — 8 slots, fixed order, never cycled (a 9th+
      category folds into "Otros" rather than generating a new hue). Warm/
-     earthy family coordinated with the terracotta brand hue, validated with
-     dataviz's validate_palette.js against this exact surface: lightness
-     band, chroma floor, CVD adjacent-pair separation, and contrast all
-     pass (two categories sit in the CVD 8-12 floor band / sub-3:1 contrast
-     WARN zone — legal only because CategoryChart always pairs marks with a
-     visible legend + direct labels, never color alone). */
+     earthy family coordinated with the terracotta brand hue.
+     Reordered (not retinted — same 8 hues) from the original
+     1..8=[terracotta,blue,gold,cyan,purple,green,pink,rust] because that
+     order put cyan/pink/rust adjacent to each other and to terracotta,
+     which failed dataviz's normal-vision-floor check (ΔE 13.7 light /
+     10.9 dark, both below the 15 hard gate) — full-color readers, not
+     just CVD, couldn't reliably tell those neighbors apart. Re-ordering
+     via exhaustive permutation search (same technique validate_palette.js
+     documents: enumerate orderings, maximize the minimum adjacent ΔE) found
+     this order clears 19.2 light / 19.3 dark on the same surfaces, with the
+     one remaining CVD pair landing in the floor band (6.0/6.7, legal only
+     with secondary encoding) — already satisfied everywhere these are used
+     (Finanzas/CategoryChart, Couple/CategoryDistributionChart,
+     Couple/SpendByCategoryChart all pair marks with a legend + direct
+     on-slice labels, never color alone). */
   --chart-1: #c1603a;
   --chart-2: #3d4f99;
   --chart-3: #c99a3b;
-  --chart-4: #0891b2;
-  --chart-5: #8b4aa6;
-  --chart-6: #4f8f52;
-  --chart-7: #d4657a;
-  --chart-8: #a6512a;
+  --chart-4: #8b4aa6;
+  --chart-5: #4f8f52;
+  --chart-6: #a6512a;
+  --chart-7: #0891b2;
+  --chart-8: #d4657a;
   --radius: 0.7rem;
 
   /* "Night ink" palette — scoped exclusively to the Citas page hero cover
@@ -161,15 +170,18 @@
   --warning: oklch(0.8 0.16 70);
   /* Same 8 categorical slots, lightened/rebalanced for the dark surface —
      validated separately against the dark background (own lightness band,
-     own contrast check), not an automatic flip of the light values. */
+     own contrast check), not an automatic flip of the light values.
+     Reordered in lockstep with the light block above — see that comment
+     for why (same slot reassignment, same reasoning, dark surface clears
+     19.3 on the same normal-vision-floor check). */
   --chart-1: #d67349;
   --chart-2: #5468b8;
   --chart-3: #b8862a;
-  --chart-4: #1e97b6;
-  --chart-5: #a05cbd;
-  --chart-6: #63a365;
-  --chart-7: #d66f84;
-  --chart-8: #bc6335;
+  --chart-4: #a05cbd;
+  --chart-5: #63a365;
+  --chart-6: #bc6335;
+  --chart-7: #1e97b6;
+  --chart-8: #d66f84;
 
   /* Night ink cover palette, dark-theme variant — deepened slightly so the
      band still reads as a distinct nocturnal scene against the app's own

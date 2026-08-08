@@ -10,7 +10,7 @@ import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import type { EmojiGameSession, MovieDifficulty } from '@/types/games.types'
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 6000
 
 const DIFFICULTIES: { value: MovieDifficulty; label: string }[] = [
   { value: 'easy', label: 'Fácil' },
@@ -71,6 +71,21 @@ export default function EmojiMoviesTab() {
   )
 
   useEffect(() => stopPolling, [stopPolling])
+
+  // Pause polling while the tab isn't visible — no point burning requests
+  // for a screen nobody's looking at. Resume on return if the session is
+  // still live (same pattern as UltimaPreguntaTab).
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.hidden) {
+        stopPolling()
+      } else if (session && (session.status === 'waiting' || session.status === 'active')) {
+        startPolling(session.id)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [session, startPolling, stopPolling])
 
   async function handleCreate() {
     setBusy(true)
