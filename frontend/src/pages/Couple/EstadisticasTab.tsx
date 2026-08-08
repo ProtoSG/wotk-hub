@@ -1,4 +1,4 @@
-import { Heart } from 'lucide-react'
+import { Heart, CalendarDays, Clock, Wallet } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { formatPEN } from '@/lib/currency'
@@ -38,7 +38,10 @@ export default function EstadisticasTab({ dates, canSeePrice }: EstadisticasTabP
       <div className={cn('grid grid-cols-2 gap-4', canSeePrice ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
         <CozyCard className="animate-card-in">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Citas registradas</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <CalendarDays className="h-4 w-4" />
+              Citas registradas
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{dates.length}</div>
@@ -46,7 +49,10 @@ export default function EstadisticasTab({ dates, canSeePrice }: EstadisticasTabP
         </CozyCard>
         <CozyCard className="animate-card-in [animation-delay:60ms]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Última cita</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              Última cita
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {daysSince != null ? (
@@ -60,7 +66,10 @@ export default function EstadisticasTab({ dates, canSeePrice }: EstadisticasTabP
         </CozyCard>
         <CozyCard className={cn('animate-card-in [animation-delay:120ms]', !canSeePrice && 'col-span-2 sm:col-span-1')}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Calificación promedio</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Heart className="h-4 w-4" />
+              Calificación promedio
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {avgRating != null ? (
@@ -73,7 +82,10 @@ export default function EstadisticasTab({ dates, canSeePrice }: EstadisticasTabP
         {canSeePrice && (
           <CozyCard className="animate-card-in [animation-delay:180ms]">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total invertido</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Wallet className="h-4 w-4" />
+                Total invertido
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatPEN(totalSpentCents)}</div>
