@@ -500,6 +500,10 @@ func Migrate(db *sql.DB) error {
 		// when a full day passes with no care action, same "Duolingo streak
 		// freeze" idea.
 		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS streak_freezes INT NOT NULL DEFAULT 0`,
+		// Empty string means unnamed — NOT NULL DEFAULT '' rather than a
+		// nullable column, same as every other pet_state column, so there's
+		// never a NULL to special-case when reading it back.
+		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

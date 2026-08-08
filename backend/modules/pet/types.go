@@ -24,6 +24,9 @@ type ActionStatus struct {
 type State struct {
 	CareScore int    `json:"careScore"`
 	Mood      string `json:"mood"` // happy | neutral | sad | hungry
+	// Name is "" until the shop's rename item is bought at least once — the
+	// frontend falls back to a generic title while empty.
+	Name string `json:"name"`
 	// Streak is consecutive days with at least one care action. Resets to 0
 	// the moment a full day passes with none — unless StreakFreezes > 0 at
 	// that moment, in which case one freeze is consumed and the streak

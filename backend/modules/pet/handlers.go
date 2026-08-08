@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
@@ -54,8 +55,14 @@ const (
 	// actions in one calendar day — awarded exactly once, at the moment the
 	// 5th action of the day is newly logged (see care()).
 	perfectDaySparks = 3
-	// freezeCostSparks is the first (and so far only) shop item's price.
+	// freezeCostSparks is the first shop item's price.
 	freezeCostSparks = 15
+	// renameCostSparks is the second shop item's price — cosmetic, priced
+	// lower than the freeze since it doesn't protect anything.
+	renameCostSparks = 10
+	// maxNameLen keeps the name short enough to fit the pixel-font title
+	// without wrapping/overflowing the card header.
+	maxNameLen = 20
 )
 
 func moodFor(careScore int) string {
@@ -118,6 +125,7 @@ type petRow struct {
 	streak        int
 	sparks        int
 	streakFreezes int
+	name          string
 }
 
 // loadOrCreate fetches the team's pet row, creating it with the default
@@ -137,9 +145,9 @@ func (h *handler) loadOrCreate(teamID int64) (*petRow, error) {
 	p := petRow{teamID: teamID}
 	var lastUpdatedOn string
 	row := h.db.QueryRow(
-		`SELECT id, care_score, streak, sparks, streak_freezes, last_updated_on FROM pet_state WHERE team_id = $1`, teamID,
+		`SELECT id, care_score, streak, sparks, streak_freezes, name, last_updated_on FROM pet_state WHERE team_id = $1`, teamID,
 	)
-	if err := row.Scan(&p.id, &p.careScore, &p.streak, &p.sparks, &p.streakFreezes, &lastUpdatedOn); err != nil {
+	if err := row.Scan(&p.id, &p.careScore, &p.streak, &p.sparks, &p.streakFreezes, &p.name, &lastUpdatedOn); err != nil {
 		return nil, err
 	}
 	// DATE columns come back from the driver as full RFC3339
@@ -310,6 +318,7 @@ func (h *handler) respondState(w http.ResponseWriter, p *petRow) {
 	httpx.WriteJSON(w, http.StatusOK, stateResponse{Pet: State{
 		CareScore:     p.careScore,
 		Mood:          moodFor(p.careScore),
+		Name:          p.name,
 		Streak:        p.streak,
 		Sparks:        p.sparks,
 		StreakFreezes: p.streakFreezes,
@@ -498,9 +507,67 @@ func (h *handler) BuyFreeze(w http.ResponseWriter, r *http.Request) {
 	h.respondState(w, p)
 }
 
+type renameRequest struct {
+	Name string `json:"name"`
+}
+
+// Rename sets the pet's display name. The very first name (p.name == "",
+// i.e. it's never been named) is free — that's the couple's initial
+// naming moment, not a shop purchase. Every rename after that spends
+// renameCostSparks. Not admin-gated, same reasoning as BuyFreeze — a
+// normal spend either partner can make.
+func (h *handler) Rename(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := middleware.UserFromContext(r.Context()); !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	var req renameRequest
+	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len([]rune(name)) > maxNameLen {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "name must be 1-20 characters")
+		return
+	}
+
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("pet: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	p, err := h.loadOrCreate(teamID)
+	if err != nil {
+		log.Printf("pet: load state failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	cost := renameCostSparks
+	if p.name == "" {
+		cost = 0
+	}
+	if p.sparks < cost {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "not enough sparks")
+		return
+	}
+	p.sparks -= cost
+	p.name = name
+	if _, err := h.db.Exec(
+		`UPDATE pet_state SET sparks = $1, name = $2 WHERE id = $3`,
+		p.sparks, p.name, p.id,
+	); err != nil {
+		log.Printf("pet: rename failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	h.respondState(w, p)
+}
+
 // Reset wipes the shared pet back to its default state (care_score 70, no
-// action done today, streak 0, sparks/freezes 0). Admin-only — this
-// discards real shared progress, not just a view, so unlike the
+// action done today, streak 0, sparks/freezes 0, name cleared). Admin-only
+// — this discards real shared progress, not just a view, so unlike the
 // frontend-only canManage/canSeePrice gates elsewhere it's enforced here
 // too, not just hidden in the UI.
 func (h *handler) Reset(w http.ResponseWriter, r *http.Request) {
@@ -520,7 +587,7 @@ func (h *handler) Reset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.db.Exec(
-		`UPDATE pet_state SET care_score = $1, streak = 0, sparks = 0, streak_freezes = 0, last_updated_on = $2 WHERE team_id = $3`,
+		`UPDATE pet_state SET care_score = $1, streak = 0, sparks = 0, streak_freezes = 0, name = '', last_updated_on = $2 WHERE team_id = $3`,
 		defaultCare, today(), teamID,
 	); err != nil {
 		log.Printf("pet: reset failed: %v", err)
