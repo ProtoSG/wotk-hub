@@ -10,6 +10,7 @@ import (
 	"workhub/httpx"
 	"workhub/middleware"
 	"workhub/modules/push"
+	"workhub/shared/team"
 )
 
 // limaLoc anchors every "what day is it" calculation for the riddle game to
@@ -376,19 +377,6 @@ func (h *handler) Reveal(w http.ResponseWriter, r *http.Request) {
 
 // ─── Riddle Game Handlers ─────────────────────────────────────────────────────
 
-// resolveTeamID returns the shared team identifier both partners' sessions
-// are grouped under — the admin account's user id. This app only ever
-// serves the one couple who owns it (see users.role's admin/guest check
-// constraint), so "team" isn't per-caller, it's everyone who uses this app,
-// anchored to a stable reference point. Previously every handler used
-// team_id = the calling user's own id, which meant the two partners never
-// actually shared a session at all — each saw only their own solo game.
-func resolveTeamID(db *sql.DB) (int64, error) {
-	var id int64
-	err := db.QueryRow(`SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`).Scan(&id)
-	return id, err
-}
-
 // scoring windows in hours → points
 var scoringWindows = []struct {
 	hoursMax int
@@ -471,7 +459,7 @@ func (h *handler) GetRiddleToday(w http.ResponseWriter, r *http.Request) {
 
 // GetRiddleSession returns (or creates) the shared team's riddle session.
 // The caller's own identity doesn't matter beyond "are they logged in" —
-// team_id is the shared couple id (see resolveTeamID), not per-caller.
+// team_id is the shared couple id (see shared/team.ResolveTeamID), not per-caller.
 func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	_, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -480,7 +468,7 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	today := todayLima()
 
-	teamID, err := resolveTeamID(h.db)
+	teamID, err := team.ResolveTeamID(h.db)
 	if err != nil {
 		log.Printf("games: resolve team id failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -704,7 +692,7 @@ func (h *handler) SubmitRiddleGuess(w http.ResponseWriter, r *http.Request) {
 
 	today := todayLima()
 
-	teamID, err := resolveTeamID(h.db)
+	teamID, err := team.ResolveTeamID(h.db)
 	if err != nil {
 		log.Printf("games: resolve team id failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -868,7 +856,7 @@ func (h *handler) GetRiddleHistory(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
-	teamID, err := resolveTeamID(h.db)
+	teamID, err := team.ResolveTeamID(h.db)
 	if err != nil {
 		log.Printf("games: resolve team id failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
