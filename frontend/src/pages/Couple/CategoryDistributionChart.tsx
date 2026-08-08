@@ -5,9 +5,8 @@ import { CozyCard } from '@/components/ui/cozy-card'
 import { DATE_CATEGORIES, DATE_CATEGORY_LABELS, type CoupleDate } from '@/types/couple.types'
 
 // Same validated 8-slot categorical palette as Finanzas/CategoryChart — same
-// surface (--card), so the existing validate_palette.js pass documented in
-// index.css already covers this exact palette+surface pair; not re-run here
-// since neither changed.
+// surface (--card), so the validate_palette.js pass documented in index.css
+// already covers this exact palette+surface pair.
 const CHART_COLORS = [
   'var(--chart-1)',
   'var(--chart-2)',

@@ -6,8 +6,8 @@ import { formatPEN } from '@/lib/currency'
 import type { CategoryAmount } from '@/types/finance.types'
 import { useCategories } from '@/hooks/useCategories'
 
-// Categorical chart palette — 8 slots, fixed order, never cycled. Two
-// adjacent pairs sit in the validator's WARN band, which is only legal
+// Categorical chart palette — 8 slots, fixed order, never cycled. One
+// adjacent pair sits in the validator's CVD WARN band, which is only legal
 // because this chart always pairs marks with a visible legend AND direct
 // on-slice labels (see index.css for the full validation note).
 const CHART_COLORS = [
