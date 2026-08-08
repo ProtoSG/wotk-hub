@@ -37,14 +37,30 @@ const MOOD_LABEL: Record<PetMood, string> = {
 // Deliberately not exposing careScore as a number anywhere in this UI —
 // the brief called for calm/minimalist, not a stat to optimize. Mood is
 // the only signal the couple sees.
+//
+// These are animated GIFs (PixelLab "Breathing Idle" exports), not static
+// PNGs — the browser animates them natively, so the CSS pet-float/flicker
+// fake-motion classes are no longer applied to this image (see the render
+// below). CARE_ACTIONS' reactionSprite entries are animated GIFs too now.
 const MOOD_SPRITE: Record<PetMood, string> = {
-  happy: '/pet/happy.png',
-  neutral: '/pet/neutral.png',
-  sad: '/pet/sad.png',
-  hungry: '/pet/hungry.png',
+  happy: '/pet/happy.gif',
+  neutral: '/pet/neutral.gif',
+  sad: '/pet/sad.gif',
+  hungry: '/pet/hungry.gif',
 }
 
-const REACTION_MS = 400
+// The reaction GIFs (react-play/react-eat/react-clean) are 9 frames at
+// 200ms each — 1.8s for a full loop. 4000ms plays that loop through twice
+// plus a buffer, instead of cutting off mid-first-pass.
+const REACTION_MS = 4000
+
+// fidget.gif is 17 frames at 200ms — its one natural loop, in ms.
+const FIDGET_MS = 17 * 200
+// Gap between fidgets: random 8-15s. Frequent enough to feel alive on a
+// screen someone's actually looking at, rare enough to still read as a
+// deliberate flourish instead of a nervous tic.
+const FIDGET_MIN_GAP_MS = 8000
+const FIDGET_MAX_GAP_MS = 15000
 
 // Mirrors backend/modules/pet/handlers.go's freezeCostSparks — kept in sync
 // by hand. The backend is still the enforcement point (BuyFreeze re-checks
@@ -79,9 +95,14 @@ interface CareActionConfig {
   // --card for the surface, full-strength for the icon/label.
   accent: string
   // Shown for REACTION_MS instead of the persistent mood sprite — lets a
-  // single tap feel like a real reaction (excited for food, wink for play,
-  // startled for the shower) rather than the same face just bouncing.
-  reactionSprite: string
+  // single tap feel like a real reaction rather than the same face just
+  // bouncing. All 5 actions have one now: breakfast/lunch/dinner share one
+  // "eating a cookie" GIF (same underlying action, no reason to generate 3
+  // near-identical clips), bathe and play each have their own. Still
+  // optional in the type — an action without one just shows the current
+  // mood GIF with the pop bounce instead, which is what let this roll out
+  // sprite-by-sprite instead of needing all 5 before shipping any.
+  reactionSprite?: string
   apiCall: () => Promise<{ pet: PetState }>
   successMessage: string
 }
@@ -126,6 +147,11 @@ export default function MascotaTab() {
   const [pet, setPet] = useState<PetState | null>(null)
   const [busy, setBusy] = useState(false)
   const [reactingAction, setReactingAction] = useState<CareAction | null>(null)
+  // An occasional flourish (tossing a spark, catching it) shown instead of
+  // the plain breathing loop — keeps a long-idle pet from feeling static.
+  // Generated against the happy face specifically, so it's only shown for
+  // that mood; other moods just keep their own breathing loop.
+  const [fidgeting, setFidgeting] = useState(false)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
   const [nameInput, setNameInput] = useState('')
@@ -144,7 +170,7 @@ export default function MascotaTab() {
       label: 'Bañar',
       icon: ShowerHead,
       accent: '--warning',
-      reactionSprite: '/pet/react-clean.png',
+      reactionSprite: '/pet/react-clean.gif',
       apiCall: bathePet,
       successMessage: 'Quedó reluciente',
     },
@@ -153,7 +179,7 @@ export default function MascotaTab() {
       label: 'Desayunar',
       icon: Coffee,
       accent: '--primary',
-      reactionSprite: '/pet/react-feed.png',
+      reactionSprite: '/pet/react-eat.gif',
       apiCall: breakfastPet,
       successMessage: 'Le diste el desayuno',
     },
@@ -162,7 +188,7 @@ export default function MascotaTab() {
       label: 'Almorzar',
       icon: Utensils,
       accent: '--primary',
-      reactionSprite: '/pet/react-lunch.png',
+      reactionSprite: '/pet/react-eat.gif',
       apiCall: lunchPet,
       successMessage: 'Le diste el almuerzo',
     },
@@ -171,7 +197,7 @@ export default function MascotaTab() {
       label: 'Jugar',
       icon: Heart,
       accent: '--success',
-      reactionSprite: '/pet/react-play.png',
+      reactionSprite: '/pet/react-play.gif',
       apiCall: playWithPet,
       successMessage: '¡Jugaron juntos!',
     },
@@ -180,7 +206,7 @@ export default function MascotaTab() {
       label: 'Cenar',
       icon: Moon,
       accent: '--primary',
-      reactionSprite: '/pet/react-dinner.png',
+      reactionSprite: '/pet/react-eat.gif',
       apiCall: dinnerPet,
       successMessage: 'Le diste la cena',
     },
@@ -197,6 +223,36 @@ export default function MascotaTab() {
       }
     })()
   }, [getPetState])
+
+  // Schedules the occasional idle fidget on a random loop. Re-runs whenever
+  // mood changes so it starts scheduling the moment mood becomes 'happy'
+  // and stops cleanly (via the cleanup) the moment it stops being happy —
+  // the render below double-checks mood too, so a fidget that was already
+  // mid-display when mood flips away just finishes invisibly rather than
+  // popping a mismatched face.
+  useEffect(() => {
+    if (!pet || pet.mood !== 'happy') return
+    let gapTimer: ReturnType<typeof setTimeout>
+    let revertTimer: ReturnType<typeof setTimeout>
+    function scheduleNext() {
+      const gap = FIDGET_MIN_GAP_MS + Math.random() * (FIDGET_MAX_GAP_MS - FIDGET_MIN_GAP_MS)
+      gapTimer = setTimeout(() => {
+        setFidgeting(true)
+        revertTimer = setTimeout(() => setFidgeting(false), FIDGET_MS)
+        scheduleNext()
+      }, gap)
+    }
+    scheduleNext()
+    return () => {
+      clearTimeout(gapTimer)
+      clearTimeout(revertTimer)
+    }
+    // Deliberately depending on pet?.mood only, not all of `pet` — care_score/
+    // streak/sparks changing shouldn't tear down and reschedule this timer
+    // chain, only an actual mood transition should. Nothing past the initial
+    // guard reads `pet` again, so there's no stale-closure risk either.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pet?.mood])
 
   function playReaction(kind: CareAction) {
     setReactingAction(kind)
@@ -283,6 +339,10 @@ export default function MascotaTab() {
   const reactionSprite = reactingAction
     ? CARE_ACTIONS.find((a) => a.key === reactingAction)?.reactionSprite
     : undefined
+  // A reaction always wins over the fidget if both happen to be true at
+  // once (see the scheduling effect's comment on why that's not worth
+  // preventing outright).
+  const showFidget = fidgeting && pet?.mood === 'happy' && !reactionSprite
 
   // One action on stage at a time, in CARE_ACTIONS order — the first one
   // not yet done today, whether or not its window is open yet. If it's
@@ -323,10 +383,12 @@ export default function MascotaTab() {
           ) : (
             <>
               <div className="relative h-40 w-40">
-                {/* Ground shadow — pulses opposite pet-float's timing (same
-                    3s duration, no JS sync needed) so it shrinks/fades as
-                    the sprite rises and grows/darkens as it settles back
-                    down, selling the float as an actual hover over ground. */}
+                {/* Ground shadow — a standalone ambient pulse, not driven by
+                    the sprite anymore (the mood GIFs below animate
+                    themselves now, no CSS float/flicker needed to fake
+                    motion on a static image like before). Left running on
+                    its own timing since it still sells a sense of life under
+                    the sprite regardless of what that sprite is doing. */}
                 <div
                   aria-hidden="true"
                   className="animate-pet-shadow-pulse absolute bottom-1 left-1/2 h-4 w-20 -translate-x-1/2 rounded-full"
@@ -334,14 +396,17 @@ export default function MascotaTab() {
                 />
                 <img
                   key={pet.mood}
-                  src={reactionSprite ?? MOOD_SPRITE[pet.mood]}
+                  src={reactionSprite ?? (showFidget ? '/pet/fidget.gif' : MOOD_SPRITE[pet.mood])}
                   alt={MOOD_LABEL[pet.mood]}
                   width={160}
                   height={160}
                   style={{ imageRendering: 'pixelated' }}
                   className={cn(
                     'relative animate-in fade-in-0 duration-500',
-                    reactionSprite ? 'animate-pet-pop' : 'animate-pet-float animate-pet-flicker'
+                    // Pop plays for every reaction, sprite-swap or not — the
+                    // 4 actions without a dedicated reaction GIF still get
+                    // the bounce on the mood sprite, just no image change.
+                    reactingAction && 'animate-pet-pop'
                   )}
                 />
               </div>
