@@ -22,11 +22,18 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 // PushManager.subscribe wants the VAPID public key as a Uint8Array, not the
 // base64url string the backend hands out — standard conversion, same as
 // every Web Push tutorial's applicationServerKey helper.
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+//
+// Explicitly allocating the backing ArrayBuffer (rather than letting
+// `new Uint8Array(length)` infer one) matters here: newer TS DOM lib types
+// made Uint8Array generic over its buffer, and PushSubscriptionOptionsInit's
+// applicationServerKey wants ArrayBufferView<ArrayBuffer> specifically —
+// the inferred ArrayBufferLike (which also covers SharedArrayBuffer)
+// doesn't satisfy that.
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4)
   const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/')
   const raw = atob(b64)
-  const bytes = new Uint8Array(raw.length)
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length))
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
   return bytes
 }
