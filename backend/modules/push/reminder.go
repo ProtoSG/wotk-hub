@@ -10,6 +10,8 @@ import (
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
+
+	"workhub/shared/team"
 )
 
 // reminderTTL bounds how long a push service holds an undelivered
@@ -160,6 +162,103 @@ func NotifyPartnerSolved(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubje
 	for _, sub := range subs {
 		sendPush(db, sub, vapidPublicKey, vapidPrivateKey, vapidSubject, body)
 	}
+}
+
+// petActionSchedule mirrors pet.careActions' unlock hours — duplicated here
+// rather than importing the pet package. This file already avoids depending
+// on games/pet Go packages, querying their tables directly via raw SQL
+// instead (see CheckUnsolvedAndNotify above); this is the same tradeoff,
+// just for a 5-row static table instead of a single Lima-offset constant.
+var petActionSchedule = []struct {
+	action string
+	hour   int
+	body   string
+}{
+	{"bathe", 7, "Es hora del baño 🛁"},
+	{"breakfast", 8, "Es hora del desayuno ☕"},
+	{"lunch", 12, "Es hora del almuerzo 🍽️"},
+	{"play", 16, "Es hora de jugar 🎾"},
+	{"dinner", 19, "Es hora de la cena 🌙"},
+}
+
+// NextPetActionTime returns whichever of the 5 pet care actions unlocks
+// soonest — today's occurrence if still upcoming, otherwise tomorrow's.
+// Same shape as NextLimaNoon, generalized from 1 fixed instant to whichever
+// of 5 is closest.
+func NextPetActionTime() (action string, at time.Time) {
+	now := time.Now().In(limaLoc)
+	for _, a := range petActionSchedule {
+		candidate := time.Date(now.Year(), now.Month(), now.Day(), a.hour, 0, 0, 0, limaLoc)
+		if !candidate.After(now) {
+			candidate = candidate.Add(24 * time.Hour)
+		}
+		if action == "" || candidate.Before(at) {
+			action, at = a.action, candidate
+		}
+	}
+	return action, at
+}
+
+// CheckPetActionAndNotify runs once — intended to be called right at the
+// unlock hour for `action` (see NextPetActionTime) — and pushes a reminder
+// to every subscribed device unless that action is already done today.
+// Unlike CheckUnsolvedAndNotify (per-user riddle progress), the pet is one
+// shared state for the whole team, so there's a single done/not-done check
+// and every subscriber gets notified, not a per-user loop.
+func CheckPetActionAndNotify(db *sql.DB, action, vapidPublicKey, vapidPrivateKey, vapidSubject string) error {
+	var body string
+	for _, a := range petActionSchedule {
+		if a.action == action {
+			body = a.body
+			break
+		}
+	}
+	if body == "" {
+		return fmt.Errorf("push: unknown pet action %q", action)
+	}
+
+	teamID, err := team.ResolveTeamID(db)
+	if err != nil {
+		return err
+	}
+	today := time.Now().In(limaLoc).Format("2006-01-02")
+	var done bool
+	if err := db.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM pet_care_log WHERE team_id = $1 AND action = $2 AND care_date = $3)`,
+		teamID, action, today,
+	).Scan(&done); err != nil {
+		return err
+	}
+	if done {
+		return nil // already taken care of, nothing to remind about
+	}
+
+	rows, err := db.Query(`SELECT endpoint, p256dh, auth FROM push_subscriptions`)
+	if err != nil {
+		return err
+	}
+	var subs []webpush.Subscription
+	for rows.Next() {
+		var s webpush.Subscription
+		if err := rows.Scan(&s.Endpoint, &s.Keys.P256dh, &s.Keys.Auth); err != nil {
+			rows.Close()
+			return err
+		}
+		subs = append(subs, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(map[string]string{"title": "Nuestra mascota", "body": body})
+	if err != nil {
+		return err
+	}
+	for _, sub := range subs {
+		sendPush(db, sub, vapidPublicKey, vapidPrivateKey, vapidSubject, payload)
+	}
+	return nil
 }
 
 func sendPush(db *sql.DB, sub webpush.Subscription, vapidPublicKey, vapidPrivateKey, vapidSubject string, payload []byte) {

@@ -18,6 +18,7 @@ import (
 	"workhub/modules/finances"
 	"workhub/modules/games"
 	"workhub/modules/gym"
+	"workhub/modules/pet"
 	"workhub/modules/push"
 	"workhub/modules/ytdlp"
 	"workhub/storage"
@@ -150,6 +151,7 @@ func main() {
 			pr.Mount("/api/push", push.Routes(appDB, cfg.VAPIDPublicKey))
 		}
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB, photoStorage))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/pet", pet.Routes(appDB))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
 	})
@@ -229,6 +231,38 @@ func main() {
 		log.Println("push: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set, riddle reminders disabled")
 	}
 
+	// Background job: remind the couple when each of the pet's 5 daily care
+	// actions unlocks. Same "sleep until the next precise instant" shape as
+	// the riddle reminder above, just generalized to whichever of 5 fixed
+	// hours is soonest (see push.NextPetActionTime) instead of one fixed
+	// noon — a separate goroutine rather than folding into the loop above
+	// since the two reminders are unrelated features that happen to share
+	// the same scheduling shape, not because there's any actual dependency
+	// between them.
+	var petPushStop, petPushDone chan struct{}
+	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
+		petPushStop = make(chan struct{})
+		petPushDone = make(chan struct{})
+		go func() {
+			defer close(petPushDone)
+			for {
+				action, at := push.NextPetActionTime()
+				timer := time.NewTimer(time.Until(at))
+				select {
+				case <-timer.C:
+					if err := push.CheckPetActionAndNotify(appDB, action, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject); err != nil {
+						log.Printf("push: pet reminder check failed: %v", err)
+					}
+				case <-petPushStop:
+					timer.Stop()
+					return
+				}
+			}
+		}()
+	} else {
+		log.Println("push: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set, pet reminders disabled")
+	}
+
 	go func() {
 		log.Printf("Backend running on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -248,6 +282,10 @@ func main() {
 	if pushStop != nil {
 		close(pushStop)
 		<-pushDone
+	}
+	if petPushStop != nil {
+		close(petPushStop)
+		<-petPushDone
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
