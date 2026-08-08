@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -131,6 +132,7 @@ func NotifyPartnerSolved(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubje
 		log.Printf("push: load partner subscriptions failed: %v", err)
 		return
 	}
+	log.Printf("push: notifying %d partner subscription(s) that %s solved", len(subs), solverName)
 
 	body, err := json.Marshal(map[string]string{
 		"title": "La Última Pregunta",
@@ -157,6 +159,16 @@ func sendPush(db *sql.DB, sub webpush.Subscription, vapidPublicKey, vapidPrivate
 		return
 	}
 	defer resp.Body.Close()
+
+	// Always log the outcome — a silent success looked identical to "never
+	// attempted" in the logs, which made a real delivery failure
+	// indistinguishable from this function never having run at all.
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		log.Printf("push: sent to %s, status %d", sub.Endpoint, resp.StatusCode)
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("push: send to %s rejected, status %d: %s", sub.Endpoint, resp.StatusCode, string(body))
+	}
 
 	// 404/410 means the push service considers this subscription gone for
 	// good (uninstalled, permissions revoked, browser data cleared) —
