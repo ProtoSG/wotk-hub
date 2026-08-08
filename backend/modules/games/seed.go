@@ -1,6 +1,9 @@
 package games
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 type seedMovie struct {
 	emojiStr   string
@@ -106,8 +109,8 @@ func SeedRiddles(db *sql.DB) error {
 		{"¿Qué tiene mariachi y se habla sin cesar?", "El mariachi", "Lleva sombreros grandes", "medium"},
 		// Logic puzzles
 		{"Un padre y un hijo van en un auto. El padre muere. El hijo es llevado al hospital. El médico dice: 'No puedo operarlo, es mi hijo'. ¿Cómo es posible?", "El médico era su madre", "Piensa en la diversidad de médicos", "medium"},
-		{"Hay tres cajas. Una dice 'Premio', otra 'Premio', y la tercera 'Vacío'. Las tres tienen incorrectas las etiquetas. Si solo puedes abrir una caja y sacar un objeto (sin mirar), ¿cómo puedes saber cuál tiene el premio?", "Saca de la caja que dice 'Premio' — si sale vacío, esa es vacía; si sale premio, la otra es vacía y la restante es premio", "Las tres etiquetas están mal, así que la que dice Premio no puede tener Premio", "hard"},
-		{"Un hombre vive en el piso 50. Cada día baja al lobby y sube en elevador. Cuando vuelve, solo sube hasta el piso 40 y luego usa las escaleras. ¿Por qué?", "Porque el elevador no tiene botón para el piso 50 desde arriba — es muy alto para llegar con la mano", "El edificio tiene más de 40 pisos", "medium"},
+		{"Hay tres cajas. Una dice 'Premio', otra 'Premio', y la tercera 'Vacío'. Las tres tienen incorrectas las etiquetas. Si solo puedes abrir una caja y sacar un objeto (sin mirar), ¿cómo puedes saber cuál tiene el premio?", "La que dice premio", "Las tres etiquetas están mal, así que la que dice Premio no puede tener Premio: si sale vacío, esa caja es la vacía; si sale premio, la otra caja marcada Premio es la vacía y la restante es el premio", "hard"},
+		{"Un hombre vive en el piso 50. Cada día baja al lobby y sube en elevador. Cuando vuelve, solo sube hasta el piso 40 y luego usa las escaleras. ¿Por qué?", "No alcanza el botón", "Piensa en su estatura, no en el edificio — el botón del piso 50 queda muy alto para su mano", "medium"},
 		{"¿Qué número sigue: 1, 11, 21, 1211, 111221, ...?", "312211", "Es una secuencia de descripción", "hard"},
 		// Wordplay / doble sentido
 		{"¿Por qué el libro de matemáticas estaba triste?", "Porque tenía muchos problemas", "Es un chiste clásico", "easy"},
@@ -115,9 +118,9 @@ func SeedRiddles(db *sql.DB) error {
 		{"¿Cómo se dice 'pantalla' en chino?", "No se dice, se habla", "Piensa en la pregunta literal", "easy"},
 		{"¿Qué cosa tiene cities pero no houses, forests pero no trees, y agua pero no fish?", "El mapa", "Lo despliegas sobre una mesa", "medium"},
 		// Math riddles
-		{"¿Cuántas veces puedes restar 5 de 25?", "Una vez — después ya no es 25", "El número cambia", "medium"},
+		{"¿Cuántas veces puedes restar 5 de 25?", "Una vez", "El número cambia después de la primera resta, ya no es 25", "medium"},
 		{"Un granjero tiene 17 ovejas. Todas mueren menos 9. ¿Cuántas quedan?", "9", "Lee bien la pregunta", "easy"},
-		{"Si tienes 6 velas encendidas y el viento apaga 2, ¿cuántas velas quedan?", "2 — las otras se derritieron", "Las velas no se van a ningún lado", "medium"},
+		{"Si tienes 6 velas encendidas y el viento apaga 2, ¿cuántas velas quedan?", "2", "Las velas no se van a ningún lado, siguen ahí — pregunta cuántas quedan, no cuántas siguen encendidas", "medium"},
 		{"¿Qué pesa más: un kilo de plumas o un kilo de hierro?", "Pesan igual", "Un kilo es un kilo", "easy"},
 		// Couple-specific riddles
 		{"¿Dónde fue nuestra primera cita?", "El parque", "Esta respuesta debe ser personalizada", "medium"},
@@ -146,7 +149,7 @@ func SeedRiddles(db *sql.DB) error {
 		{"¿Qué tiene espalda pero no puede doler?", "La pared", "Es parte de una habitación", "easy"},
 		{"¿Qué tiene frente pero no tiene cara?", "El cuchillo", "Lo usas en la cocina", "easy"},
 		{"¿Qué cosa comienza en T, termina en T y solo tiene T?", "El tetris", "Un juego clásico", "easy"},
-		{"¿Qué palabra tiene 5 letras pero si le quitas 1 quedan 12?", "Doce — le quitas la 'd' y queda 'once'", "Doce tiene 4 letras, no 5... espera", "hard"},
+		{"¿Qué palabra tiene 5 letras pero si le quitas 1 quedan 12?", "Doce", "Le quitas la 'd' y queda 'once' — cuenta las letras de la palabra 'doce', no el número", "hard"},
 		{"¿Qué cosa tiene cities, no houses, forests sin trees, water sin fish?", "Un mapa", "Ya salió arriba también", "easy"},
 		{"¿Qué tiene 1000 ojos pero no puede ver?", "Un microscopio", "Ayuda a ver lo pequeño", "medium"},
 		{"¿Qué tiene 4 letras, 9 sílabas, 1 sonido?", "El silencio", "No se pronuncia", "hard"},
@@ -215,12 +218,18 @@ func SeedRiddles(db *sql.DB) error {
 		{"¿Qué hacemos el domingo?", "Ver películas", "Noche de netflix", "easy"},
 	}
 
-	for _, r := range riddles {
+	// Spread one riddle per calendar day, starting today, so the set covers
+	// the next len(riddles) days instead of colliding on a single date
+	// (published_on is UNIQUE — a shared date meant every insert after the
+	// first hit ON CONFLICT DO NOTHING and got silently dropped).
+	start := time.Now().In(limaLoc)
+	for i, r := range riddles {
+		publishedOn := start.AddDate(0, 0, i).Format("2006-01-02")
 		if _, err := db.Exec(
 			`INSERT INTO daily_riddles (question, answer, hint, difficulty, published_on)
-			 VALUES ($1, $2, $3, $4, '2025-01-01')
+			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT DO NOTHING`,
-			r.question, r.answer, r.hint, r.difficulty,
+			r.question, r.answer, r.hint, r.difficulty, publishedOn,
 		); err != nil {
 			return err
 		}
