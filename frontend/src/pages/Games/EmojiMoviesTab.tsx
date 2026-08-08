@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Trophy } from 'lucide-react'
+import { Trophy, Copy, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CozyCard, paperSurfaceStyle } from '@/components/ui/cozy-card'
 import { useGamesApi } from '@/hooks/useGamesApi'
 import { useAuthStore } from '@/store/authStore'
+import { cn } from '@/lib/utils'
 import type { EmojiGameSession, MovieDifficulty } from '@/types/games.types'
 
 const POLL_INTERVAL_MS = 2000
@@ -15,6 +17,21 @@ const DIFFICULTIES: { value: MovieDifficulty; label: string }[] = [
   { value: 'medium', label: 'Media' },
   { value: 'hard', label: 'Difícil' },
 ]
+
+// Compact score readout shared by the header (in-progress) and the recap
+// (finished) — same "small muted label over a bold number" pattern as
+// Couple/EstadisticasTab's stat tiles, just inline instead of its own card
+// (avoids stacking a card inside this one).
+function ScoreBlock({ label, score, lead }: { label: string; score: number; lead: boolean }) {
+  return (
+    <div className="text-center">
+      <div className={cn('text-2xl font-bold tabular-nums', lead ? 'text-primary' : 'text-muted-foreground')}>
+        {score}
+      </div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+    </div>
+  )
+}
 
 export default function EmojiMoviesTab() {
   const { createSession, joinSession, getSession, guess, reveal } = useGamesApi()
@@ -124,14 +141,24 @@ export default function EmojiMoviesTab() {
     setFeedback(null)
   }
 
+  async function handleCopyId() {
+    if (!session) return
+    try {
+      await navigator.clipboard.writeText(String(session.id))
+      toast.success('ID copiado')
+    } catch {
+      toast.error('No se pudo copiar')
+    }
+  }
+
   if (!session) {
     return (
-      <Card className="mx-auto max-w-md">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
           <CardTitle>Emoji Movies</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Adiviná la película a partir de los emojis. Jugás contra otra persona.
             </p>
@@ -153,31 +180,46 @@ export default function EmojiMoviesTab() {
             </Button>
           </div>
 
-          <div className="space-y-2 border-t pt-4">
-            <Input placeholder="ID de la partida" value={joinId} onChange={(e) => setJoinId(e.target.value)} inputMode="numeric" />
+          <div className="space-y-3 border-t pt-4">
+            <Input
+              placeholder="ID de la partida"
+              value={joinId}
+              onChange={(e) => setJoinId(e.target.value)}
+              inputMode="numeric"
+            />
             <Button onClick={handleJoin} disabled={busy} variant="secondary" className="w-full">
               Unirse
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </CozyCard>
     )
   }
 
   if (session.status === 'waiting') {
     return (
-      <Card className="mx-auto max-w-md">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
-          <CardTitle>Esperando jugador...</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 animate-pulse text-muted-foreground" />
+            Esperando jugador...
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 text-center">
+        <CardContent className="space-y-5 text-center">
           <p className="text-sm text-muted-foreground">Compartí este ID con la otra persona para que se una:</p>
-          <p className="text-3xl font-bold">{session.id}</p>
+          <button
+            type="button"
+            onClick={handleCopyId}
+            className="group mx-auto flex items-center gap-2.5 rounded-[var(--radius)] border border-border bg-secondary/60 px-6 py-3 transition-colors hover:border-primary/40"
+          >
+            <span className="text-3xl font-bold tabular-nums">{session.id}</span>
+            <Copy className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
+          </button>
           <Button variant="outline" onClick={handleNewGame}>
             Cancelar
           </Button>
         </CardContent>
-      </Card>
+      </CozyCard>
     )
   }
 
@@ -185,45 +227,55 @@ export default function EmojiMoviesTab() {
     const winner =
       session.p1Score > session.p2Score ? 'Jugador 1' : session.p2Score > session.p1Score ? 'Jugador 2' : 'Empate'
     return (
-      <Card className="mx-auto max-w-md">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-yellow-500" />
+            <Trophy className="h-5 w-5 text-warning" />
             ¡Partida terminada!
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 text-center">
+        <CardContent className="space-y-6 text-center">
           <p className="text-xl font-semibold">{winner === 'Empate' ? 'Empate' : `Ganó ${winner}`}</p>
-          <p className="text-sm text-muted-foreground">
-            {session.p1Score} - {session.p2Score}
-          </p>
+          <div className="flex items-center justify-center gap-8">
+            <ScoreBlock label="Jugador 1" score={session.p1Score} lead={session.p1Score > session.p2Score} />
+            <div className="text-sm text-muted-foreground">vs</div>
+            <ScoreBlock label="Jugador 2" score={session.p2Score} lead={session.p2Score > session.p1Score} />
+          </div>
           <Button onClick={handleNewGame} className="w-full">
             Nueva partida
           </Button>
         </CardContent>
-      </Card>
+      </CozyCard>
     )
   }
 
   const isPlayer1 = userId === session.player1Id
 
   return (
-    <Card className="mx-auto max-w-md">
+    <CozyCard className="mx-auto max-w-md animate-card-in">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Emoji Movies</CardTitle>
-          <div className="flex items-center gap-3 text-sm font-medium">
-            <span className={isPlayer1 ? 'text-primary' : 'text-muted-foreground'}>P1: {session.p1Score}</span>
-            <span className="text-muted-foreground">vs</span>
-            <span className={!isPlayer1 ? 'text-primary' : 'text-muted-foreground'}>P2: {session.p2Score}</span>
+          <div className="flex items-center gap-4">
+            <ScoreBlock label="Vos" score={isPlayer1 ? session.p1Score : session.p2Score} lead />
+            <ScoreBlock
+              label="Rival"
+              score={isPlayer1 ? session.p2Score : session.p1Score}
+              lead={false}
+            />
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="rounded-lg bg-muted py-10 text-center text-6xl">{session.currentEmoji}</div>
+        <div
+          className="rounded-[var(--radius)] border border-border py-12 text-center text-7xl"
+          style={paperSurfaceStyle}
+        >
+          {session.currentEmoji}
+        </div>
 
         {feedback && (
-          <p className={`text-center font-medium ${feedback === 'correct' ? 'text-success' : 'text-destructive'}`}>
+          <p className={cn('text-center font-medium', feedback === 'correct' ? 'text-success' : 'text-destructive')}>
             {feedback === 'correct' ? '¡Correcto! 🎉' : 'Nop, otra vez'}
           </p>
         )}
@@ -251,6 +303,6 @@ export default function EmojiMoviesTab() {
           Revelar respuesta
         </Button>
       </CardContent>
-    </Card>
+    </CozyCard>
   )
 }

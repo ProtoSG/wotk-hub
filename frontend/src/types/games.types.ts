@@ -41,6 +41,14 @@ export interface DailyRiddle {
   difficulty: RiddleDifficulty
   publishedOn: string
   createdAt: string
+  // Absolute instant (ISO) this riddle's 24h window closes, computed
+  // server-side in Lima local time — don't re-derive a deadline from
+  // publishedOn client-side, that's what caused the countdown to be off by
+  // exactly the Lima/UTC offset (5h) before this field existed.
+  expiresAt: string
+  // Weekly "doble o nada" riddle (every Sunday, Lima time) — a wrong guess
+  // wipes the solver's score instead of the normal miss-has-no-cost rule.
+  isBonus: boolean
 }
 
 export interface RiddleGameSession {
@@ -50,9 +58,15 @@ export interface RiddleGameSession {
   livesRemaining: number
   p1Score: number
   p2Score: number
+  // Consecutive days solved without a miss — resets to 0 the moment a day
+  // expires unsolved.
+  streak: number
   currentRiddleId?: number
   status: RiddleStatus
   createdAt: string
+  // Only present once status is 'solved' or 'gameover' — backend never
+  // sends it while active, so an in-progress poll can't leak it.
+  answer?: string
 }
 
 export interface RiddleAttempt {

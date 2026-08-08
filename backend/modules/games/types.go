@@ -77,20 +77,35 @@ type DailyRiddle struct {
 	Difficulty  string `json:"difficulty"`
 	PublishedOn string `json:"publishedOn"`
 	CreatedAt   string `json:"createdAt"`
+	// ExpiresAt is the absolute instant (RFC3339) this riddle's 24h window
+	// closes — always Lima-local midnight of the day after PublishedOn,
+	// computed server-side so the client never has to guess a timezone from
+	// a bare date string.
+	ExpiresAt string `json:"expiresAt"`
+	// IsBonus marks the weekly "doble o nada" riddle (every Sunday, Lima
+	// time) — the frontend gates the guess input behind an explicit
+	// confirm on these days since a wrong guess wipes the solver's score.
+	IsBonus bool `json:"isBonus"`
 }
 
 // RiddleGameSession holds the shared state for a team's daily riddle round.
 // Lives are shared between both partners; scores are individual.
 type RiddleGameSession struct {
-	ID              int64  `json:"id"`
-	TeamID          int64  `json:"teamId"`
-	PartnerID       int64  `json:"partnerId"`
-	LivesRemaining  int    `json:"livesRemaining"`
-	P1Score         int    `json:"p1Score"`
-	P2Score         int    `json:"p2Score"`
+	ID             int64 `json:"id"`
+	TeamID         int64 `json:"teamId"`
+	PartnerID      int64 `json:"partnerId"`
+	LivesRemaining int   `json:"livesRemaining"`
+	P1Score        int   `json:"p1Score"`
+	P2Score        int   `json:"p2Score"`
+	// Streak is consecutive days solved without a miss. Resets to 0 the
+	// moment a day expires unsolved (see expireStaleSessions).
+	Streak          int    `json:"streak"`
 	CurrentRiddleID *int64 `json:"currentRiddleId,omitempty"`
 	Status          string `json:"status"` // active | solved | expired | gameover
 	CreatedAt       string `json:"createdAt"`
+	// Answer is only populated once Status is 'solved' or 'gameover' — never
+	// while active, so polling an in-progress session can't leak it.
+	Answer *string `json:"answer,omitempty"`
 }
 
 // RiddleAttempt records a correct solve.

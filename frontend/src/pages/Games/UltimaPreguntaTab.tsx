@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Heart, Lightbulb, Clock, Trophy, AlertCircle } from 'lucide-react'
+import { Heart, Lightbulb, Clock, Trophy, AlertCircle, History, Flame, Dices } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CozyCard, paperSurfaceStyle } from '@/components/ui/cozy-card'
 import { useGamesApi } from '@/hooks/useGamesApi'
 import { useAuthStore } from '@/store/authStore'
+import { cn } from '@/lib/utils'
 import type { DailyRiddle, RiddleGameSession, RiddleGuessResult } from '@/types/games.types'
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 6000
 
 const DIFFICULTY_LABELS: Record<string, string> = {
   easy: 'Fácil',
@@ -23,12 +25,15 @@ const POINTS_LABELS: Record<number, string> = {
   50: '¡50 pts! 🎉',
 }
 
-// Countdown from 24 hours (time remaining for today's riddle)
-function useCountdown(publishedOn: string) {
+// Countdown to expiresAt, an absolute instant the backend computes in Lima
+// local time — deliberately not derived from publishedOn + 24h client-side.
+// That used to parse publishedOn's date-only portion as UTC midnight and
+// add 24h, which silently disagreed with the server's actual Lima-midnight
+// day boundary by exactly the 5h UTC offset.
+function useCountdown(expiresAt: string) {
   const [timeLeft, setTimeLeft] = useState('')
   useEffect(() => {
-    const deadline = new Date(publishedOn)
-    deadline.setHours(deadline.getHours() + 24)
+    const deadline = new Date(expiresAt)
     const tick = () => {
       const diff = deadline.getTime() - Date.now()
       if (diff <= 0) {
@@ -43,16 +48,49 @@ function useCountdown(publishedOn: string) {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [publishedOn])
+  }, [expiresAt])
   return timeLeft
 }
 
+// Exact same treatment as Couple's DateCard rating hearts — fill-primary,
+// not a red/destructive tone. Consistency with Couple won over a "danger"
+// framing for lives.
 function Hearts({ lives }: { lives: number }) {
   return (
     <div className="flex gap-1">
       {[0, 1, 2].map((i) => (
-        <Heart key={i} className={`h-5 w-5 ${i < lives ? 'fill-red-500 text-red-500' : 'text-muted'}`} />
+        <Heart
+          key={i}
+          size={16}
+          className={cn(i < lives ? 'fill-primary text-primary' : 'text-muted-foreground/30')}
+        />
       ))}
+    </div>
+  )
+}
+
+// Streak indicator — only rendered once there's something to show (0 reads
+// as noise, not motivating). Primary-tinted, not --warning, so it doesn't
+// visually collide with the hint/countdown's warning tone.
+function StreakBadge({ streak }: { streak: number }) {
+  if (streak <= 0) return null
+  return (
+    <div className="flex items-center gap-1 text-primary" title={`Racha de ${streak} día${streak === 1 ? '' : 's'}`}>
+      <Flame className="h-4 w-4 fill-primary" />
+      <span className="text-sm font-bold tabular-nums">{streak}</span>
+    </div>
+  )
+}
+
+// Small muted-label-over-bold-number readout — same pattern as
+// Couple/EstadisticasTab's stat tiles and EmojiMoviesTab's score blocks.
+function ScoreBlock({ label, score, lead }: { label: string; score: number; lead: boolean }) {
+  return (
+    <div className="text-center">
+      <div className={cn('text-xl font-bold tabular-nums', lead ? 'text-primary' : 'text-muted-foreground')}>
+        {score}
+      </div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
     </div>
   )
 }
@@ -69,10 +107,16 @@ export default function UltimaPreguntaTab() {
   const [showHint, setShowHint] = useState(false)
   const [busy, setBusy] = useState(false)
   const [view, setView] = useState<'play' | 'history'>('play')
+  // Gates the guess input behind an explicit opt-in on bonus days — a wrong
+  // guess wipes the score, so typing shouldn't be able to trigger that by
+  // accident. Tracks WHICH riddle was confirmed (not a plain boolean) so a
+  // new riddle loading automatically requires reconfirmation — no effect
+  // needed to reset it.
+  const [confirmedBonusRiddleId, setConfirmedBonusRiddleId] = useState<number | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Must be called before any early returns — hooks can't be conditional
-  const countdown = useCountdown(riddle?.publishedOn ?? new Date().toISOString().split('T')[0])
+  const countdown = useCountdown(riddle?.expiresAt ?? new Date().toISOString())
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -82,13 +126,15 @@ export default function UltimaPreguntaTab() {
   }, [])
 
   // Poll session for live updates — no websockets, same pattern as EmojiMoviesTab.
+  // Keep polling while the session is 'active' (waiting on either partner);
+  // stop only once it reaches a terminal state.
   const startPolling = useCallback(() => {
     stopPolling()
     pollRef.current = setInterval(async () => {
       try {
         const { session: s } = await getRiddleSession()
         setSession(s)
-        if (s?.status === 'active' || s?.status === 'solved' || s?.status === 'gameover') {
+        if (s?.status === 'solved' || s?.status === 'gameover') {
           stopPolling()
         }
       } catch {
@@ -98,6 +144,20 @@ export default function UltimaPreguntaTab() {
   }, [getRiddleSession, stopPolling])
 
   useEffect(() => () => stopPolling(), [stopPolling])
+
+  // Pause polling while the tab isn't visible — no point burning requests
+  // for a screen nobody's looking at. Resume on return if session is still live.
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.hidden) {
+        stopPolling()
+      } else if (session?.status === 'active') {
+        startPolling()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [session?.status, startPolling, stopPolling])
 
   // Initial load
   useEffect(() => {
@@ -133,7 +193,10 @@ export default function UltimaPreguntaTab() {
     setSession(result.session)
     if (result.correct) {
       setGuessText('')
-      toast.success(POINTS_LABELS[result.pointsEarned] ?? `¡Correcto! +${result.pointsEarned} pts`)
+      const base = riddle?.isBonus
+        ? `¡Doblaste tus puntos! 🎲 +${result.pointsEarned} pts`
+        : (POINTS_LABELS[result.pointsEarned] ?? `¡Correcto! +${result.pointsEarned} pts`)
+      toast.success(!riddle?.isBonus && result.session.streak > 1 ? `${base} · 🔥 racha de ${result.session.streak} días` : base)
       stopPolling()
       // Auto-advance after 5s
       setTimeout(() => {
@@ -141,6 +204,7 @@ export default function UltimaPreguntaTab() {
         reloadToday()
       }, 5000)
     } else {
+      if (riddle?.isBonus) toast.error('Perdiste tu apuesta 😬 — tus puntos volvieron a 0')
       setTimeout(() => setFeedback(null), 1500)
     }
   }
@@ -182,10 +246,13 @@ export default function UltimaPreguntaTab() {
   // ── Derive UI state ──────────────────────────────────────────────────────────
   if (view === 'history') {
     return (
-      <Card className="mx-auto max-w-md">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Historial</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-muted-foreground" />
+              Historial
+            </CardTitle>
             <Button variant="ghost" size="sm" onClick={() => setView('play')}>
               Volver
             </Button>
@@ -196,7 +263,7 @@ export default function UltimaPreguntaTab() {
             <p className="text-sm text-muted-foreground text-center py-8">Aún no hay historial.</p>
           ) : (
             history.map((h) => (
-              <div key={h.riddleId} className="rounded-lg border p-3 text-sm">
+              <div key={h.riddleId} className="rounded-[var(--radius)] border border-border p-3 text-sm">
                 <p className="font-medium">{h.question}</p>
                 <p className="text-muted-foreground mt-1">Respuesta: {h.answer}</p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -206,37 +273,28 @@ export default function UltimaPreguntaTab() {
             ))
           )}
         </CardContent>
-      </Card>
+      </CozyCard>
     )
   }
 
-  // No session — show lives and scores CTA
-  if (!session || session.status === 'gameover') {
+  // No session yet — friendly starting CTA
+  if (!session) {
     return (
-      <Card className="mx-auto max-w-md">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-red-500" />
-            {session?.status === 'gameover' ? '¡Perdieron!' : 'La Última Pregunta'}
+            <Heart className="h-5 w-5 text-primary" />
+            La Última Pregunta
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {session?.status === 'gameover' && (
-            <p className="text-center text-muted-foreground">Se acabaron las vidas. 😢</p>
-          )}
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-1">
-              <span className="text-sm text-muted-foreground">Vidas</span>
-              <Hearts lives={session?.livesRemaining ?? 3} />
+              <span className="text-xs font-medium text-muted-foreground">Vidas</span>
+              <Hearts lives={3} />
             </div>
-            <div className="flex flex-col gap-1 text-center">
-              <span className="text-sm text-muted-foreground">Pareja 1</span>
-              <span className="text-xl font-bold">{session?.p1Score ?? 0} pts</span>
-            </div>
-            <div className="flex flex-col gap-1 text-center">
-              <span className="text-sm text-muted-foreground">Pareja 2</span>
-              <span className="text-xl font-bold">{session?.p2Score ?? 0} pts</span>
-            </div>
+            <ScoreBlock label="Pareja 1" score={0} lead={false} />
+            <ScoreBlock label="Pareja 2" score={0} lead={false} />
           </div>
           <div className="space-y-2">
             <Button onClick={handleStartGame} disabled={busy} className="w-full">
@@ -247,29 +305,70 @@ export default function UltimaPreguntaTab() {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </CozyCard>
+    )
+  }
+
+  // Lives ran out
+  if (session.status === 'gameover') {
+    return (
+      <CozyCard className="mx-auto max-w-md animate-card-in">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            ¡Perdieron!
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-center text-muted-foreground">Se acabaron las vidas. 😢</p>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Vidas</span>
+              <Hearts lives={0} />
+            </div>
+            <ScoreBlock label="Pareja 1" score={session.p1Score} lead={session.p1Score > session.p2Score} />
+            <ScoreBlock label="Pareja 2" score={session.p2Score} lead={session.p2Score > session.p1Score} />
+          </div>
+          <div className="space-y-2">
+            <Button onClick={handleStartGame} disabled={busy} className="w-full">
+              Jugar de nuevo
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleViewHistory} className="w-full">
+              Ver historial
+            </Button>
+          </div>
+        </CardContent>
+      </CozyCard>
     )
   }
 
   // Riddle is solved (by either partner)
   if (session.status === 'solved') {
     return (
-      <Card className="mx-auto max-w-md border-green-500">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-green-600">
+          <CardTitle className="flex items-center gap-2 text-success">
             <Trophy className="h-5 w-5" />
             ¡La resolvieron!
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg bg-green-50 p-4 text-center dark:bg-green-950">
-            <p className="text-sm text-muted-foreground mb-2">La respuesta era:</p>
-            <p className="text-xl font-bold text-green-700 dark:text-green-400">{riddle?.hint.split('.')[0] ?? ''}</p>
+        <CardContent className="space-y-5">
+          <div
+            className="rounded-[var(--radius)] p-4 text-center"
+            style={{ backgroundColor: 'color-mix(in oklch, var(--success) 12%, var(--card))' }}
+          >
+            <p className="text-sm text-muted-foreground mb-1">La respuesta era:</p>
+            <p className="text-xl font-bold text-success">{session.answer ?? riddle?.hint.split('.')[0] ?? ''}</p>
           </div>
-          <div className="flex items-center justify-between text-sm">
+          {session.streak > 0 && (
+            <div className="flex justify-center">
+              <StreakBadge streak={session.streak} />
+            </div>
+          )}
+          <div className="flex items-center justify-between">
             <Hearts lives={session.livesRemaining} />
-            <span>P1: {session.p1Score} pts</span>
-            <span>P2: {session.p2Score} pts</span>
+            <ScoreBlock label="Pareja 1" score={session.p1Score} lead={session.p1Score > session.p2Score} />
+            <ScoreBlock label="Pareja 2" score={session.p2Score} lead={session.p2Score > session.p1Score} />
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleViewHistory} className="flex-1">
@@ -287,52 +386,63 @@ export default function UltimaPreguntaTab() {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </CozyCard>
     )
   }
 
   // Expired (24h passed, no one solved — loses a life)
   if (session.status === 'expired') {
     return (
-      <Card className="mx-auto max-w-md border-yellow-500">
+      <CozyCard className="mx-auto max-w-md animate-card-in">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-yellow-600">
+          <CardTitle className="flex items-center gap-2 text-warning">
             <Clock className="h-5 w-5" />
             Se acabó el tiempo
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg bg-yellow-50 p-4 text-center dark:bg-yellow-950">
-            <p className="text-sm text-muted-foreground mb-2">La respuesta era:</p>
-            <p className="text-xl font-bold text-yellow-700 dark:text-yellow-400">{riddle?.hint.split('.')[0] ?? ''}</p>
+        <CardContent className="space-y-5">
+          <div
+            className="rounded-[var(--radius)] p-4 text-center"
+            style={{ backgroundColor: 'color-mix(in oklch, var(--warning) 12%, var(--card))' }}
+          >
+            <p className="text-sm text-muted-foreground mb-1">La respuesta era:</p>
+            <p className="text-xl font-bold text-warning">{session.answer ?? riddle?.hint.split('.')[0] ?? ''}</p>
           </div>
-          <div className="flex items-center justify-center gap-2 text-yellow-600">
-            <Heart className="h-4 w-4 fill-yellow-500" />
+          <div className="flex items-center justify-center gap-2 text-warning text-sm font-medium">
+            <Heart className="h-4 w-4 fill-warning" />
             <span>-1 vida</span>
           </div>
-          <Hearts lives={session.livesRemaining} />
+          <div className="flex justify-center">
+            <Hearts lives={session.livesRemaining} />
+          </div>
           <Button onClick={() => reloadToday()} className="w-full">
             Siguiente pregunta
           </Button>
         </CardContent>
-      </Card>
+      </CozyCard>
     )
   }
 
   // Active daily riddle
   const isP1 = userId === session.teamId
+  const isBonus = riddle?.isBonus ?? false
+  const myScore = isP1 ? session.p1Score : session.p2Score
 
   return (
-    <Card className="mx-auto max-w-md">
+    <CozyCard className={cn('mx-auto max-w-md animate-card-in', isBonus && 'ring-2 ring-primary/40')}>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>La Última Pregunta</CardTitle>
-          <Hearts lives={session.livesRemaining} />
+          <CardTitle className="flex items-center gap-2">
+            {isBonus && <Dices className="h-5 w-5 text-primary" />}
+            {isBonus ? 'Pregunta Bonus' : 'La Última Pregunta'}
+          </CardTitle>
+          <div className="flex items-center gap-3">
+            <StreakBadge streak={session.streak} />
+            <Hearts lives={session.livesRemaining} />
+          </div>
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
-          <span>
-            {riddle ? DIFFICULTY_LABELS[riddle.difficulty] : ''}
-          </span>
+          <span>{isBonus ? 'Doble o nada' : riddle ? DIFFICULTY_LABELS[riddle.difficulty] : ''}</span>
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {countdown}
@@ -341,75 +451,105 @@ export default function UltimaPreguntaTab() {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Score bar */}
-        <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2 text-sm">
-          <span className={isP1 ? 'font-bold text-primary' : 'text-muted-foreground'}>
-            P1: {session.p1Score} pts
-          </span>
-          <span className="text-muted-foreground">vs</span>
-          <span className={!isP1 ? 'font-bold text-primary' : 'text-muted-foreground'}>
-            P2: {session.p2Score} pts
-          </span>
+        <div className="flex items-center justify-center gap-8">
+          <ScoreBlock label="Pareja 1" score={session.p1Score} lead={isP1} />
+          <div className="text-sm text-muted-foreground">vs</div>
+          <ScoreBlock label="Pareja 2" score={session.p2Score} lead={!isP1} />
         </div>
 
-        {/* Question */}
-        {riddle && (
-          <div className="rounded-lg bg-card border p-4 text-center">
-            <p className="text-lg font-medium">{riddle.question}</p>
-          </div>
-        )}
-
-        {/* Hint toggle */}
-        {riddle?.hint && (
-          <div className="space-y-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowHint((v) => !v)}
-              className="w-full flex items-center gap-2"
-            >
-              <Lightbulb className="h-4 w-4" />
-              {showHint ? 'Ocultar pista' : 'Mostrar pista'}
+        {isBonus && confirmedBonusRiddleId !== riddle?.id ? (
+          // Explicit opt-in gate — a wrong guess wipes myScore, so typing an
+          // answer shouldn't be able to trigger that without a deliberate
+          // confirm first.
+          <div
+            className="rounded-[var(--radius)] p-4 text-center space-y-3"
+            style={{ backgroundColor: 'color-mix(in oklch, var(--primary) 10%, var(--card))' }}
+          >
+            <p className="text-sm">
+              Es domingo — pregunta bonus. Si acertás, <strong>duplicás</strong> tus {myScore} pts.
+              Si fallás, los <strong>perdés todos</strong>.
+            </p>
+            <Button onClick={() => setConfirmedBonusRiddleId(riddle?.id ?? null)} className="w-full">
+              Apostar {myScore} pts
             </Button>
-            {showHint && (
-              <p className="rounded bg-yellow-50 p-2 text-sm text-yellow-800 dark:bg-yellow-950 dark:text-yellow-400">
-                💡 {riddle.hint}
+          </div>
+        ) : (
+          <>
+            {/* Question */}
+            {riddle && (
+              <div
+                className="rounded-[var(--radius)] border border-border p-5 text-center"
+                style={paperSurfaceStyle}
+              >
+                <p className="text-lg font-medium">{riddle.question}</p>
+              </div>
+            )}
+
+            {/* Hint toggle */}
+            {riddle?.hint && (
+              <div className="space-y-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowHint((v) => !v)}
+                  className="w-full flex items-center gap-2"
+                >
+                  <Lightbulb className="h-4 w-4" />
+                  {showHint ? 'Ocultar pista' : 'Mostrar pista'}
+                </Button>
+                {showHint && (
+                  <p
+                    className="rounded-[var(--radius)] p-3 text-sm text-warning"
+                    style={{ backgroundColor: 'color-mix(in oklch, var(--warning) 12%, var(--card))' }}
+                  >
+                    💡 {riddle.hint}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Feedback */}
+            {feedback && (
+              <p
+                className={cn('text-center font-medium', feedback === 'correct' ? 'text-success' : 'text-destructive')}
+              >
+                {feedback === 'correct'
+                  ? isBonus
+                    ? '¡Doblaste tus puntos! 🎲'
+                    : '¡Correcto! 🎉'
+                  : isBonus
+                    ? 'Perdiste tu apuesta 😬'
+                    : 'Nop, otra vez'}
               </p>
             )}
-          </div>
-        )}
 
-        {/* Feedback */}
-        {feedback && (
-          <p className={`text-center font-medium ${feedback === 'correct' ? 'text-green-600' : 'text-red-500'}`}>
-            {feedback === 'correct' ? '¡Correcto! 🎉' : 'Nop, otra vez'}
-          </p>
+            {/* Guess input */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleGuess()
+              }}
+              className="flex gap-2"
+            >
+              <Input
+                value={guessText}
+                onChange={(e) => setGuessText(e.target.value)}
+                placeholder="Tu respuesta..."
+                disabled={busy}
+                autoFocus
+              />
+              <Button type="submit" disabled={busy || !guessText.trim()}>
+                Enviar
+              </Button>
+            </form>
+          </>
         )}
-
-        {/* Guess input */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleGuess()
-          }}
-          className="flex gap-2"
-        >
-          <Input
-            value={guessText}
-            onChange={(e) => setGuessText(e.target.value)}
-            placeholder="Tu respuesta..."
-            disabled={busy}
-            autoFocus
-          />
-          <Button type="submit" disabled={busy || !guessText.trim()}>
-            Enviar
-          </Button>
-        </form>
 
         {/* History link */}
         <Button variant="ghost" size="sm" onClick={handleViewHistory} className="w-full">
           Ver historial
         </Button>
       </CardContent>
-    </Card>
+    </CozyCard>
   )
 }
