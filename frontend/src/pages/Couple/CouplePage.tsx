@@ -207,7 +207,14 @@ export default function CouplePage() {
   const { listDates, updateDate, deleteDate } = useCoupleApi()
   const role = useAuthStore((s) => s.user?.role)
   const pendingDeletes = useRef(new Map<number, number>())
-  const { tab, setSearchParams } = useActiveTab(TABS, 'citas')
+  // Estadísticas is admin-only — frontend gate only (same as canManage/
+  // canSeePrice below), no backend enforcement. Filtered out of the tab
+  // list itself (not just the panel) so a guest can't reach it via a
+  // ?tab=estadisticas URL param either — useActiveTab falls back to the
+  // default tab for any value not in this list.
+  const canManage = role === 'admin'
+  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.value !== 'estadisticas')
+  const { tab, setSearchParams } = useActiveTab(visibleTabs, 'citas')
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 
   const load = useCallback(async () => {
@@ -289,7 +296,6 @@ export default function CouplePage() {
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
 
   // guest: view-only citas, no prices. Frontend-only for now.
-  const canManage = role === 'admin'
   const canSeePrice = role === 'admin'
 
   return (
@@ -297,7 +303,7 @@ export default function CouplePage() {
       <div className="space-y-6 pb-24 sm:pb-0">
         <Tabs value={tab} onValueChange={goToTab}>
           <TabsList className="hidden sm:inline-flex">
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}
               </TabsTrigger>
@@ -392,9 +398,11 @@ export default function CouplePage() {
             <GaleriaTab />
           </TabsContent>
 
-          <TabsContent value="estadisticas" className={TAB_CONTENT_CLASS}>
-            <EstadisticasTab dates={dates} canSeePrice={canSeePrice} />
-          </TabsContent>
+          {canManage && (
+            <TabsContent value="estadisticas" className={TAB_CONTENT_CLASS}>
+              <EstadisticasTab dates={dates} canSeePrice={canSeePrice} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
@@ -408,7 +416,7 @@ export default function CouplePage() {
         />
       )}
 
-      <MobileTabNav tabs={TABS} activeTab={tab} onChange={goToTab} fabVisible={tab === 'citas' && canManage} />
+      <MobileTabNav tabs={visibleTabs} activeTab={tab} onChange={goToTab} fabVisible={tab === 'citas' && canManage} />
 
       <DateForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editing={editing} />
     </>
