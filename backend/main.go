@@ -142,7 +142,7 @@ func main() {
 	r.Group(func(pr chi.Router) {
 		pr.Use(middleware.JWTAuth(cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
-		pr.Mount("/api/games", games.Routes(appDB))
+		pr.Mount("/api/games", games.Routes(appDB, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject))
 		// Push reminders are a nice-to-have, not core — same pattern as
 		// photoStorage/Minio above: not mounted at all unless VAPID keys
 		// are configured, rather than mounting and 503ing per-request.

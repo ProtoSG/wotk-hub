@@ -2,9 +2,10 @@ package push
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log"
 	"time"
-	"workhub/modules/games"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 )
@@ -15,15 +16,19 @@ import (
 // surface hours later after they already have.
 const reminderTTL = 3600
 
+// limaLoc is a deliberate duplicate of games' own Lima anchor, not an
+// import of it — games now depends on this package (to send the
+// solve-notification below), so importing games here would be a cycle.
+// Peru's UTC-5 offset is a fixed fact (no DST since 1990), not something
+// that drifts, so this tiny duplication is the pragmatic tradeoff versus
+// fighting the cycle with a third shared package for two constants.
+var limaLoc = time.FixedZone("America/Lima", -5*60*60)
+
 // NextLimaNoon returns the next occurrence of 12:00 Lima time — today's if
-// it hasn't passed yet, otherwise tomorrow's. Shares games.LimaLocation so
-// this and the riddle's own day-boundary logic can never quietly disagree
-// on what "noon" or "today" means (see games/handlers.go's comments on the
-// timezone bugs that cost a full afternoon to track down).
+// it hasn't passed yet, otherwise tomorrow's.
 func NextLimaNoon() time.Time {
-	loc := games.LimaLocation()
-	now := time.Now().In(loc)
-	noon := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, loc)
+	now := time.Now().In(limaLoc)
+	noon := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, limaLoc)
 	if !now.Before(noon) {
 		noon = noon.Add(24 * time.Hour)
 	}
@@ -36,7 +41,7 @@ func NextLimaNoon() time.Time {
 // once a day at a precise instant rather than polling a ticker, so there's
 // no "did I already notify today" state to track.
 func CheckUnsolvedAndNotify(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubject string) error {
-	today := games.TodayLima()
+	today := time.Now().In(limaLoc).Format("2006-01-02")
 
 	rows, err := db.Query(`SELECT DISTINCT user_id FROM push_subscriptions`)
 	if err != nil {
@@ -90,15 +95,57 @@ func CheckUnsolvedAndNotify(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSu
 		}
 		subRows.Close()
 
+		payload := []byte(`{"title":"La Última Pregunta","body":"Todavía no resolviste la de hoy 🧩"}`)
 		for _, sub := range subs {
-			sendReminder(db, sub, vapidPublicKey, vapidPrivateKey, vapidSubject)
+			sendPush(db, sub, vapidPublicKey, vapidPrivateKey, vapidSubject, payload)
 		}
 	}
 	return nil
 }
 
-func sendReminder(db *sql.DB, sub webpush.Subscription, vapidPublicKey, vapidPrivateKey, vapidSubject string) {
-	payload := []byte(`{"title":"La Última Pregunta","body":"Todavía no resolviste la de hoy 🧩"}`)
+// NotifyPartnerSolved pushes "your partner solved it" to every subscribed
+// device belonging to anyone OTHER than solverUserID. Best-effort: the
+// caller (games.SubmitRiddleGuess) fires this from a goroutine so a slow or
+// failing push service can't add latency to the guess response, and every
+// error here is logged, not propagated — a failed celebratory notification
+// shouldn't be visible as an API error to the person who just solved it.
+func NotifyPartnerSolved(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubject string, solverUserID int64, solverName string) {
+	rows, err := db.Query(
+		`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id != $1`, solverUserID,
+	)
+	if err != nil {
+		log.Printf("push: load partner subscriptions failed: %v", err)
+		return
+	}
+	var subs []webpush.Subscription
+	for rows.Next() {
+		var s webpush.Subscription
+		if err := rows.Scan(&s.Endpoint, &s.Keys.P256dh, &s.Keys.Auth); err != nil {
+			log.Printf("push: scan partner subscription failed: %v", err)
+			continue
+		}
+		subs = append(subs, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		log.Printf("push: load partner subscriptions failed: %v", err)
+		return
+	}
+
+	body, err := json.Marshal(map[string]string{
+		"title": "La Última Pregunta",
+		"body":  fmt.Sprintf("¡%s ya resolvió la de hoy! 🎉", solverName),
+	})
+	if err != nil {
+		log.Printf("push: marshal solve notification failed: %v", err)
+		return
+	}
+	for _, sub := range subs {
+		sendPush(db, sub, vapidPublicKey, vapidPrivateKey, vapidSubject, body)
+	}
+}
+
+func sendPush(db *sql.DB, sub webpush.Subscription, vapidPublicKey, vapidPrivateKey, vapidSubject string, payload []byte) {
 	resp, err := webpush.SendNotification(payload, &sub, &webpush.Options{
 		Subscriber:      vapidSubject,
 		VAPIDPublicKey:  vapidPublicKey,
