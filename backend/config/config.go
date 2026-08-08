@@ -52,6 +52,18 @@ type Config struct {
 	// http. Production sets MINIO_USE_SSL=true if MinIO sits behind TLS
 	// termination.
 	MinioUseSSL bool
+	// VAPIDPublicKey/VAPIDPrivateKey authenticate this server to push
+	// services (browser vendors) for Web Push — same nice-to-have pattern
+	// as MinioEndpoint above: empty means the push/reminder feature is
+	// disabled entirely (routes not mounted, no background job started),
+	// not a fatal error.
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	// VAPIDSubject is a mailto: or https: URL identifying the sender,
+	// required by the Web Push protocol so a push service can contact the
+	// operator about a misbehaving sender. Defaults to a placeholder
+	// mailto: if unset — push still works, it's just how the spec is.
+	VAPIDSubject string
 }
 
 func Load() Config {
@@ -83,6 +95,12 @@ func Load() Config {
 		minioBucket = "workhub-couple-photos"
 	}
 	minioUseSSL := os.Getenv("MINIO_USE_SSL") == "true"
+	vapidPublicKey := os.Getenv("VAPID_PUBLIC_KEY")
+	vapidPrivateKey := os.Getenv("VAPID_PRIVATE_KEY")
+	vapidSubject := os.Getenv("VAPID_SUBJECT")
+	if vapidSubject == "" {
+		vapidSubject = "mailto:admin@workhub.local"
+	}
 	return Config{
 		Port:             port,
 		CORSOrigin:       origin,
@@ -98,5 +116,8 @@ func Load() Config {
 		MinioSecretKey:   minioSecretKey,
 		MinioBucket:      minioBucket,
 		MinioUseSSL:      minioUseSSL,
+		VAPIDPublicKey:   vapidPublicKey,
+		VAPIDPrivateKey:  vapidPrivateKey,
+		VAPIDSubject:     vapidSubject,
 	}
 }

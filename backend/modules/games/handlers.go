@@ -52,6 +52,15 @@ func isBonusDay(dateLima string) bool {
 	return d.Weekday() == time.Sunday
 }
 
+// LimaLocation and TodayLima are exported for other modules (the push
+// reminder scheduler) that need to agree with the riddle game on exactly
+// what "today" and "noon" mean — single source of truth for the timezone
+// anchor, rather than a second package quietly re-deriving its own and
+// risking the same client/server day-boundary drift this file's comments
+// already document two separate bugs from.
+func LimaLocation() *time.Location { return limaLoc }
+func TodayLima() string            { return todayLima() }
+
 func (h *handler) ListMovies(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`SELECT id, emoji_str, answer, difficulty, created_at FROM emoji_movies ORDER BY id`)
 	if err != nil {
