@@ -14,12 +14,14 @@ import {
   Store,
   Coins,
   Snowflake,
+  Pencil,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { usePetApi } from '@/hooks/usePetApi'
 import { useAuthStore } from '@/store/authStore'
@@ -49,6 +51,10 @@ const REACTION_MS = 400
 // the balance server-side), this is only used to disable the buy button
 // early and show the price without a round trip.
 const FREEZE_COST_SPARKS = 15
+
+// Mirrors backend/modules/pet/handlers.go's renameCostSparks/maxNameLen.
+const RENAME_COST_SPARKS = 10
+const MAX_NAME_LEN = 20
 
 // Hard-edged offset shadow, zero blur — the classic 8-bit/pixel-art "drop
 // shadow block" (Stardew Valley/Earthbound-style panels), not a soft modern
@@ -104,8 +110,17 @@ function petToast(Icon: typeof ShowerHead, accent: string, message: string) {
 }
 
 export default function MascotaTab() {
-  const { getPetState, bathePet, breakfastPet, lunchPet, playWithPet, dinnerPet, buyStreakFreeze, resetPet } =
-    usePetApi()
+  const {
+    getPetState,
+    bathePet,
+    breakfastPet,
+    lunchPet,
+    playWithPet,
+    dinnerPet,
+    buyStreakFreeze,
+    renamePet,
+    resetPet,
+  } = usePetApi()
   const role = useAuthStore((s) => s.user?.role)
   const canReset = role === 'admin'
   const [pet, setPet] = useState<PetState | null>(null)
@@ -113,6 +128,12 @@ export default function MascotaTab() {
   const [reactingAction, setReactingAction] = useState<CareAction | null>(null)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  // Whether the shop's "Cambiar nombre" item has been tapped open to reveal
+  // its input — starts collapsed so the shop's item list stays scannable
+  // (icon + label + price), same shape as every other item, instead of an
+  // input field sitting there all the time.
+  const [showRenameField, setShowRenameField] = useState(false)
 
   // Order matters here — it's the render order of the button grid below.
   // Rebuilt each render since it closes over the hook's care functions, but
@@ -170,6 +191,7 @@ export default function MascotaTab() {
       try {
         const { pet: p } = await getPetState()
         setPet(p)
+        setNameInput(p.name)
       } catch {
         toast.error('No se pudo cargar la mascota')
       }
@@ -220,11 +242,35 @@ export default function MascotaTab() {
     }
   }
 
+  async function handleRename() {
+    const trimmed = nameInput.trim()
+    // Mirrors the backend's Rename: the very first name is free, every
+    // rename after that costs RENAME_COST_SPARKS.
+    const cost = pet?.name ? RENAME_COST_SPARKS : 0
+    if (busy || !pet || !trimmed || pet.sparks < cost) return
+    setBusy(true)
+    try {
+      const { pet: p } = await renamePet(trimmed)
+      setPet(p)
+      setNameInput(p.name)
+      setShowRenameField(false)
+      toast.success(`Ahora se llama ${p.name}`)
+    } catch {
+      // Same reasoning as handleBuyFreeze's catch — the button is already
+      // disabled below the price/empty-name cases the backend would reject.
+      toast.error('No se pudo cambiar el nombre')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleReset() {
     setBusy(true)
     try {
       const { pet: p } = await resetPet()
       setPet(p)
+      setNameInput(p.name)
+      setShowRenameField(false)
       setResetDialogOpen(false)
       toast.success('Estado reiniciado')
     } catch (err) {
@@ -251,7 +297,7 @@ export default function MascotaTab() {
     <CozyCard className="mx-auto max-w-md animate-card-in">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="font-pixel text-2xl tracking-wide">Nuestra mascota</CardTitle>
+          <CardTitle className="font-pixel text-2xl tracking-wide">{pet?.name || 'Nuestra mascota'}</CardTitle>
           <div className="flex items-center gap-2">
             {pet && <SparksBadge sparks={pet.sparks} />}
             {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
@@ -307,6 +353,37 @@ export default function MascotaTab() {
             </>
           )}
         </div>
+
+        {/* First naming is free and lives here, not in the shop — the shop's
+            "Cambiar nombre" item only appears once there's already a name to
+            change (see below), same distinction the backend's Rename makes. */}
+        {pet && pet.name === '' && (
+          <div
+            className="flex items-center gap-2 rounded-sm border-2 p-3"
+            style={{
+              backgroundColor: `color-mix(in oklch, var(--chart-3) 12%, var(--card))`,
+              borderColor: `color-mix(in oklch, var(--chart-3) 40%, var(--border))`,
+              boxShadow: NEUTRAL_PIXEL_SHADOW,
+            }}
+          >
+            <Pencil className="h-5 w-5 shrink-0" style={{ color: 'var(--chart-3)' }} />
+            <Input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value.slice(0, MAX_NAME_LEN))}
+              placeholder="Ponle un nombre"
+              maxLength={MAX_NAME_LEN}
+              className="font-pixel"
+            />
+            <Button
+              size="sm"
+              className="font-pixel tracking-wide shrink-0"
+              disabled={busy || !nameInput.trim()}
+              onClick={handleRename}
+            >
+              Listo
+            </Button>
+          </div>
+        )}
 
         {pet && (
           <div className="space-y-3">
@@ -376,7 +453,16 @@ export default function MascotaTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={shopOpen} onOpenChange={setShopOpen}>
+      <Dialog
+        open={shopOpen}
+        onOpenChange={(open) => {
+          setShopOpen(open)
+          if (!open) {
+            setShowRenameField(false)
+            setNameInput(pet?.name ?? '')
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-pixel text-xl tracking-wide">Tienda</DialogTitle>
@@ -385,7 +471,7 @@ export default function MascotaTab() {
             <>
               <div className="flex items-center gap-1.5 font-pixel text-sm text-muted-foreground">
                 <Coins className="h-4 w-4" style={{ color: 'var(--chart-3)' }} />
-                <span>Tenés {pet.sparks} chispas</span>
+                <span>Tienes {pet.sparks} chispas</span>
               </div>
               <div
                 className="flex items-center gap-3 rounded-sm border-2 p-3"
@@ -411,6 +497,56 @@ export default function MascotaTab() {
                   {FREEZE_COST_SPARKS} 🪙
                 </Button>
               </div>
+              {pet.name && (
+                <div
+                  className="flex items-center gap-3 rounded-sm border-2 p-3"
+                  style={{
+                    backgroundColor: `color-mix(in oklch, var(--chart-3) 12%, var(--card))`,
+                    borderColor: `color-mix(in oklch, var(--chart-3) 40%, var(--border))`,
+                    boxShadow: NEUTRAL_PIXEL_SHADOW,
+                  }}
+                >
+                  <Pencil className="h-8 w-8 shrink-0" style={{ color: 'var(--chart-3)' }} />
+                  {showRenameField ? (
+                    <>
+                      <Input
+                        autoFocus
+                        value={nameInput}
+                        onChange={(e) => setNameInput(e.target.value.slice(0, MAX_NAME_LEN))}
+                        placeholder="Nuevo nombre"
+                        maxLength={MAX_NAME_LEN}
+                        className="font-pixel flex-1"
+                      />
+                      <Button
+                        size="sm"
+                        className="font-pixel tracking-wide shrink-0"
+                        disabled={busy || !nameInput.trim() || pet.sparks < RENAME_COST_SPARKS}
+                        onClick={handleRename}
+                      >
+                        {RENAME_COST_SPARKS} 🪙
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1">
+                        <p className="font-pixel text-base leading-none tracking-wide">Cambiar nombre</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Ponle otro nombre a la mascota.</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="font-pixel tracking-wide shrink-0"
+                        onClick={() => {
+                          setNameInput(pet.name)
+                          setShowRenameField(true)
+                        }}
+                      >
+                        {RENAME_COST_SPARKS} 🪙
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">Más artículos, próximamente.</p>
             </>
           )}
