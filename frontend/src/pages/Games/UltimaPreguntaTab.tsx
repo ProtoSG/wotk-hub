@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard, paperSurfaceStyle } from '@/components/ui/cozy-card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useGamesApi } from '@/hooks/useGamesApi'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
@@ -277,7 +278,12 @@ export default function UltimaPreguntaTab() {
     )
   }
 
-  // No session yet — friendly starting CTA
+  // No session yet — either the initial fetch hasn't resolved (brief,
+  // GetRiddleSession auto-creates so this normally clears in one round
+  // trip) or it errored (the toast in the load effect already said so).
+  // A real loading skeleton instead of a "start" CTA: there's no manual
+  // start step anymore now that the session auto-creates, so a button here
+  // would just be misleading about what's actually happening.
   if (!session) {
     return (
       <CozyCard className="mx-auto max-w-md animate-card-in">
@@ -289,21 +295,14 @@ export default function UltimaPreguntaTab() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-muted-foreground">Vidas</span>
-              <Hearts lives={3} />
-            </div>
-            <ScoreBlock label="Pareja 1" score={0} lead={false} />
-            <ScoreBlock label="Pareja 2" score={0} lead={false} />
+            <Skeleton className="h-10 w-16" />
+            <Skeleton className="h-10 w-12" />
+            <Skeleton className="h-10 w-12" />
           </div>
-          <div className="space-y-2">
-            <Button onClick={handleStartGame} disabled={busy} className="w-full">
-              Resolver la pregunta de hoy
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleViewHistory} className="w-full">
-              Ver historial
-            </Button>
-          </div>
+          <Skeleton className="h-24 w-full rounded-[var(--radius)]" />
+          <Button variant="ghost" size="sm" onClick={handleViewHistory} className="w-full">
+            Ver historial
+          </Button>
         </CardContent>
       </CozyCard>
     )
