@@ -5,6 +5,14 @@ import { useThemeStore } from '@/store/themeStore'
 import { useAuthStore } from '@/store/authStore'
 import { useAuthApi } from '@/hooks/useAuthApi'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu'
 
 interface TopBarProps {
   onMenuClick: () => void
@@ -43,13 +51,35 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
       <div className="flex flex-1 items-center justify-between">
         <div />
         <div className="flex items-center gap-3">
-          {user && <span className="text-sm text-muted-foreground">{user.name}</span>}
-          <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Cambiar tema">
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Cerrar sesión">
-            <LogOut size={16} />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="relative h-8 w-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                aria-label="Menú de usuario"
+              >
+                {user?.name?.[0]?.toUpperCase() ?? 'U'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user?.name}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
+                {theme === 'dark' ? <Sun size={14} className="mr-2" /> : <Moon size={14} className="mr-2" />}
+                {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
+                <LogOut size={14} className="mr-2" />
+                Cerrar sesión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>
