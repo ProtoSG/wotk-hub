@@ -1,4 +1,4 @@
-import { Gamepad2, HelpCircle, Film, Bell, BellOff } from 'lucide-react'
+import { Gamepad2, HelpCircle, Film, Flame, Bell, BellOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -7,14 +7,16 @@ import { useActiveTab } from '@/hooks/useActiveTab'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import EmojiMoviesTab from './EmojiMoviesTab'
 import UltimaPreguntaTab from './UltimaPreguntaTab'
+import MascotaTab from './MascotaTab'
 
 const TABS = [
+  { value: 'mascota', label: 'Mascota', icon: Flame },
   { value: 'ultima-pregunta', label: 'La Última Pregunta', icon: HelpCircle },
   { value: 'emoji-movies', label: 'Emoji Movies', icon: Film },
 ]
 
 export default function GamesPage() {
-  const { tab, setSearchParams } = useActiveTab(TABS, 'ultima-pregunta')
+  const { tab, setSearchParams } = useActiveTab(TABS, 'mascota')
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
   const { supported, subscribed, busy, toggle } = usePushNotifications()
 
@@ -56,6 +58,9 @@ export default function GamesPage() {
             </TabsTrigger>
           ))}
         </TabsList>
+        <TabsContent value="mascota" className="mt-4">
+          <MascotaTab />
+        </TabsContent>
         <TabsContent value="ultima-pregunta" className="mt-4">
           <UltimaPreguntaTab />
         </TabsContent>
