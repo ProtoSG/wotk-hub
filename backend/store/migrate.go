@@ -448,6 +448,58 @@ func Migrate(db *sql.DB) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			UNIQUE (user_id, endpoint)
 		)`,
+		// Shared couple pet — one row per team (see shared/team.ResolveTeamID),
+		// not per user. care_score decays lazily on read (same pattern as the
+		// riddle's expireStaleSessions — no separate cron needed for decay
+		// itself). last_fed_on/last_played_on/last_cleaned_on are superseded
+		// by pet_care_log below (5 actions with per-action attribution now,
+		// not 3 anonymous booleans) — left in place as harmless unused legacy
+		// columns per this file's additive-only migration style, no longer
+		// read or written by Go code.
+		`CREATE TABLE IF NOT EXISTS pet_state (
+			id              BIGSERIAL PRIMARY KEY,
+			team_id         BIGINT NOT NULL REFERENCES users(id),
+			care_score      INT    NOT NULL DEFAULT 70 CHECK (care_score BETWEEN 0 AND 100),
+			last_fed_on     DATE,
+			last_played_on  DATE,
+			last_cleaned_on DATE,
+			last_updated_on DATE   NOT NULL DEFAULT CURRENT_DATE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (team_id)
+		)`,
+		// Consecutive days with at least one care action — same shape as the
+		// riddle game's streak: +1 on the day's first action, resets to 0
+		// the moment a full day passes with none (i.e. exactly when decay
+		// fires).
+		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS streak INT NOT NULL DEFAULT 0`,
+		// Per-action, per-day care log — replaces pet_state's 3 anonymous
+		// last_*_on columns now that there are 5 actions and each needs to
+		// remember WHO did it, not just that it happened. The UNIQUE
+		// constraint is the idempotency mechanism (see pet's care() function):
+		// INSERT ... ON CONFLICT DO NOTHING RETURNING id tells the caller in
+		// one round trip whether this was a genuinely new action today.
+		`CREATE TABLE IF NOT EXISTS pet_care_log (
+			id         BIGSERIAL PRIMARY KEY,
+			team_id    BIGINT NOT NULL REFERENCES users(id),
+			action     TEXT NOT NULL CHECK (action IN ('bathe','breakfast','lunch','play','dinner')),
+			care_date  DATE NOT NULL,
+			user_id    BIGINT NOT NULL REFERENCES users(id),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (team_id, action, care_date)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_care_log_team_date ON pet_care_log (team_id, care_date)`,
+		// Shop currency — "chispas" (sparks), earned by completing a perfect
+		// day (all 5 actions in one calendar day), spent on shop items.
+		// Unlike care_score, sparks IS shown as a raw number in the UI — a
+		// shop needs a visible balance to be legible at all, that's a
+		// different job than care_score's "ambient mood, not a stat to
+		// chase" role.
+		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS sparks INT NOT NULL DEFAULT 0`,
+		// Owned streak-freeze count — first shop item. Consumed in
+		// loadOrCreate's streak-reset branch instead of zeroing the streak
+		// when a full day passes with no care action, same "Duolingo streak
+		// freeze" idea.
+		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS streak_freezes INT NOT NULL DEFAULT 0`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
