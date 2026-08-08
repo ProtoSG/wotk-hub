@@ -9,6 +9,7 @@ import (
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
+	"workhub/modules/push"
 )
 
 // limaLoc anchors every "what day is it" calculation for the riddle game to
@@ -51,15 +52,6 @@ func isBonusDay(dateLima string) bool {
 	}
 	return d.Weekday() == time.Sunday
 }
-
-// LimaLocation and TodayLima are exported for other modules (the push
-// reminder scheduler) that need to agree with the riddle game on exactly
-// what "today" and "noon" mean — single source of truth for the timezone
-// anchor, rather than a second package quietly re-deriving its own and
-// risking the same client/server day-boundary drift this file's comments
-// already document two separate bugs from.
-func LimaLocation() *time.Location { return limaLoc }
-func TodayLima() string            { return todayLima() }
 
 func (h *handler) ListMovies(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(`SELECT id, emoji_str, answer, difficulty, created_at FROM emoji_movies ORDER BY id`)
@@ -384,6 +376,19 @@ func (h *handler) Reveal(w http.ResponseWriter, r *http.Request) {
 
 // ─── Riddle Game Handlers ─────────────────────────────────────────────────────
 
+// resolveTeamID returns the shared team identifier both partners' sessions
+// are grouped under — the admin account's user id. This app only ever
+// serves the one couple who owns it (see users.role's admin/guest check
+// constraint), so "team" isn't per-caller, it's everyone who uses this app,
+// anchored to a stable reference point. Previously every handler used
+// team_id = the calling user's own id, which meant the two partners never
+// actually shared a session at all — each saw only their own solo game.
+func resolveTeamID(db *sql.DB) (int64, error) {
+	var id int64
+	err := db.QueryRow(`SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`).Scan(&id)
+	return id, err
+}
+
 // scoring windows in hours → points
 var scoringWindows = []struct {
 	hoursMax int
@@ -464,18 +469,27 @@ func (h *handler) GetRiddleToday(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, riddleTodayResponse{Riddle: &rid})
 }
 
-// GetRiddleSession returns (or creates) the current team's riddle session.
+// GetRiddleSession returns (or creates) the shared team's riddle session.
+// The caller's own identity doesn't matter beyond "are they logged in" —
+// team_id is the shared couple id (see resolveTeamID), not per-caller.
 func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
-	userID, _, ok := middleware.UserFromContext(r.Context())
+	_, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
 		return
 	}
 	today := todayLima()
 
+	teamID, err := resolveTeamID(h.db)
+	if err != nil {
+		log.Printf("games: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
 	// Expire any session left dangling 'active' from a day the team never
 	// came back to finish — lives/status get updated in place.
-	justGameoverID, err := h.expireStaleSessions(userID, today)
+	justGameoverID, err := h.expireStaleSessions(teamID, today)
 	if err != nil {
 		log.Printf("games: expire stale sessions failed: %v", err)
 		// non-fatal — worst case a session outlives its day by one more poll
@@ -520,7 +534,7 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	var lastStatus string
 	err = h.db.QueryRow(
 		`SELECT lives_remaining, p1_score, p2_score, status, streak FROM riddle_game_sessions
-		 WHERE team_id = $1 ORDER BY id DESC LIMIT 1`, userID,
+		 WHERE team_id = $1 ORDER BY id DESC LIMIT 1`, teamID,
 	).Scan(&carryLives, &carryP1, &carryP2, &lastStatus, &carryStreak)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("games: get riddle session failed: %v", err)
@@ -531,10 +545,7 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 		carryLives, carryP1, carryP2, carryStreak = 3, 0, 0, 0
 	}
 
-	// Upsert session for this team + today's riddle. team_id = userID's "team"
-	// (treated as userID for now — the couple relationship is out of scope,
-	// so each user is their own team). partner_id = same user (placeholder
-	// until couple module provides the link).
+	// Upsert session for the shared team + today's riddle.
 	//
 	// (team_id, current_riddle_id) is UNIQUE — ON CONFLICT reuses the day's
 	// existing session instead of inserting a new blank one on every call
@@ -544,7 +555,7 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO riddle_game_sessions (team_id, partner_id, current_riddle_id, status, lives_remaining, p1_score, p2_score, streak)
 		 VALUES ($1, $1, $2, 'active', $3, $4, $5, $6)
 		 ON CONFLICT (team_id, current_riddle_id) DO NOTHING`,
-		userID, todayRiddleID.Int64, carryLives, carryP1, carryP2, carryStreak,
+		teamID, todayRiddleID.Int64, carryLives, carryP1, carryP2, carryStreak,
 	); err != nil {
 		log.Printf("games: get riddle session failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -554,7 +565,7 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	var sessionID int64
 	if err := h.db.QueryRow(
 		`SELECT id FROM riddle_game_sessions WHERE team_id = $1 AND current_riddle_id = $2`,
-		userID, todayRiddleID.Int64,
+		teamID, todayRiddleID.Int64,
 	).Scan(&sessionID); err != nil {
 		log.Printf("games: get riddle session failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -693,16 +704,23 @@ func (h *handler) SubmitRiddleGuess(w http.ResponseWriter, r *http.Request) {
 
 	today := todayLima()
 
+	teamID, err := resolveTeamID(h.db)
+	if err != nil {
+		log.Printf("games: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
 	// Get session
 	var s RiddleGameSession
 	var currentRiddleID sql.NullInt64
 	var createdAt time.Time
-	err := h.db.QueryRow(
+	err = h.db.QueryRow(
 		`SELECT id, team_id, partner_id, lives_remaining, p1_score, p2_score,
 		        current_riddle_id, status, created_at, streak
 		 FROM riddle_game_sessions WHERE team_id = $1 AND status = 'active'
 		 ORDER BY id DESC LIMIT 1`,
-		userID).Scan(&s.ID, &s.TeamID, &s.PartnerID, &s.LivesRemaining, &s.P1Score, &s.P2Score,
+		teamID).Scan(&s.ID, &s.TeamID, &s.PartnerID, &s.LivesRemaining, &s.P1Score, &s.P2Score,
 		&currentRiddleID, &s.Status, &createdAt, &s.Streak)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "no active session")
@@ -828,14 +846,32 @@ func (h *handler) SubmitRiddleGuess(w http.ResponseWriter, r *http.Request) {
 	s.Status = "solved"
 	s.Answer = &rid.Answer
 
+	// Let the partner know — fired in the background so a slow/unreachable
+	// push service can't add latency to the guess response itself. Skipped
+	// entirely when push isn't configured (see routes.go).
+	if h.vapidPublicKey != "" && h.vapidPrivateKey != "" {
+		var solverName string
+		if err := h.db.QueryRow(`SELECT name FROM users WHERE id = $1`, userID).Scan(&solverName); err != nil {
+			log.Printf("games: load solver name for notification failed: %v", err)
+		} else {
+			go push.NotifyPartnerSolved(h.db, h.vapidPublicKey, h.vapidPrivateKey, h.vapidSubject, userID, solverName)
+		}
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, riddleGuessResponse{Correct: true, PointsEarned: points, Session: s})
 }
 
 // GetRiddleHistory returns past solved/expired rounds for the team.
 func (h *handler) GetRiddleHistory(w http.ResponseWriter, r *http.Request) {
-	userID, _, ok := middleware.UserFromContext(r.Context())
+	_, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	teamID, err := resolveTeamID(h.db)
+	if err != nil {
+		log.Printf("games: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	rows, err := h.db.Query(
@@ -846,7 +882,7 @@ func (h *handler) GetRiddleHistory(w http.ResponseWriter, r *http.Request) {
 		 JOIN users u ON ra.solver_id = u.id
 		 WHERE rs.team_id = $1
 		 ORDER BY ra.solved_at DESC
-		 LIMIT 30`, userID)
+		 LIMIT 30`, teamID)
 	if err != nil {
 		log.Printf("games: get riddle history failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")

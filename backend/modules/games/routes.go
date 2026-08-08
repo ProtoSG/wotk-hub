@@ -9,10 +9,17 @@ import (
 
 type handler struct {
 	db *sql.DB
+	// VAPID* are empty when push notifications aren't configured (see
+	// config.VAPIDPublicKey) — SubmitRiddleGuess checks before attempting
+	// the partner-solved notification, same "feature quietly does nothing
+	// without config" pattern as photoStorage/Minio.
+	vapidPublicKey  string
+	vapidPrivateKey string
+	vapidSubject    string
 }
 
-func Routes(db *sql.DB) http.Handler {
-	h := &handler{db: db}
+func Routes(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubject string) http.Handler {
+	h := &handler{db: db, vapidPublicKey: vapidPublicKey, vapidPrivateKey: vapidPrivateKey, vapidSubject: vapidSubject}
 	r := chi.NewRouter()
 
 	r.Get("/emoji-movies", h.ListMovies)
