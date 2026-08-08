@@ -11,6 +11,8 @@ export interface PetActionStatus {
 export interface PetState {
   careScore: number
   mood: PetMood
+  // Empty until the shop's rename item is bought at least once.
+  name: string
   streak: number
   sparks: number
   streakFreezes: number

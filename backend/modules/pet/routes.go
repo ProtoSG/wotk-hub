@@ -18,6 +18,7 @@ func Routes(db *sql.DB) http.Handler {
 	r.Post("/play", h.Play)
 	r.Post("/dinner", h.Dinner)
 	r.Post("/shop/freeze", h.BuyFreeze)
+	r.Post("/shop/rename", h.Rename)
 	r.Post("/reset", h.Reset)
 
 	return r

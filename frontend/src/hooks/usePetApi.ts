@@ -46,6 +46,12 @@ export function usePetApi() {
     return res.data
   }, [])
 
+  // Not admin-gated, same reasoning as buyStreakFreeze (see pet.Rename).
+  const renamePet = useCallback(async (name: string): Promise<{ pet: PetState }> => {
+    const res = await api.post<{ pet: PetState }>('/api/pet/shop/rename', { name })
+    return res.data
+  }, [])
+
   // Admin-only backend-side (see pet.Reset) — not just a frontend-hidden
   // button, since this discards real shared progress.
   const resetPet = useCallback(async (): Promise<{ pet: PetState }> => {
@@ -53,5 +59,15 @@ export function usePetApi() {
     return res.data
   }, [])
 
-  return { getPetState, bathePet, breakfastPet, lunchPet, playWithPet, dinnerPet, buyStreakFreeze, resetPet }
+  return {
+    getPetState,
+    bathePet,
+    breakfastPet,
+    lunchPet,
+    playWithPet,
+    dinnerPet,
+    buyStreakFreeze,
+    renamePet,
+    resetPet,
+  }
 }
