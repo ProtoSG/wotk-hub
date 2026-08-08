@@ -423,6 +423,16 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_riddle_game_sessions_team_id ON riddle_game_sessions (team_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_riddle_attempts_session_id ON riddle_attempts (session_id)`,
+		// One session per team per riddle — GetRiddleSession relies on this
+		// for its ON CONFLICT upsert. Without it, every poll tick inserted a
+		// fresh 'active' row instead of reusing the day's session, which both
+		// hid solved/scored state behind the next freshly-created row and
+		// ran the table up by thousands of rows per minute.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_riddle_game_sessions_team_riddle_uniq
+			ON riddle_game_sessions (team_id, current_riddle_id)`,
+		// Consecutive days solved without a miss — carries forward day to day
+		// like lives/scores, resets to 0 the moment a day expires unsolved.
+		`ALTER TABLE riddle_game_sessions ADD COLUMN IF NOT EXISTS streak INT NOT NULL DEFAULT 0`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
