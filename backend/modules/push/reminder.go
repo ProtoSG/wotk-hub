@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -24,6 +25,20 @@ const reminderTTL = 3600
 // that drifts, so this tiny duplication is the pragmatic tradeoff versus
 // fighting the cycle with a third shared package for two constants.
 var limaLoc = time.FixedZone("America/Lima", -5*60*60)
+
+// normalizeVAPIDSubject works around a webpush-go quirk: its VAPID JWT
+// builder unconditionally prepends "mailto:" unless the subject already
+// starts with "https:" — it never checks for an existing "mailto:" prefix.
+// Our config's VAPID_SUBJECT is set (and documented, and every web-push
+// tutorial's convention) as a full "mailto:foo@bar.com" string, so passing
+// it straight through produced a malformed double-prefixed
+// "mailto:mailto:foo@bar.com" JWT subject — confirmed via prod logs as a
+// 403 BadJwtToken from Apple's push service (web.push.apple.com), the only
+// platform tested against so far. Unconfirmed whether Chrome/Firefox's push
+// services would have accepted or also rejected the same malformed value.
+func normalizeVAPIDSubject(subject string) string {
+	return strings.TrimPrefix(subject, "mailto:")
+}
 
 // NextLimaNoon returns the next occurrence of 12:00 Lima time — today's if
 // it hasn't passed yet, otherwise tomorrow's.
@@ -149,7 +164,7 @@ func NotifyPartnerSolved(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubje
 
 func sendPush(db *sql.DB, sub webpush.Subscription, vapidPublicKey, vapidPrivateKey, vapidSubject string, payload []byte) {
 	resp, err := webpush.SendNotification(payload, &sub, &webpush.Options{
-		Subscriber:      vapidSubject,
+		Subscriber:      normalizeVAPIDSubject(vapidSubject),
 		VAPIDPublicKey:  vapidPublicKey,
 		VAPIDPrivateKey: vapidPrivateKey,
 		TTL:             reminderTTL,
