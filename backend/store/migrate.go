@@ -433,6 +433,21 @@ func Migrate(db *sql.DB) error {
 		// Consecutive days solved without a miss — carries forward day to day
 		// like lives/scores, resets to 0 the moment a day expires unsolved.
 		`ALTER TABLE riddle_game_sessions ADD COLUMN IF NOT EXISTS streak INT NOT NULL DEFAULT 0`,
+		// One row per browser/device a user has enabled push notifications
+		// on (Web Push subscriptions aren't reusable across devices).
+		// UNIQUE(user_id, endpoint) makes re-subscribing idempotent — the
+		// same device re-registering (e.g. after clearing permissions and
+		// re-granting) just updates its keys instead of creating a
+		// duplicate row the reminder job would double-send to.
+		`CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id         BIGSERIAL PRIMARY KEY,
+			user_id    BIGINT NOT NULL REFERENCES users(id),
+			endpoint   TEXT   NOT NULL,
+			p256dh     TEXT   NOT NULL,
+			auth       TEXT   NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (user_id, endpoint)
+		)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

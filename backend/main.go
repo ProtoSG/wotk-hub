@@ -18,6 +18,7 @@ import (
 	"workhub/modules/finances"
 	"workhub/modules/games"
 	"workhub/modules/gym"
+	"workhub/modules/push"
 	"workhub/modules/ytdlp"
 	"workhub/storage"
 	"workhub/store"
@@ -142,6 +143,12 @@ func main() {
 		pr.Use(middleware.JWTAuth(cfg.JWTSecret))
 		pr.With(middleware.RequireRole("admin")).Mount("/api/db", dbmanager.Routes())
 		pr.Mount("/api/games", games.Routes(appDB))
+		// Push reminders are a nice-to-have, not core — same pattern as
+		// photoStorage/Minio above: not mounted at all unless VAPID keys
+		// are configured, rather than mounting and 503ing per-request.
+		if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
+			pr.Mount("/api/push", push.Routes(appDB, cfg.VAPIDPublicKey))
+		}
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB, photoStorage))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
@@ -192,6 +199,36 @@ func main() {
 		}
 	}()
 
+	// Background job: remind players who haven't solved today's riddle by
+	// noon Lima time. Sleeps until the next exact occurrence instead of
+	// polling on an interval like subscriptionsPollInterval above — this
+	// only needs to fire once a day at a precise instant, not react to
+	// changing state, so a ticker would just mean tracking "did I already
+	// notify today" for no benefit. Not started at all unless VAPID keys
+	// are configured (see the /api/push mount above).
+	var pushStop, pushDone chan struct{}
+	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
+		pushStop = make(chan struct{})
+		pushDone = make(chan struct{})
+		go func() {
+			defer close(pushDone)
+			for {
+				timer := time.NewTimer(time.Until(push.NextLimaNoon()))
+				select {
+				case <-timer.C:
+					if err := push.CheckUnsolvedAndNotify(appDB, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject); err != nil {
+						log.Printf("push: reminder check failed: %v", err)
+					}
+				case <-pushStop:
+					timer.Stop()
+					return
+				}
+			}
+		}()
+	} else {
+		log.Println("push: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set, riddle reminders disabled")
+	}
+
 	go func() {
 		log.Printf("Backend running on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -207,6 +244,11 @@ func main() {
 	ticker.Stop()
 	close(subStop)
 	<-subDone
+
+	if pushStop != nil {
+		close(pushStop)
+		<-pushDone
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
