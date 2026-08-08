@@ -17,11 +17,12 @@ import {
   Home,
   PartyPopper,
   Sparkles,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import {
   DropdownMenu,
@@ -41,11 +42,13 @@ import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import CoupleCover from './CoupleCover'
 import DateForm from './DateForm'
 import GaleriaTab from './GaleriaTab'
+import EstadisticasTab from './EstadisticasTab'
 
 const UNDO_WINDOW_MS = 4500
 
 const TABS = [
   { value: 'citas', label: 'Citas', icon: Heart },
+  { value: 'estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { value: 'galeria', label: 'Galería', icon: Images },
 ]
 
@@ -285,12 +288,6 @@ export default function CouplePage() {
     .filter((d) => d.status === 'planned')
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
 
-  const rated = doneDates.filter((d) => d.rating != null)
-  const avgRating = rated.length
-    ? rated.reduce((sum, d) => sum + (d.rating ?? 0), 0) / rated.length
-    : null
-  const totalSpentCents = doneDates.reduce((sum, d) => sum + (d.costCents ?? 0), 0)
-
   // guest: view-only citas, no prices. Frontend-only for now.
   const canManage = role === 'admin'
   const canSeePrice = role === 'admin'
@@ -319,45 +316,7 @@ export default function CouplePage() {
           }
         />
 
-        {/* Constrained to a reading-column width (Day One's centered journal
-            feel) instead of stretching full viewport width — with only 1-3
-            entries, a full-bleed grid left a large dead void below the cards
-            that read as cold/unfinished. The cover above stays full width,
-            untouched. */}
         <div className="mx-auto w-full max-w-4xl space-y-6">
-          <div className={cn('grid grid-cols-2 gap-4', canSeePrice && 'sm:grid-cols-3')}>
-            <CozyCard className="animate-card-in">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Citas registradas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{dates.length}</div>
-              </CardContent>
-            </CozyCard>
-            <CozyCard className="animate-card-in [animation-delay:60ms]">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Calificación promedio</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {avgRating != null ? (
-                  <div className="text-2xl font-bold">{avgRating.toFixed(1)}</div>
-                ) : (
-                  <Heart className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
-                )}
-              </CardContent>
-            </CozyCard>
-            {canSeePrice && (
-              <CozyCard className="col-span-2 animate-card-in [animation-delay:120ms] sm:col-span-1">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total invertido</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{formatPEN(totalSpentCents)}</div>
-                </CardContent>
-              </CozyCard>
-            )}
-          </div>
-
           {dates.length === 0 ? (
             <CozyCard className="animate-card-in">
               <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
@@ -431,6 +390,10 @@ export default function CouplePage() {
 
           <TabsContent value="galeria" className={TAB_CONTENT_CLASS}>
             <GaleriaTab />
+          </TabsContent>
+
+          <TabsContent value="estadisticas" className={TAB_CONTENT_CLASS}>
+            <EstadisticasTab dates={dates} canSeePrice={canSeePrice} />
           </TabsContent>
         </Tabs>
       </div>
