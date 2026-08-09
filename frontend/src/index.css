@@ -274,6 +274,9 @@
      slide-in toasts. Scoped to that one feature via toast.custom(), not a
      change to the shared Toaster. */
   --animate-pet-toast-in: pet-toast-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* Night-sky backdrop stars behind the sleeping sprite (22:00-07:00 Lima) —
+     staggered per-star via inline animation-delay, same keyframe. */
+  --animate-pet-star-twinkle: pet-star-twinkle 1.8s ease-in-out infinite;
 }
 
 @keyframes card-in {
@@ -296,6 +299,16 @@
   50% {
     transform: scale(0.7);
     opacity: 0.14;
+  }
+}
+
+@keyframes pet-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
