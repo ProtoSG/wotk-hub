@@ -152,7 +152,7 @@ func main() {
 		}
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB, photoStorage))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/pet", pet.Routes(appDB))
-		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL, cfg.YtdlpPotProviderURL))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
 	})
 
@@ -160,7 +160,7 @@ func main() {
 	// someone who doesn't have an account. Not mounted at all unless
 	// YTDLP_PUBLIC_TOKEN is set, so it can't be exposed by accident.
 	if cfg.YtdlpPublicToken != "" {
-		r.Mount("/api/ytdlp/public", ytdlp.PublicRoutes(cfg.YtdlpPublicToken, cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL))
+		r.Mount("/api/ytdlp/public", ytdlp.PublicRoutes(cfg.YtdlpPublicToken, cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL, cfg.YtdlpPotProviderURL))
 	}
 
 	// CLI routes for workhubctl — gated by static CLI_TOKEN. Not mounted

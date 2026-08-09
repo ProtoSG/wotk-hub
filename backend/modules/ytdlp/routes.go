@@ -14,9 +14,11 @@ import (
 // needed since nothing is persisted (see handlers.go: each request downloads,
 // converts, streams, then deletes its own temp dir). cookiesPath is passed to
 // yt-dlp as --cookies when non-empty (see config.YtdlpCookiesPath), proxyURL
-// as --proxy when non-empty (see config.YtdlpProxyURL).
-func Routes(cookiesPath, proxyURL string) http.Handler {
-	h := &handler{cookiesPath: cookiesPath, proxyURL: proxyURL}
+// as --proxy when non-empty (see config.YtdlpProxyURL), potProviderURL points
+// the bgutil-ytdlp-pot-provider plugin at a self-hosted PO-token server when
+// non-empty (see config.YtdlpPotProviderURL).
+func Routes(cookiesPath, proxyURL, potProviderURL string) http.Handler {
+	h := &handler{cookiesPath: cookiesPath, proxyURL: proxyURL, potProviderURL: potProviderURL}
 	r := chi.NewRouter()
 
 	r.Post("/download", h.Download)
@@ -28,8 +30,8 @@ func Routes(cookiesPath, proxyURL string) http.Handler {
 // instead of JWT login, for sharing with someone who doesn't have an account
 // on this app. The token travels as either `?token=` (easy to embed in a
 // link) or an `Authorization: Bearer <token>` header.
-func PublicRoutes(token, cookiesPath, proxyURL string) http.Handler {
-	h := &handler{cookiesPath: cookiesPath, proxyURL: proxyURL}
+func PublicRoutes(token, cookiesPath, proxyURL, potProviderURL string) http.Handler {
+	h := &handler{cookiesPath: cookiesPath, proxyURL: proxyURL, potProviderURL: potProviderURL}
 	r := chi.NewRouter()
 	r.Use(requireToken(token))
 	r.Post("/download", h.PublicDownload)

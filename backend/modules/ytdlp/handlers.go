@@ -39,8 +39,9 @@ var allowedHosts = map[string]bool{
 }
 
 type handler struct {
-	cookiesPath string
-	proxyURL    string
+	cookiesPath    string
+	proxyURL       string
+	potProviderURL string
 }
 
 type downloadRequest struct {
@@ -238,6 +239,18 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 		// flagged (common on datacenter VPS ranges) — route through a
 		// residential proxy instead.
 		args = append(args, "--proxy", h.proxyURL)
+	}
+	if h.potProviderURL != "" {
+		// Exported cookies are a snapshot, not a session — YouTube rotates
+		// the underlying tokens and invalidates that snapshot fast on a
+		// flagged IP (confirmed here: ~20 minutes in practice), so cookies
+		// alone need re-exporting on a schedule to stay working. A PO-token
+		// provider generates a fresh proof-of-origin token per request
+		// instead of relying on a static file, so it doesn't degrade the
+		// same way. Requires the bgutil-ytdlp-pot-provider pip plugin
+		// (installed in the Dockerfile) talking to a self-hosted server at
+		// this URL — see https://github.com/Brainicism/bgutil-ytdlp-pot-provider.
+		args = append(args, "--extractor-args", "youtubepot-bgutilhttp:base_url="+h.potProviderURL)
 	}
 	args = append(args, "-o", outputTemplate, "--", req.URL)
 	cmd := exec.CommandContext(ctx, ytdlpPath, args...)

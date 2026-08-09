@@ -28,6 +28,15 @@ type Config struct {
 	// YouTube regardless of cookies — routes the request through a
 	// residential proxy instead. Empty (default) skips the flag entirely.
 	YtdlpProxyURL string
+	// YtdlpPotProviderURL, when set, points yt-dlp's bgutil-ytdlp-pot-provider
+	// plugin at a self-hosted PO-token server (e.g.
+	// http://bgutil-provider:4416, the sidecar's Docker service name — not
+	// 127.0.0.1, containers don't share a loopback). Cookies alone degrade
+	// fast on a flagged IP (YouTube rotates them, invalidating any exported
+	// snapshot within about 20 minutes in practice here) — a PO token
+	// provider is the durable fix instead of re-exporting cookies on a
+	// schedule. Empty (default) skips the flag entirely.
+	YtdlpPotProviderURL string
 	// CLIToken, when set, enables a static token for CLI access. Unlike JWT
 	// (which expires), this token doesn't expire — useful for scripts and
 	// the workhubctl CLI. Mounted at /api/cli/* behind CLITokenAuth.
@@ -86,6 +95,7 @@ func Load() Config {
 	ytdlpPublicToken := os.Getenv("YTDLP_PUBLIC_TOKEN")
 	ytdlpCookiesPath := os.Getenv("YTDLP_COOKIES_PATH")
 	ytdlpProxyURL := os.Getenv("YTDLP_PROXY_URL")
+	ytdlpPotProviderURL := os.Getenv("YTDLP_POT_PROVIDER_URL")
 	cliToken := os.Getenv("CLI_TOKEN")
 	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
 	minioAccessKey := os.Getenv("MINIO_ACCESS_KEY")
@@ -102,22 +112,23 @@ func Load() Config {
 		vapidSubject = "mailto:admin@workhub.local"
 	}
 	return Config{
-		Port:             port,
-		CORSOrigin:       origin,
-		DatabaseURL:      dbURL,
-		JWTSecret:        jwtSecret,
-		CookieSecure:     cookieSecure,
-		YtdlpPublicToken: ytdlpPublicToken,
-		YtdlpCookiesPath: ytdlpCookiesPath,
-		YtdlpProxyURL:    ytdlpProxyURL,
-		CLIToken:         cliToken,
-		MinioEndpoint:    minioEndpoint,
-		MinioAccessKey:   minioAccessKey,
-		MinioSecretKey:   minioSecretKey,
-		MinioBucket:      minioBucket,
-		MinioUseSSL:      minioUseSSL,
-		VAPIDPublicKey:   vapidPublicKey,
-		VAPIDPrivateKey:  vapidPrivateKey,
-		VAPIDSubject:     vapidSubject,
+		Port:                port,
+		CORSOrigin:          origin,
+		DatabaseURL:         dbURL,
+		JWTSecret:           jwtSecret,
+		CookieSecure:        cookieSecure,
+		YtdlpPublicToken:    ytdlpPublicToken,
+		YtdlpCookiesPath:    ytdlpCookiesPath,
+		YtdlpProxyURL:       ytdlpProxyURL,
+		YtdlpPotProviderURL: ytdlpPotProviderURL,
+		CLIToken:            cliToken,
+		MinioEndpoint:       minioEndpoint,
+		MinioAccessKey:      minioAccessKey,
+		MinioSecretKey:      minioSecretKey,
+		MinioBucket:         minioBucket,
+		MinioUseSSL:         minioUseSSL,
+		VAPIDPublicKey:      vapidPublicKey,
+		VAPIDPrivateKey:     vapidPrivateKey,
+		VAPIDSubject:        vapidSubject,
 	}
 }
