@@ -13,6 +13,17 @@ import (
 
 type handler struct {
 	db *sql.DB
+	// opencodeAPIKey/opencodeModel back the Chat handler (chat.go). Threaded
+	// in via Routes() the same way ytdlp.Routes() takes its extra config
+	// params, rather than reaching into a global config package from deep in
+	// the handler — keeps this module's dependencies explicit at the mount
+	// site in main.go.
+	opencodeAPIKey string
+	opencodeModel  string
+	// elevenLabsAPIKey/elevenLabsVoiceID back the Speak handler (speak.go),
+	// threaded in the same way as opencodeAPIKey/opencodeModel above.
+	elevenLabsAPIKey  string
+	elevenLabsVoiceID string
 }
 
 // limaLoc is a deliberate duplicate of the same constant already living in

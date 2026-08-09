@@ -15,6 +15,7 @@ import {
   Coins,
   Snowflake,
   Pencil,
+  MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,6 +27,8 @@ import { cn } from '@/lib/utils'
 import { usePetApi } from '@/hooks/usePetApi'
 import { useAuthStore } from '@/store/authStore'
 import type { CareAction, PetActionStatus, PetMood, PetState } from '@/types/pet.types'
+import PetChat from './PetChat'
+import { MOOD_SPRITE } from './petSprites'
 
 const MOOD_LABEL: Record<PetMood, string> = {
   happy: '¡Está feliz!',
@@ -42,12 +45,10 @@ const MOOD_LABEL: Record<PetMood, string> = {
 // PNGs — the browser animates them natively, so the CSS pet-float/flicker
 // fake-motion classes are no longer applied to this image (see the render
 // below). CARE_ACTIONS' reactionSprite entries are animated GIFs too now.
-const MOOD_SPRITE: Record<PetMood, string> = {
-  happy: '/pet/happy.gif',
-  neutral: '/pet/neutral.gif',
-  sad: '/pet/sad.gif',
-  hungry: '/pet/hungry.gif',
-}
+// MOOD_SPRITE now lives in petSprites.ts (imported above) so PetChat.tsx can
+// reuse the same mood->sprite mapping for its header avatar without
+// duplicating this table or tripping react-refresh's
+// only-export-components rule on this component file.
 
 const SLEEP_SPRITE = '/pet/sleep.gif'
 const SLEEP_START_HOUR = 22
@@ -184,6 +185,7 @@ export default function MascotaTab() {
   const [fidgeting, setFidgeting] = useState(false)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
   const [nameInput, setNameInput] = useState('')
   // Whether the shop's "Cambiar nombre" item has been tapped open to reveal
   // its input — starts collapsed so the shop's item list stays scannable
@@ -421,6 +423,15 @@ export default function MascotaTab() {
             {pet && <SparksBadge sparks={pet.sparks} />}
             {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
             {!!pet?.streak && pet.streak > 0 && <StreakBadge streak={pet.streak} />}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Chatear con la mascota"
+              disabled={!pet}
+              onClick={() => setChatOpen(true)}
+            >
+              <MessageCircle className="h-4 w-4 text-muted-foreground" />
+            </Button>
             {canReset && (
               <Button
                 variant="ghost"
@@ -702,6 +713,10 @@ export default function MascotaTab() {
           )}
         </DialogContent>
       </Dialog>
+
+      {pet && (
+        <PetChat open={chatOpen} onOpenChange={setChatOpen} mood={pet.mood} petName={pet.name} />
+      )}
     </CozyCard>
   )
 }
