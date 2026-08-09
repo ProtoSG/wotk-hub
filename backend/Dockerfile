@@ -14,7 +14,7 @@ FROM denoland/deno:bin AS deno
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates ffmpeg python3 python3-pip && \
-    pip install --no-cache-dir --break-system-packages yt-dlp && \
+    pip install --no-cache-dir --break-system-packages yt-dlp bgutil-ytdlp-pot-provider && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=deno /deno /usr/local/bin/deno
 WORKDIR /app
