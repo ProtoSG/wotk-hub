@@ -73,6 +73,28 @@ type Config struct {
 	// operator about a misbehaving sender. Defaults to a placeholder
 	// mailto: if unset — push still works, it's just how the spec is.
 	VAPIDSubject string
+	// OpencodeAPIKey authenticates against OpenCode Zen's chat/completions
+	// gateway for the pet chat feature. Same nice-to-have pattern as
+	// MinioEndpoint/VAPIDPublicKey above: empty means the route still mounts
+	// (unlike Minio/push, chat lives inside the existing pet router rather
+	// than a standalone module, so there's no separate Routes() to skip
+	// calling) but the handler itself 503s instead of calling out with an
+	// empty key.
+	OpencodeAPIKey string
+	// OpencodeModel selects which model OpenCode Zen routes the chat request
+	// to. Defaults to "deepseek-v4-flash-free" — a free-tier model on that
+	// gateway — so local dev works without picking one explicitly.
+	OpencodeModel string
+	// ElevenLabsAPIKey authenticates against ElevenLabs' text-to-speech API
+	// for the pet chat feature's voice playback. Same nice-to-have pattern as
+	// OpencodeAPIKey above: empty means the route still mounts, but the
+	// handler itself 503s instead of calling out with an empty key.
+	ElevenLabsAPIKey string
+	// ElevenLabsVoiceID selects which ElevenLabs voice speaks the pet's
+	// replies. No default — unlike OpencodeModel's free-tier fallback,
+	// there's no sensible "default voice" to pick blind, so this stays empty
+	// (and the feature stays disabled) until explicitly configured.
+	ElevenLabsVoiceID string
 }
 
 func Load() Config {
@@ -111,6 +133,13 @@ func Load() Config {
 	if vapidSubject == "" {
 		vapidSubject = "mailto:admin@workhub.local"
 	}
+	opencodeAPIKey := os.Getenv("OPENCODE_API_KEY")
+	opencodeModel := os.Getenv("OPENCODE_MODEL")
+	if opencodeModel == "" {
+		opencodeModel = "deepseek-v4-flash-free"
+	}
+	elevenLabsAPIKey := os.Getenv("ELEVENLABS_API_KEY")
+	elevenLabsVoiceID := os.Getenv("ELEVENLABS_VOICE_ID")
 	return Config{
 		Port:                port,
 		CORSOrigin:          origin,
@@ -130,5 +159,9 @@ func Load() Config {
 		VAPIDPublicKey:      vapidPublicKey,
 		VAPIDPrivateKey:     vapidPrivateKey,
 		VAPIDSubject:        vapidSubject,
+		OpencodeAPIKey:      opencodeAPIKey,
+		OpencodeModel:       opencodeModel,
+		ElevenLabsAPIKey:    elevenLabsAPIKey,
+		ElevenLabsVoiceID:   elevenLabsVoiceID,
 	}
 }

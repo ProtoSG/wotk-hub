@@ -504,6 +504,24 @@ func Migrate(db *sql.DB) error {
 		// nullable column, same as every other pet_state column, so there's
 		// never a NULL to special-case when reading it back.
 		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''`,
+		// Pet chat rate-limit log — one row per chat message sent, purely for
+		// counting ("how many messages has this team sent in the last hour"),
+		// no message content stored here at all (the message text itself is
+		// never persisted, only forwarded to OpenCode Zen and discarded).
+		// Inserted BEFORE the external API call in Chat() rather than after,
+		// so a slow/failed call still counts against quota — same
+		// "idempotency/accounting first, side effect second" ordering as
+		// pet_care_log's INSERT ... ON CONFLICT, just without the conflict
+		// (every message is a new row, there's nothing to dedupe here).
+		`CREATE TABLE IF NOT EXISTS pet_chat_log (
+			id         BIGSERIAL PRIMARY KEY,
+			team_id    BIGINT NOT NULL REFERENCES users(id),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		// Supports the rate-limit query's WHERE team_id = $1 AND created_at >
+		// now() - interval '1 hour' directly, same shape as
+		// idx_pet_care_log_team_date above.
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_log_team_created ON pet_chat_log (team_id, created_at)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
