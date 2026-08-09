@@ -227,6 +227,13 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 		"-x", "--audio-format", "mp3", "--audio-quality", "0",
 		"--no-playlist",
 		"--js-runtimes", "deno",
+		// Without this, yt-dlp's deno runtime skips downloading the actual
+		// challenge-solver script/NPM package it needs to defeat YouTube's
+		// signature/"n" parameter obfuscation, and every format gets
+		// dropped ("Only images are available for download") even after
+		// authentication succeeds. github is yt-dlp's own recommended
+		// source over npm.
+		"--remote-components", "ejs:github",
 	}
 	if h.cookiesPath != "" {
 		// Datacenter IPs get "Sign in to confirm you're not a bot" from
@@ -251,6 +258,15 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 		// (installed in the Dockerfile) talking to a self-hosted server at
 		// this URL — see https://github.com/Brainicism/bgutil-ytdlp-pot-provider.
 		args = append(args, "--extractor-args", "youtubepot-bgutilhttp:base_url="+h.potProviderURL)
+		// The PO token only actually gets used by the "web" client — yt-dlp's
+		// other default clients (android_vr, web_safari, etc) don't request
+		// it at all, and YouTube has independently been locking several of
+		// those behind a required login throughout 2025-2026 regardless of
+		// any token. Force web specifically so the token this block just
+		// configured is the one actually doing the work — confirmed via
+		// yt-dlp --verbose showing "Retrieved a gvs PO Token for web client"
+		// only appears with this client forced.
+		args = append(args, "--extractor-args", "youtube:player_client=web")
 	}
 	args = append(args, "-o", outputTemplate, "--", req.URL)
 	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
