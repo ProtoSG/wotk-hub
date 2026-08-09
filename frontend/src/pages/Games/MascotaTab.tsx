@@ -224,6 +224,31 @@ export default function MascotaTab() {
     })()
   }, [getPetState])
 
+  // Poll for the partner's changes — there's no push mechanism (no
+  // websocket/SSE in this app yet), so without this, one partner's care
+  // actions only show up for the other after a reload. 8s balances "feels
+  // live enough" against extra requests; this feature is a handful of taps
+  // a day, not a fast game, so a few seconds of staleness is fine. Skipped
+  // while `busy` so a poll response can't land between an action's request
+  // and its own (fresher) response. Deliberately does NOT touch nameInput
+  // — that's local edit-in-progress state; only the initial load and the
+  // rename/reset actions above are allowed to overwrite it.
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (busy) return
+      try {
+        const { pet: p } = await getPetState()
+        setPet(p)
+      } catch {
+        // Silent — a failed background poll isn't worth interrupting
+        // whoever's looking at the screen with an error toast; the next
+        // tick tries again, and any explicit action still surfaces its own
+        // errors normally.
+      }
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [getPetState, busy])
+
   // Schedules the occasional idle fidget on a random loop. Re-runs whenever
   // mood changes so it starts scheduling the moment mood becomes 'happy'
   // and stops cleanly (via the cleanup) the moment it stops being happy —
