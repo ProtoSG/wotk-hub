@@ -49,6 +49,36 @@ const MOOD_SPRITE: Record<PetMood, string> = {
   hungry: '/pet/hungry.gif',
 }
 
+const SLEEP_SPRITE = '/pet/sleep.gif'
+const SLEEP_START_HOUR = 22
+const SLEEP_END_HOUR = 7
+
+// Scattered star positions behind the sleeping sprite — hand-placed rather
+// than random so they don't overlap the sprite's own face, each with its
+// own twinkle delay so they don't all pulse in lockstep. Pixel squares
+// (no border-radius), matching the rest of this feature's flat/hard-edged
+// pixel-art material instead of soft dots.
+const SLEEP_STARS = [
+  { top: '12%', left: '18%', size: 3, delay: '0s' },
+  { top: '20%', left: '78%', size: 2, delay: '0.4s' },
+  { top: '55%', left: '10%', size: 2, delay: '0.9s' },
+  { top: '15%', left: '48%', size: 2, delay: '1.3s' },
+  { top: '70%', left: '85%', size: 3, delay: '0.6s' },
+  { top: '75%', left: '30%', size: 2, delay: '1.1s' },
+]
+
+// Lima hour via Intl instead of a hardcoded UTC-5 offset — same fixed-offset
+// fact the backend relies on (Peru has no DST), but reading it through the
+// IANA zone means this doesn't silently drift if that fact ever stopped
+// being true, and it's one less duplicated offset constant. Purely
+// cosmetic (which sprite to show), so no need to keep it live-updating
+// every second — it's re-read on every render, and the component already
+// re-renders at least every 8s from polling.
+function isSleepingNow(): boolean {
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Lima', hour: 'numeric', hour12: false }).format(new Date()))
+  return hour >= SLEEP_START_HOUR || hour < SLEEP_END_HOUR
+}
+
 // The reaction GIFs (react-play/react-eat/react-clean) are 9 frames at
 // 200ms each — 1.8s for a full loop. 4000ms plays that loop through twice
 // plus a buffer, instead of cutting off mid-first-pass.
@@ -368,6 +398,10 @@ export default function MascotaTab() {
   // once (see the scheduling effect's comment on why that's not worth
   // preventing outright).
   const showFidget = fidgeting && pet?.mood === 'happy' && !reactionSprite
+  // Sleep beats the fidget (no tossing sparks around at 3am) but not a
+  // reaction — tapping a still-open action late at night should still show
+  // its real reaction, not the sleeping sprite.
+  const showSleep = !reactionSprite && isSleepingNow()
 
   // One action on stage at a time, in CARE_ACTIONS order — the first one
   // not yet done today, whether or not its window is open yet. If it's
@@ -407,7 +441,28 @@ export default function MascotaTab() {
             <Skeleton className="h-40 w-40 rounded-full" />
           ) : (
             <>
-              <div className="relative h-40 w-40">
+              <div className="relative flex h-40 w-40 items-center justify-center">
+                {showSleep && (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 overflow-hidden rounded-sm"
+                    style={{ backgroundColor: 'color-mix(in oklch, var(--chart-2) 55%, black)' }}
+                  >
+                    {SLEEP_STARS.map((star, i) => (
+                      <div
+                        key={i}
+                        className="animate-pet-star-twinkle absolute rounded-none bg-white"
+                        style={{
+                          top: star.top,
+                          left: star.left,
+                          width: star.size,
+                          height: star.size,
+                          animationDelay: star.delay,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {/* Ground shadow — a standalone ambient pulse, not driven by
                     the sprite anymore (the mood GIFs below animate
                     themselves now, no CSS float/flicker needed to fake
@@ -421,10 +476,13 @@ export default function MascotaTab() {
                 />
                 <img
                   key={pet.mood}
-                  src={reactionSprite ?? (showFidget ? '/pet/fidget.gif' : MOOD_SPRITE[pet.mood])}
-                  alt={MOOD_LABEL[pet.mood]}
-                  width={160}
-                  height={160}
+                  src={reactionSprite ?? (showSleep ? SLEEP_SPRITE : showFidget ? '/pet/fidget.gif' : MOOD_SPRITE[pet.mood])}
+                  alt={showSleep ? 'Está durmiendo' : MOOD_LABEL[pet.mood]}
+                  // Smaller while sleeping — leaves visible night-sky margin
+                  // around it inside the same box instead of enlarging the
+                  // box itself (which overlapped the health bar below it).
+                  width={showSleep ? 112 : 160}
+                  height={showSleep ? 112 : 160}
                   style={{ imageRendering: 'pixelated' }}
                   className={cn(
                     'relative animate-in fade-in-0 duration-500',
@@ -435,7 +493,9 @@ export default function MascotaTab() {
                   )}
                 />
               </div>
-              <p className="font-pixel text-lg tracking-wide text-muted-foreground">{MOOD_LABEL[pet.mood]}</p>
+              <p className="font-pixel text-lg tracking-wide text-muted-foreground">
+                {showSleep ? 'Está durmiendo 💤' : MOOD_LABEL[pet.mood]}
+              </p>
               <div className="w-full space-y-1.5">
                 <p className="font-pixel text-xs tracking-widest text-muted-foreground">ESTADO</p>
                 <HealthBar careScore={pet.careScore} />
