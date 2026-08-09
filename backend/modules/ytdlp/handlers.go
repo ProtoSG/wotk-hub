@@ -226,12 +226,6 @@ func (h *handler) doDownload(w http.ResponseWriter, r *http.Request) {
 		"-x", "--audio-format", "mp3", "--audio-quality", "0",
 		"--no-playlist",
 		"--js-runtimes", "deno",
-		// The Android client's bot-check is looser than the web client's —
-		// requests through this client player often skip the "Sign in to
-		// confirm you're not a bot" wall entirely on flagged (datacenter/VPS)
-		// IPs, no cookies or proxy needed. Try this before reaching for
-		// either of those.
-		"--extractor-args", "youtube:player_client=android",
 	}
 	if h.cookiesPath != "" {
 		// Datacenter IPs get "Sign in to confirm you're not a bot" from
