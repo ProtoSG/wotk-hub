@@ -12,6 +12,7 @@ import {
   Flame,
   PartyPopper,
   Store,
+  Coins,
   Snowflake,
   Pencil,
 } from 'lucide-react'
@@ -559,7 +560,8 @@ export default function MascotaTab() {
           {pet && (
             <>
               <div className="flex items-center gap-1.5 font-pixel text-sm text-muted-foreground">
-                <span>🪙 Tienes {pet.sparks} chispas</span>
+                <Coins className="h-4 w-4" style={{ color: 'var(--chart-3)' }} />
+                <span>Tienes {pet.sparks} chispas</span>
               </div>
               <div
                 className="flex items-center gap-3 rounded-sm border-2 p-3"
@@ -664,13 +666,16 @@ function StreakBadge({ streak }: { streak: number }) {
   )
 }
 
-// Same 🪙 used everywhere else money shows up (SparksBadge, the shop
-// balance line) — a price tag on a buy button is the same currency, it
-// should never look like a different coin.
+// Same Coins icon used everywhere else money shows up (SparksBadge, the
+// shop balance line) — a price tag on a buy button is the same currency,
+// it should never look like a different coin. Lucide icon rather than the
+// 🪙 emoji this used to be: emoji glyphs render differently (sometimes
+// wildly so) across browsers/OS/fonts, an SVG icon doesn't.
 function PriceTag({ cost }: { cost: number }) {
   return (
     <span className="inline-flex items-center gap-1">
-      {cost} 🪙
+      {cost}
+      <Coins className="h-3.5 w-3.5" />
     </span>
   )
 }
@@ -691,7 +696,7 @@ function SparksBadge({ sparks }: { sparks: number }) {
         boxShadow: pixelShadow('--chart-3', 2),
       }}
     >
-      <span className="flex h-3.5 w-3.5 items-center justify-center text-sm leading-none">🪙</span>
+      <Coins className="h-3.5 w-3.5" />
       <span className="font-pixel text-sm leading-none tabular-nums">{sparks}</span>
     </div>
   )
