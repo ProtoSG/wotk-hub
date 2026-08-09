@@ -12,7 +12,6 @@ import {
   Flame,
   PartyPopper,
   Store,
-  Coins,
   Snowflake,
   Pencil,
 } from 'lucide-react'
@@ -560,8 +559,7 @@ export default function MascotaTab() {
           {pet && (
             <>
               <div className="flex items-center gap-1.5 font-pixel text-sm text-muted-foreground">
-                <Coins className="h-4 w-4" style={{ color: 'var(--chart-3)' }} />
-                <span>Tienes {pet.sparks} chispas</span>
+                <span>🪙 Tienes {pet.sparks} chispas</span>
               </div>
               <div
                 className="flex items-center gap-3 rounded-sm border-2 p-3"
@@ -584,7 +582,7 @@ export default function MascotaTab() {
                   disabled={busy || pet.sparks < FREEZE_COST_SPARKS}
                   onClick={handleBuyFreeze}
                 >
-                  {FREEZE_COST_SPARKS} 🪙
+                  <PriceTag cost={FREEZE_COST_SPARKS} />
                 </Button>
               </div>
               {pet.name && (
@@ -613,7 +611,7 @@ export default function MascotaTab() {
                         disabled={busy || !nameInput.trim() || pet.sparks < RENAME_COST_SPARKS}
                         onClick={handleRename}
                       >
-                        {RENAME_COST_SPARKS} 🪙
+                        <PriceTag cost={RENAME_COST_SPARKS} />
                       </Button>
                     </>
                   ) : (
@@ -631,7 +629,7 @@ export default function MascotaTab() {
                           setShowRenameField(true)
                         }}
                       >
-                        {RENAME_COST_SPARKS} 🪙
+                        <PriceTag cost={RENAME_COST_SPARKS} />
                       </Button>
                     </>
                   )}
@@ -666,6 +664,17 @@ function StreakBadge({ streak }: { streak: number }) {
   )
 }
 
+// Same 🪙 used everywhere else money shows up (SparksBadge, the shop
+// balance line) — a price tag on a buy button is the same currency, it
+// should never look like a different coin.
+function PriceTag({ cost }: { cost: number }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {cost} 🪙
+    </span>
+  )
+}
+
 // Shop currency balance — always shown (even at 0), unlike StreakBadge
 // which only shows once there's something to show. A shop needs a visible
 // balance to be legible at all; see the sparks comment in types.go for why
@@ -682,7 +691,7 @@ function SparksBadge({ sparks }: { sparks: number }) {
         boxShadow: pixelShadow('--chart-3', 2),
       }}
     >
-      <Coins className="h-3.5 w-3.5" />
+      <span className="flex h-3.5 w-3.5 items-center justify-center text-sm leading-none">🪙</span>
       <span className="font-pixel text-sm leading-none tabular-nums">{sparks}</span>
     </div>
   )
