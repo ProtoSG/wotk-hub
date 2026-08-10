@@ -99,6 +99,25 @@ type poemRequest struct {
 	Content string `json:"content"`
 }
 
+// Video is the API shape for a couple-date video. URL and ThumbnailURL are
+// freshly generated presigned MinIO GET URLs (see storage.Client.
+// PresignedGetURL) — they expire, so neither is ever persisted; only the
+// two object keys are durable in the DB. Both stored objects (a 720p H.264
+// transcode and a JPEG thumbnail) are server-generated via ffmpeg/ffprobe —
+// see videos.go UploadVideo.
+type Video struct {
+	ID               int64  `json:"id"`
+	URL              string `json:"url"`
+	ThumbnailURL     string `json:"thumbnailUrl"`
+	DurationSeconds  int    `json:"durationSeconds"`
+	OriginalFilename string `json:"originalFilename"`
+	CreatedAt        string `json:"createdAt"`
+}
+
+type listVideosResponse struct {
+	Videos []Video `json:"videos"`
+}
+
 func (r dateRequest) validate() (time.Time, error) {
 	d, err := time.Parse(dateLayout, r.OccurredOn)
 	if err != nil {

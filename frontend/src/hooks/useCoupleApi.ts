@@ -1,5 +1,14 @@
 import api from '@/lib/axios'
-import type { CoupleDate, CoupleDateInput, CoupleDatePhoto, GalleryPhoto, Poem, PoemInput, TodayPoemResponse } from '@/types/couple.types'
+import type {
+  CoupleDate,
+  CoupleDateInput,
+  CoupleDatePhoto,
+  GalleryPhoto,
+  Poem,
+  PoemInput,
+  TodayPoemResponse,
+  Video,
+} from '@/types/couple.types'
 
 export function useCoupleApi() {
   async function listDates(): Promise<CoupleDate[]> {
@@ -69,5 +78,41 @@ export function useCoupleApi() {
     return res.data
   }
 
-  return { listDates, createDate, updateDate, deleteDate, listPhotos, uploadPhoto, deletePhoto, listGallery, listPoems, createPoem, deletePoem, markPoemSeen, todayPoem }
+  async function listVideos(dateId: number): Promise<Video[]> {
+    const res = await api.get<{ videos: Video[] }>(`/api/couple/dates/${dateId}/videos`)
+    return res.data.videos
+  }
+
+  async function uploadVideo(dateId: number, file: File): Promise<Video> {
+    const formData = new FormData()
+    formData.append('video', file)
+    // Much longer than the client's 30s default: the backend transcodes to
+    // 720p and generates a thumbnail before responding, and files can be up
+    // to 500MB — real processing time, not a typical JSON round trip.
+    const res = await api.post<Video>(`/api/couple/dates/${dateId}/videos`, formData, { timeout: 300000 })
+    return res.data
+  }
+
+  async function deleteVideo(dateId: number, videoId: number): Promise<void> {
+    await api.delete(`/api/couple/dates/${dateId}/videos/${videoId}`)
+  }
+
+  return {
+    listDates,
+    createDate,
+    updateDate,
+    deleteDate,
+    listPhotos,
+    uploadPhoto,
+    deletePhoto,
+    listGallery,
+    listPoems,
+    createPoem,
+    deletePoem,
+    markPoemSeen,
+    todayPoem,
+    listVideos,
+    uploadVideo,
+    deleteVideo,
+  }
 }
