@@ -79,6 +79,22 @@ type dateRequest struct {
 	Status     string `json:"status"`
 }
 
+type Poem struct {
+	ID        int64  `json:"id"`
+	Content   string `json:"content"`
+	IsMine    bool   `json:"isMine"`
+	IsSeen    bool   `json:"isSeen"`
+	CreatedAt string `json:"createdAt"`
+}
+
+type listPoemsResponse struct {
+	Poems []Poem `json:"poems"`
+}
+
+type poemRequest struct {
+	Content string `json:"content"`
+}
+
 func (r dateRequest) validate() (time.Time, error) {
 	d, err := time.Parse(dateLayout, r.OccurredOn)
 	if err != nil {

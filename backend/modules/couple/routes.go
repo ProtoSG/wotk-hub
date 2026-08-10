@@ -33,5 +33,10 @@ func Routes(db *sql.DB, photoStorage *storage.Client) http.Handler {
 	r.Delete("/dates/{id}/photos/{photoId}", h.DeletePhoto)
 	r.Get("/photos", h.ListGalleryPhotos)
 
+	r.Get("/poems", h.ListPoems)
+	r.Post("/poems", h.CreatePoem)
+	r.Delete("/poems/{id}", h.DeletePoem)
+	r.Post("/poems/{id}/seen", h.MarkPoemSeen)
+
 	return r
 }

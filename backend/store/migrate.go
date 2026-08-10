@@ -522,6 +522,17 @@ func Migrate(db *sql.DB) error {
 		// now() - interval '1 hour' directly, same shape as
 		// idx_pet_care_log_team_date above.
 		`CREATE INDEX IF NOT EXISTS idx_pet_chat_log_team_created ON pet_chat_log (team_id, created_at)`,
+		// Couples poems — private love notes written for each other.
+		`CREATE TABLE IF NOT EXISTS couple_poems (
+			id         BIGSERIAL PRIMARY KEY,
+			author_id  BIGINT NOT NULL REFERENCES users(id),
+			team_id    BIGINT NOT NULL REFERENCES users(id),
+			content    TEXT   NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			seen_at    TIMESTAMPTZ
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_poems_team_id ON couple_poems (team_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_poems_author_id ON couple_poems (author_id)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

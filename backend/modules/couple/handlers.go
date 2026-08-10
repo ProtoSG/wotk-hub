@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
+	"workhub/shared/team"
 )
 
 func scanDate(row interface{ Scan(...any) error }) (Date, error) {
@@ -196,4 +198,158 @@ func (h *handler) DeleteDate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteSuccess(w, http.StatusOK)
+}
+
+// ListPoems returns all poems for the couple team, with isMine and isSeen
+// computed per-request from the JWT. It also auto-marks all unseen poems
+// written by the other partner as seen in the same request.
+func (h *handler) ListPoems(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("couple: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	// Auto-mark unseen poems from the other partner as seen.
+	_, err = h.db.Exec(`UPDATE couple_poems SET seen_at = now()
+		WHERE team_id = $1 AND author_id != $2 AND seen_at IS NULL`, teamID, userID)
+	if err != nil {
+		log.Printf("couple: mark poems seen failed: %v", err)
+	}
+
+	rows, err := h.db.Query(`SELECT id, author_id, content, created_at, seen_at
+		FROM couple_poems WHERE team_id = $1 ORDER BY created_at ASC`, teamID)
+	if err != nil {
+		log.Printf("couple: list poems failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	defer rows.Close()
+
+	poems := []Poem{}
+	for rows.Next() {
+		var p Poem
+		var authorID int64
+		var createdAt time.Time
+		var seenAt sql.NullTime
+		if err := rows.Scan(&p.ID, &authorID, &p.Content, &createdAt, &seenAt); err != nil {
+			log.Printf("couple: scan poem failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+		p.IsMine = authorID == userID
+		p.IsSeen = seenAt.Valid
+		p.CreatedAt = createdAt.Format(time.RFC3339)
+		poems = append(poems, p)
+	}
+	httpx.WriteJSON(w, http.StatusOK, listPoemsResponse{Poems: poems})
+}
+
+// CreatePoem writes a new poem from the authenticated user.
+func (h *handler) CreatePoem(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("couple: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	var req poemRequest
+	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	req.Content = trimString(req.Content)
+	if req.Content == "" {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "content is required")
+		return
+	}
+	if len(req.Content) > 1000 {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "content must be 1000 characters or fewer")
+		return
+	}
+
+	var p Poem
+	var createdAt time.Time
+	err = h.db.QueryRow(
+		`INSERT INTO couple_poems (author_id, team_id, content) VALUES ($1, $2, $3)
+		 RETURNING id, content, created_at`,
+		userID, teamID, req.Content,
+	).Scan(&p.ID, &p.Content, &createdAt)
+	if err != nil {
+		log.Printf("couple: create poem failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	p.IsMine = true
+	p.IsSeen = false
+	p.CreatedAt = createdAt.Format(time.RFC3339)
+	httpx.WriteJSON(w, http.StatusCreated, p)
+}
+
+// DeletePoem deletes a poem, but only if the caller is its author.
+func (h *handler) DeletePoem(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseID(r)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	res, err := h.db.Exec(`DELETE FROM couple_poems WHERE id = $1 AND author_id = $2`, id, userID)
+	if err != nil {
+		log.Printf("couple: delete poem failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "poem not found")
+		return
+	}
+	httpx.WriteSuccess(w, http.StatusOK)
+}
+
+// MarkPoemSeen marks a poem as seen. Idempotent — re-calling is a no-op.
+func (h *handler) MarkPoemSeen(w http.ResponseWriter, r *http.Request) {
+	_, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := parseID(r)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+
+	_, err = h.db.Exec(`UPDATE couple_poems SET seen_at = coalesce(seen_at, now()) WHERE id = $1`, id)
+	if err != nil {
+		log.Printf("couple: mark poem seen failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	httpx.WriteSuccess(w, http.StatusOK)
+}
+
+func trimString(s string) string {
+	return strings.TrimSpace(s)
 }
