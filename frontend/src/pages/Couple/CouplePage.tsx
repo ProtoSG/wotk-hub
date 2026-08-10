@@ -51,7 +51,7 @@ const UNDO_WINDOW_MS = 4500
 
 const TABS = [
   { value: 'citas', label: 'Citas', icon: Heart },
-  { value: 'poemas', label: 'Poemas', icon: Heart },
+  { value: 'poemas', label: 'Poemas', icon: Pencil },
   { value: 'estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { value: 'galeria', label: 'Galería', icon: Images },
 ]
