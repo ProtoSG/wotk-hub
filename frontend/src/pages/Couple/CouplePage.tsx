@@ -228,7 +228,7 @@ export default function CouplePage() {
   // ?tab=estadisticas URL param either — useActiveTab falls back to the
   // default tab for any value not in this list.
   const canManage = role === 'admin'
-  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.value !== 'estadisticas' && t.value !== 'poemas')
+  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.value !== 'estadisticas' && t.value !== 'poemas' && t.value !== 'videos')
   const { tab, setSearchParams } = useActiveTab(visibleTabs, 'citas')
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 
