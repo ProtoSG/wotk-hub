@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, MoreHorizontal, Images } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,6 +15,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { useCoupleApi } from '@/hooks/useCoupleApi'
+import type { Poem } from '@/types/couple.types'
+import { useAuthStore } from '@/store/authStore'
 
 const STORAGE_KEY = 'couple-cover-image-url'
 
@@ -56,6 +59,21 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
   const [imageUrl, setImageUrl] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [urlInput, setUrlInput] = useState('')
+  const [todayPoem, setTodayPoem] = useState<Poem | null>(null)
+
+  const { todayPoem: fetchTodayPoem } = useCoupleApi()
+  const role = useAuthStore((s) => s.user?.role)
+  const canManage = role === 'admin'
+
+  useEffect(() => {
+    if (!canManage) {
+      fetchTodayPoem()
+        .then((res) => setTodayPoem(res.poem ?? null))
+        // Silently ignore — non-admin guests see the normal cover on error
+        .catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage])
 
   function openImageDialog() {
     setUrlInput(imageUrl)
@@ -162,6 +180,28 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
         className="absolute inset-0"
         style={{ background: 'linear-gradient(to top, var(--cover-scrim), transparent 65%)' }}
       />
+
+      {/* Poem of the day — replaces the cover for non-admin guests */}
+      {todayPoem && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+          <span
+            className="mb-2 text-xs font-medium uppercase tracking-widest"
+            style={{ color: 'var(--cover-sakura)', opacity: 0.9 }}
+          >
+            Poema del día
+          </span>
+          <p
+            className="max-w-xl text-sm italic leading-relaxed"
+            style={{
+              color: 'var(--cover-text)',
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+            }}
+          >
+            {todayPoem.content}
+          </p>
+        </div>
+      )}
 
       <div className="relative flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">

@@ -74,3 +74,7 @@ export interface Poem {
 export interface PoemInput {
   content: string
 }
+
+export interface TodayPoemResponse {
+  poem: Poem | null
+}
