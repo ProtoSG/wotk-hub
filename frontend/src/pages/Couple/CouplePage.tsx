@@ -20,6 +20,7 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  Video,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -46,6 +47,7 @@ import DateForm from './DateForm'
 import GaleriaTab from './GaleriaTab'
 import EstadisticasTab from './EstadisticasTab'
 import PoemasTab from './PoemasTab'
+import VideosTab from './VideosTab'
 
 const UNDO_WINDOW_MS = 4500
 
@@ -54,6 +56,7 @@ const TABS = [
   { value: 'poemas', label: 'Poemas', icon: Pencil },
   { value: 'estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { value: 'galeria', label: 'Galería', icon: Images },
+  { value: 'videos', label: 'Videos', icon: Video },
 ]
 
 const TAB_CONTENT_CLASS =
@@ -475,6 +478,10 @@ export default function CouplePage() {
               <EstadisticasTab dates={dates} canSeePrice={canSeePrice} />
             </TabsContent>
           )}
+
+          <TabsContent value="videos" className={TAB_CONTENT_CLASS}>
+            <VideosTab canManage={canManage} />
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -488,7 +495,14 @@ export default function CouplePage() {
         />
       )}
 
-      <MobileTabNav tabs={visibleTabs} activeTab={tab} onChange={goToTab} fabVisible={tab === 'citas' && canManage} />
+      {/* VideosTab renders its own upload FAB when active — fabVisible here
+          only reserves space in MobileTabNav for it. */}
+      <MobileTabNav
+        tabs={visibleTabs}
+        activeTab={tab}
+        onChange={goToTab}
+        fabVisible={(tab === 'citas' || tab === 'videos') && canManage}
+      />
 
       <DateForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editing={editing} />
     </>

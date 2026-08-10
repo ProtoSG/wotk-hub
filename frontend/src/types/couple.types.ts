@@ -78,3 +78,12 @@ export interface PoemInput {
 export interface TodayPoemResponse {
   poem: Poem | null
 }
+
+export interface Video {
+  id: number
+  url: string // freshly presigned MinIO GET URL (720p transcode), expires — don't cache long-term
+  thumbnailUrl: string // freshly presigned MinIO GET URL (JPEG thumbnail), expires — don't cache long-term
+  durationSeconds: number
+  originalFilename: string
+  createdAt: string
+}

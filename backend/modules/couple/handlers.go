@@ -179,12 +179,13 @@ func (h *handler) DeleteDate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete each photo's MinIO object before the SQL DELETE below cascades
-	// away the couple_date_photos rows — ON DELETE CASCADE only reaches the
-	// DB, so skipping this would orphan objects in MinIO forever with
-	// nothing left pointing at them.
+	// Delete each photo's and video's MinIO objects before the SQL DELETE
+	// below cascades away the couple_date_photos/couple_date_videos rows —
+	// ON DELETE CASCADE only reaches the DB, so skipping this would orphan
+	// objects in MinIO forever with nothing left pointing at them.
 	if h.storage != nil {
 		h.deletePhotoObjectsForDate(r.Context(), id)
+		h.deleteVideoObjectsForDate(r.Context(), id)
 	}
 
 	res, err := h.db.Exec(`DELETE FROM couple_dates WHERE id = $1`, id)

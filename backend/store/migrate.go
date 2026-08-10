@@ -533,6 +533,25 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_couple_poems_team_id ON couple_poems (team_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_couple_poems_author_id ON couple_poems (author_id)`,
+		// Couple date videos — TikTok-style vertical video journal per date.
+		// Same object-storage-pointer shape as couple_date_photos: the two
+		// object_key_* columns are the durable MinIO pointers (a 720p H.264
+		// transcode and a JPEG thumbnail, both server-generated — see
+		// couple/videos.go UploadVideo). ON DELETE CASCADE only reaches this
+		// row when its couple_dates parent is deleted, not the actual MinIO
+		// objects — the couple DeleteDate handler deletes each video's MinIO
+		// objects itself first, same as it already does for photos.
+		`CREATE TABLE IF NOT EXISTS couple_date_videos (
+			id                BIGSERIAL PRIMARY KEY,
+			date_id           BIGINT NOT NULL REFERENCES couple_dates(id) ON DELETE CASCADE,
+			object_key_720p   TEXT   NOT NULL,
+			object_key_thumb  TEXT   NOT NULL,
+			original_filename TEXT   NOT NULL DEFAULT '',
+			duration_seconds  INT    NOT NULL DEFAULT 0,
+			created_by        BIGINT REFERENCES users(id),
+			created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_date_videos_date_id ON couple_date_videos (date_id)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
