@@ -30,7 +30,7 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
   const [composing, setComposing] = useState('')
   const [sending, setSending] = useState(false)
   const [myPoemsOpen, setMyPoemsOpen] = useState(false)
-  const [pendingDeletes, setPendingDeletes] = useState<Map<number, ReturnType<typeof setTimeout>>>(new Map())
+  const pendingDeletes = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const load = useCallback(async () => {
@@ -71,7 +71,6 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
 
   async function commitDelete(id: number) {
     pendingDeletes.current.delete(id)
-    setPendingDeletes(new Map(pendingDeletes.current))
     try {
       await deletePoem(id)
     } catch (err) {
@@ -89,7 +88,6 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
 
     const timer = setTimeout(() => commitDelete(poem.id), UNDO_WINDOW_MS)
     pendingDeletes.current.set(poem.id, timer)
-    setPendingDeletes(new Map(pendingDeletes.current))
 
     toast.success('Poema eliminado', {
       duration: UNDO_WINDOW_MS,
@@ -100,7 +98,6 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
           if (timerId !== undefined) {
             clearTimeout(timerId)
             pendingDeletes.current.delete(poem.id)
-            setPendingDeletes(new Map(pendingDeletes.current))
           }
           setPoems((prev) => {
             const next = [...prev]
