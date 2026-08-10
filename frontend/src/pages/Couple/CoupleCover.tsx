@@ -182,7 +182,7 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
       />
 
       {/* Poem of the day — replaces the cover for non-admin guests */}
-      {todayPoem && (
+      {todayPoem ? (
         <>
           {/* frosted scrim so poem is readable regardless of background */}
           <div
@@ -204,9 +204,7 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
             </p>
           </div>
         </>
-      )}
-
-      {!todayPoem && (
+      ) : (
         <div className="relative flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <h1
@@ -219,29 +217,30 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Más opciones de portada"
-                  className="h-9 w-9"
-                >
-                  <MoreHorizontal className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={openImageDialog}>
-                  <Images className="h-4 w-4" />
-                  Cambiar imagen
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {onNewDate && (
-              <div className="hidden sm:block">
-                <Button onClick={onNewDate}>
-                  <Plus size={14} />
-                  Nueva cita
-                </Button>
-              </div>
-            )}
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Más opciones de portada"
+                    className="h-9 w-9"
+                  >
+                    <MoreHorizontal className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={openImageDialog}>
+                    <Images className="h-4 w-4" />
+                    Cambiar imagen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {onNewDate && (
+                <div className="hidden sm:block">
+                  <Button onClick={onNewDate}>
+                    <Plus size={14} />
+                    Nueva cita
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
