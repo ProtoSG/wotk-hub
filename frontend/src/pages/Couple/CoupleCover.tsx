@@ -183,24 +183,33 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
 
       {/* Poem of the day — replaces the cover for non-admin guests */}
       {todayPoem && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-          <span
-            className="mb-2 text-xs font-medium uppercase tracking-widest"
-            style={{ color: 'var(--cover-sakura)', opacity: 0.9 }}
-          >
-            Poema del día
-          </span>
-          <p
-            className="max-w-xl text-sm italic leading-relaxed"
+        <>
+          {/* frosted scrim so poem is readable regardless of background */}
+          <div
+            className="absolute inset-0"
             style={{
-              color: 'var(--cover-text)',
-              fontFamily: 'Georgia, "Times New Roman", serif',
-              textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+              background: 'linear-gradient(to top, rgba(15,10,5,0.85) 0%, rgba(15,10,5,0.55) 50%, rgba(15,10,5,0.3) 100%)',
             }}
-          >
-            {todayPoem.content}
-          </p>
-        </div>
+          />
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+            <span
+              className="mb-3 text-xs font-medium uppercase tracking-widest"
+              style={{ color: 'var(--cover-sakura)', opacity: 0.9 }}
+            >
+              Poema del día
+            </span>
+            <p
+              className="max-w-xl text-base italic leading-relaxed"
+              style={{
+                color: '#f5f0e8',
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                textShadow: '0 1px 6px rgba(0,0,0,0.5)',
+              }}
+            >
+              {todayPoem.content}
+            </p>
+          </div>
+        </>
       )}
 
       <div className="relative flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
