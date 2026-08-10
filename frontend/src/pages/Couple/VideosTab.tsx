@@ -28,9 +28,10 @@ interface Props {
   canManage: boolean
 }
 
-// TikTok/Reels-style vertical scroll feed — one full-width video per snap point.
-// autoplay is intentionally NOT used on scroll: it causes expensive network requests
-// and jarring audio interruptions. Users tap to play/pause.
+// TikTok/Reels-style vertical scroll feed — one full-screen video per snap point.
+// Uses 100dvh (dynamic viewport height) so it truly fills the mobile screen.
+// Video element is always in DOM but hidden behind the thumbnail when paused;
+// thumbnail lifts to reveal the playing video underneath.
 export default function VideosTab({ canManage }: Props) {
   const [entries, setEntries] = useState<VideoEntry[]>([])
   const [dates, setDates] = useState<CoupleDate[]>([])
@@ -76,9 +77,8 @@ export default function VideosTab({ canManage }: Props) {
     load()
   }, [load])
 
-  // Sync playing state with active index
+  // Pause videos that are no longer in view
   useEffect(() => {
-    // Pause all videos not at the active index
     videoRefs.current.forEach((video, id) => {
       const entry = entries.find((e) => e.video.id === id)
       if (!entry) return
@@ -103,7 +103,9 @@ export default function VideosTab({ canManage }: Props) {
     const video = videoRefs.current.get(entry.video.id)
     if (!video) return
     if (video.paused) {
-      video.play()
+      video.play().catch(() => {
+        toast.error('No se pudo reproducir el video')
+      })
       setPlayingId(entry.video.id)
     } else {
       video.pause()
@@ -194,11 +196,11 @@ export default function VideosTab({ canManage }: Props) {
 
   return (
     <>
-      {/* Vertical snap scroll — TikTok/Reels style */}
+      {/* Vertical snap scroll — TikTok/Reels style, truly full-screen with 100dvh */}
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-none"
+        className="h-full overflow-y-scroll overscroll-none"
         style={{ scrollSnapType: 'y mandatory' }}
       >
         {entries.map((entry, index) => {
@@ -207,36 +209,15 @@ export default function VideosTab({ canManage }: Props) {
           return (
             <div
               key={entry.video.id}
-              className="relative h-screen w-full shrink-0 snap-start"
-              style={{ scrollSnapAlign: 'start' }}
+              className="relative w-full shrink-0 snap-start"
+              style={{ height: '100dvh', scrollSnapAlign: 'start' }}
             >
-              {/* Thumbnail fills the card */}
-              <img
-                src={entry.video.thumbnailUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading={index <= 1 ? 'eager' : 'lazy'}
-              />
-
-              {/* Dark scrim so caption is always readable */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-
-              {/* Play/pause tap target — entire card */}
-              <button
-                type="button"
-                className="absolute inset-0 flex items-center justify-center"
-                onClick={() => togglePlay(entry)}
-                aria-label={isPlaying ? 'Pausar video' : 'Reproducir video'}
-              >
-                {/* Play indicator — shown when paused */}
-                {!isPlaying && (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-transform hover:scale-110">
-                    <Play className="h-8 w-8 fill-white text-white" strokeWidth={0} />
-                  </div>
-                )}
-              </button>
-
-              {/* Hidden video — activated on play */}
+              {/*
+                VIDEO — always rendered, full-screen.
+                It's UNDER the thumbnail layer in z-order when paused.
+                When isPlaying, thumbnail lifts (opacity 0) so video shows through.
+                preload="metadata" fetches just enough to show first frame fast.
+              */}
               <video
                 ref={(el) => {
                   if (el) videoRefs.current.set(entry.video.id, el)
@@ -244,35 +225,77 @@ export default function VideosTab({ canManage }: Props) {
                 }}
                 src={entry.video.url}
                 className="absolute inset-0 h-full w-full object-cover"
-                preload="none"
+                preload="metadata"
                 playsInline
                 muted
                 loop
                 onEnded={() => setPlayingId(null)}
+                onLoadedData={(e) => {
+                  // Once first frame loads, show thumbnail as backdrop
+                  ;(e.target as HTMLVideoElement).poster = entry.video.thumbnailUrl
+                }}
               />
 
-              {/* Bottom overlay: caption + duration */}
-              <div className="absolute bottom-0 left-0 right-0 p-4 pb-6">
+              {/*
+                THUMBNAIL — on top of the video when paused.
+                When playing, fades out to reveal the video underneath.
+              */}
+              <img
+                src={entry.video.thumbnailUrl}
+                alt=""
+                className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+                  isPlaying ? 'pointer-events-none opacity-0' : 'opacity-100'
+                }`}
+                loading={index <= 2 ? 'eager' : 'lazy'}
+              />
+
+              {/* Dark scrim for caption legibility */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/70" />
+
+              {/* Play button overlay — visible when paused */}
+              {!isPlaying && (
+                <button
+                  type="button"
+                  className="absolute inset-0 flex items-center justify-center"
+                  onClick={() => togglePlay(entry)}
+                  aria-label="Reproducir video"
+                >
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-black/50 backdrop-blur-md transition-transform hover:scale-110">
+                    <Play className="h-10 w-10 fill-white text-white" strokeWidth={0} />
+                  </div>
+                </button>
+              )}
+
+              {/* Bottom overlay: caption + controls */}
+              <div className="absolute bottom-0 left-0 right-0 p-4 pb-8">
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-white drop-shadow-md">
+                    <p className="truncate text-sm font-semibold text-white drop-shadow-lg">
                       {entry.date.place || '—'}
                     </p>
                     <p className="truncate text-xs text-white/70 drop-shadow-sm">
                       {entry.date.notes || entry.date.occurredOn}
                     </p>
                   </div>
-                  <div className="flex flex-col items-center gap-3">
-                    {/* Duration badge */}
+
+                  <div className="flex flex-col items-center gap-3 shrink-0">
+                    {/* Duration */}
                     <span className="rounded bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
                       {formatDuration(entry.video.durationSeconds)}
                     </span>
-                    {/* Play state indicator */}
+
+                    {/* Pause button when playing */}
                     {isPlaying && (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
-                        <Pause className="h-5 w-5 fill-white text-white" strokeWidth={0} />
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => togglePlay(entry)}
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 backdrop-blur-md transition-colors hover:bg-black/70"
+                        aria-label="Pausar video"
+                      >
+                        <Pause className="h-6 w-6 fill-white text-white" strokeWidth={0} />
+                      </button>
                     )}
+
                     {/* Admin delete */}
                     {canManage && (
                       <button
@@ -282,13 +305,13 @@ export default function VideosTab({ canManage }: Props) {
                           handleDelete(entry)
                         }}
                         disabled={deletingId === entry.video.id}
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-colors hover:bg-red-500/60 disabled:opacity-50"
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition-colors hover:bg-red-500/60 disabled:opacity-50"
                         aria-label="Eliminar video"
                       >
                         {deletingId === entry.video.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <Loader2 className="h-5 w-5 animate-spin" />
                         ) : (
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-5 w-5" />
                         )}
                       </button>
                     )}
@@ -296,12 +319,12 @@ export default function VideosTab({ canManage }: Props) {
                 </div>
               </div>
 
-              {/* Scroll indicator for first video */}
+              {/* Scroll hint — only on first video, when paused */}
               {index === 0 && !isPlaying && (
-                <div className="pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2 animate-bounce">
-                  <div className="flex flex-col items-center gap-1 text-white/60">
+                <div className="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2 animate-bounce">
+                  <div className="flex flex-col items-center gap-1 text-white/50">
                     <span className="text-xs">deslizá</span>
-                    <div className="h-4 w-px bg-white/40" />
+                    <div className="h-5 w-px bg-white/40" />
                   </div>
                 </div>
               )}
@@ -310,7 +333,7 @@ export default function VideosTab({ canManage }: Props) {
         })}
       </div>
 
-      {/* Video counter pill */}
+      {/* Counter pill */}
       <div className="pointer-events-none absolute top-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
         {activeIndex + 1} / {entries.length}
       </div>
