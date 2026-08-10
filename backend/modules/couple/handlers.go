@@ -350,6 +350,49 @@ func (h *handler) MarkPoemSeen(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK)
 }
 
+// GetTodayPoem returns the poem written by the partner today, if any.
+// Returns 200 with null poem when none exists — caller always gets a usable
+// payload regardless of data presence.
+func (h *handler) GetTodayPoem(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("couple: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	var p Poem
+	var authorID int64
+	var createdAt time.Time
+	err = h.db.QueryRow(
+		`SELECT id, author_id, content, created_at
+		 FROM couple_poems
+		 WHERE team_id = $1 AND author_id != $2 AND DATE(created_at) = CURRENT_DATE
+		 LIMIT 1`,
+		teamID, userID,
+	).Scan(&p.ID, &authorID, &p.Content, &createdAt)
+	if err == sql.ErrNoRows {
+		httpx.WriteJSON(w, http.StatusOK, todayPoemResponse{})
+		return
+	}
+	if err != nil {
+		log.Printf("couple: get today poem failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	p.IsMine = false // current user is reading the partner's poem
+	p.IsSeen = true
+	p.CreatedAt = createdAt.Format(time.RFC3339)
+	httpx.WriteJSON(w, http.StatusOK, todayPoemResponse{Poem: &p})
+}
+
 func trimString(s string) string {
 	return strings.TrimSpace(s)
 }

@@ -91,6 +91,10 @@ type listPoemsResponse struct {
 	Poems []Poem `json:"poems"`
 }
 
+type todayPoemResponse struct {
+	Poem *Poem `json:"poem"`
+}
+
 type poemRequest struct {
 	Content string `json:"content"`
 }
