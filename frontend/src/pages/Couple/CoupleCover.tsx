@@ -192,12 +192,6 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
             }}
           />
           <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-            <span
-              className="mb-3 text-xs font-medium uppercase tracking-widest"
-              style={{ color: 'var(--cover-sakura)', opacity: 0.9 }}
-            >
-              Poema del día
-            </span>
             <p
               className="max-w-xl text-base italic leading-relaxed"
               style={{
@@ -212,18 +206,19 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
         </>
       )}
 
-      <div className="relative flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h1
-            className="text-2xl font-bold drop-shadow-sm"
-            style={{ color: 'var(--cover-text)' }}
-          >
-            Citas
-          </h1>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
+      {!todayPoem && (
+        <div className="relative flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h1
+              className="text-2xl font-bold drop-shadow-sm"
+              style={{ color: 'var(--cover-text)' }}
+            >
+              Citas
+            </h1>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
                   variant="ghost"
                   size="icon"
                   aria-label="Más opciones de portada"
@@ -249,7 +244,7 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
             )}
           </div>
         </div>
-      </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
