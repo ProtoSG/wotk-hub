@@ -1,5 +1,5 @@
 import api from '@/lib/axios'
-import type { CoupleDate, CoupleDateInput, CoupleDatePhoto, GalleryPhoto } from '@/types/couple.types'
+import type { CoupleDate, CoupleDateInput, CoupleDatePhoto, GalleryPhoto, Poem, PoemInput } from '@/types/couple.types'
 
 export function useCoupleApi() {
   async function listDates(): Promise<CoupleDate[]> {
@@ -46,5 +46,23 @@ export function useCoupleApi() {
     return res.data.photos
   }
 
-  return { listDates, createDate, updateDate, deleteDate, listPhotos, uploadPhoto, deletePhoto, listGallery }
+  async function listPoems(): Promise<Poem[]> {
+    const res = await api.get<{ poems: Poem[] }>('/api/couple/poems')
+    return res.data.poems
+  }
+
+  async function createPoem(input: PoemInput): Promise<Poem> {
+    const res = await api.post<Poem>('/api/couple/poems', input)
+    return res.data
+  }
+
+  async function deletePoem(id: number): Promise<void> {
+    await api.delete(`/api/couple/poems/${id}`)
+  }
+
+  async function markPoemSeen(id: number): Promise<void> {
+    await api.post(`/api/couple/poems/${id}/seen`)
+  }
+
+  return { listDates, createDate, updateDate, deleteDate, listPhotos, uploadPhoto, deletePhoto, listGallery, listPoems, createPoem, deletePoem, markPoemSeen }
 }
