@@ -44,7 +44,8 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
   }, [listPoems])
 
   useEffect(() => {
-    load()
+    setLoading(true) // eslint-disable-line react-hooks/cascading-effect
+    void load()
   }, [load])
 
   const receivedPoems = poems.filter((p) => !p.isMine)
