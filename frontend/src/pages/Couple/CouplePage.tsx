@@ -45,11 +45,13 @@ import CoupleCover from './CoupleCover'
 import DateForm from './DateForm'
 import GaleriaTab from './GaleriaTab'
 import EstadisticasTab from './EstadisticasTab'
+import PoemasTab from './PoemasTab'
 
 const UNDO_WINDOW_MS = 4500
 
 const TABS = [
   { value: 'citas', label: 'Citas', icon: Heart },
+  { value: 'poemas', label: 'Poemas', icon: Heart },
   { value: 'estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { value: 'galeria', label: 'Galería', icon: Images },
 ]
@@ -462,6 +464,10 @@ export default function CouplePage() {
 
           <TabsContent value="galeria" className={TAB_CONTENT_CLASS}>
             <GaleriaTab />
+          </TabsContent>
+
+          <TabsContent value="poemas" className={TAB_CONTENT_CLASS}>
+            <PoemasTab canManage={canManage} />
           </TabsContent>
 
           {canManage && (

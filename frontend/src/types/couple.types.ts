@@ -62,3 +62,15 @@ export interface GalleryPhoto extends CoupleDatePhoto {
   dateOccurredOn: string // YYYY-MM-DD
   datePlace: string
 }
+
+export interface Poem {
+  id: number
+  content: string
+  isMine: boolean
+  isSeen: boolean
+  createdAt: string
+}
+
+export interface PoemInput {
+  content: string
+}
