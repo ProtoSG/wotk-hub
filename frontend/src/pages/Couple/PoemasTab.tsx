@@ -44,7 +44,7 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
   }, [listPoems])
 
   useEffect(() => {
-    setLoading(true) // eslint-disable-line react-hooks/cascading-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
 
