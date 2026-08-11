@@ -16,6 +16,7 @@ import {
   Snowflake,
   Pencil,
   MessageCircle,
+  Camera,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +29,7 @@ import { usePetApi } from '@/hooks/usePetApi'
 import { useAuthStore } from '@/store/authStore'
 import type { CareAction, PetActionStatus, PetMood, PetState } from '@/types/pet.types'
 import PetChat from './PetChat'
+import PetCamera from './PetCamera'
 import { MOOD_SPRITE } from './petSprites'
 
 const MOOD_LABEL: Record<PetMood, string> = {
@@ -186,6 +188,7 @@ export default function MascotaTab() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(false)
   const [nameInput, setNameInput] = useState('')
   // Whether the shop's "Cambiar nombre" item has been tapped open to reveal
   // its input — starts collapsed so the shop's item list stays scannable
@@ -431,6 +434,15 @@ export default function MascotaTab() {
               onClick={() => setChatOpen(true)}
             >
               <MessageCircle className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Tomar foto con la mascota"
+              disabled={!pet}
+              onClick={() => setCameraOpen(true)}
+            >
+              <Camera className="h-4 w-4 text-muted-foreground" />
             </Button>
             {canReset && (
               <Button
@@ -716,6 +728,17 @@ export default function MascotaTab() {
 
       {pet && (
         <PetChat open={chatOpen} onOpenChange={setChatOpen} mood={pet.mood} petName={pet.name} />
+      )}
+      {pet && (
+        <PetCamera
+          open={cameraOpen}
+          onOpenChange={setCameraOpen}
+          mood={pet.mood}
+          onPhotoTaken={(url) => {
+            // Future: could show a toast or gallery — for now just close
+            toast.success('¡Foto guardada!')
+          }}
+        />
       )}
     </CozyCard>
   )
