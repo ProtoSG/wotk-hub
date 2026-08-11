@@ -4,6 +4,7 @@ import { Camera, X, Move, Image, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/axios'
 import { MOOD_SPRITE } from './petSprites'
 import type { PetMood } from '@/types/pet.types'
 
@@ -187,18 +188,9 @@ export default function PetCamera({ open, onOpenChange, mood, onPhotoTaken }: Pe
       try {
         const formData = new FormData()
         formData.append('photo', blob, 'pet-photo.jpg')
-        const res = await fetch('/api/pet/photos', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ message: 'Error uploading photo' }))
-          throw new Error(err.message || 'Error uploading photo')
-        }
-        const data = await res.json()
+        const res = await api.post<{ url: string }>('/api/pet/photos', formData, { timeout: 120000 })
         toast.success('¡Foto guardada!')
-        onPhotoTaken(data.url)
+        onPhotoTaken(res.data.url)
         onOpenChange(false)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'No se pudo subir la foto')
