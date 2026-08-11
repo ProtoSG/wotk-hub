@@ -159,7 +159,7 @@ export default function PetCamera({ open, onOpenChange, mood, onPhotoTaken }: Pe
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
     // Draw overlay at its dragged position
-    const overlayImg = new Image()
+    const overlayImg = document.createElement('img')
     overlayImg.crossOrigin = 'anonymous'
     overlayImg.src = activeOverlay.src
     await new Promise<void>((resolve) => {
