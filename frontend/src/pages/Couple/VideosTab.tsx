@@ -249,7 +249,10 @@ export default function VideosTab({ canManage, onExit }: Props) {
                 className="absolute inset-0 h-full w-full object-contain"
                 preload="metadata"
                 playsInline
-                muted
+                // Not muted: play() only ever runs from togglePlay, itself
+                // fired by a user click on the play button — a real user
+                // gesture, so browser autoplay-with-sound restrictions don't
+                // apply here.
                 loop
                 onEnded={() => setPlayingId(null)}
                 onLoadedData={(e) => {
