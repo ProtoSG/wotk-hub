@@ -552,6 +552,17 @@ func Migrate(db *sql.DB) error {
 			created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_couple_date_videos_date_id ON couple_date_videos (date_id)`,
+		// Pet photos — snapshots taken via the camera in MascotaTab. Object
+		// key is the durable MinIO pointer; the URL is returned freshly
+		// presigned per request (never stored). Same object-storage-pointer
+		// shape as couple_date_photos, no thumbnail needed here.
+		`CREATE TABLE IF NOT EXISTS pet_photos (
+			id         BIGSERIAL PRIMARY KEY,
+			team_id    BIGINT NOT NULL REFERENCES users(id),
+			object_key TEXT   NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_photos_team_id ON pet_photos (team_id)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

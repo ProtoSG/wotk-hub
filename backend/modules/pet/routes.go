@@ -3,24 +3,24 @@ package pet
 import (
 	"database/sql"
 	"net/http"
+	"workhub/storage"
 
 	chi "github.com/go-chi/chi/v5"
 )
 
 // Routes returns the router for the shared couple pet. opencodeAPIKey and
 // opencodeModel back the /chat route (see chat.go); elevenLabsAPIKey and
-// elevenLabsVoiceID back the /speak route (see speak.go). An empty key
-// doesn't change what's mounted here (unlike ytdlp's public route or push's
-// whole module) — Chat/Speak themselves 503 per-request when unconfigured,
-// since both live inside this existing pet router rather than a standalone
-// module with a mount-time on/off switch.
-func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenLabsVoiceID string) http.Handler {
+// elevenLabsVoiceID back the /speak route (see speak.go). photoStorage backs
+// the photo routes (photos.go); it may be nil, in which case photo handlers
+// return 503 — same pattern couple.Routes uses for its own photo storage.
+func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenLabsVoiceID string, photoStorage *storage.Client) http.Handler {
 	h := &handler{
 		db:                db,
 		opencodeAPIKey:    opencodeAPIKey,
 		opencodeModel:     opencodeModel,
 		elevenLabsAPIKey:  elevenLabsAPIKey,
 		elevenLabsVoiceID: elevenLabsVoiceID,
+		storage:           photoStorage,
 	}
 	r := chi.NewRouter()
 
@@ -35,6 +35,11 @@ func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenL
 	r.Post("/reset", h.Reset)
 	r.Post("/chat", h.Chat)
 	r.Post("/speak", h.Speak)
+
+	// Photo routes — storage may be nil (see above).
+	r.Post("/photos", h.UploadPhoto)
+	r.Get("/photos", h.ListPetPhotos)
+	r.Delete("/photos/{photoId}", h.DeletePetPhoto)
 
 	return r
 }
