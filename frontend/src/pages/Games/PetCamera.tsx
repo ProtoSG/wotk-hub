@@ -43,10 +43,14 @@ export default function PetCamera({ open, onOpenChange, mood, onPhotoTaken }: Pe
   // Start camera when dialog opens
   useEffect(() => {
     if (!open) return
-    setCameraError(null)
-    setCameraReady(false)
-    setActiveOverlay(OVERLAY_OPTIONS.find(o => o.src === MOOD_SPRITE[mood]) ?? OVERLAY_OPTIONS[0])
-    setOverlayPos({ x: 50, y: 50 })
+    // Defer state updates to avoid cascading renders within the same effect
+    const initCamera = () => {
+      setCameraError(null)
+      setCameraReady(false)
+      setActiveOverlay(OVERLAY_OPTIONS.find(o => o.src === MOOD_SPRITE[mood]) ?? OVERLAY_OPTIONS[0])
+      setOverlayPos({ x: 50, y: 50 })
+    }
+    queueMicrotask(initCamera)
 
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'environment' } })
