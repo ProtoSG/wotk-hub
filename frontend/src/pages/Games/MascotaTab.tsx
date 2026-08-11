@@ -734,7 +734,7 @@ export default function MascotaTab() {
           open={cameraOpen}
           onOpenChange={setCameraOpen}
           mood={pet.mood}
-          onPhotoTaken={(url) => {
+          onPhotoTaken={() => {
             // Future: could show a toast or gallery — for now just close
             toast.success('¡Foto guardada!')
           }}
