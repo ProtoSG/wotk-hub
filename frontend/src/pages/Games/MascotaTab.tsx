@@ -447,6 +447,7 @@ export default function MascotaTab() {
               variant="ghost"
               size="icon"
               aria-label="Chatear con la mascota"
+              title="Chatear con la mascota"
               disabled={!pet}
               onClick={() => setChatOpen(true)}
             >
@@ -456,31 +457,33 @@ export default function MascotaTab() {
               variant="ghost"
               size="icon"
               aria-label="Tomar foto con la mascota"
+              title="Tomar foto con la mascota"
               disabled={!pet}
               onClick={() => setCameraOpen(true)}
             >
               <Camera className="h-4 w-4 text-muted-foreground" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Ver galería de fotos"
+              title="Ver galería de fotos"
+              onClick={() => setGalleryOpen(true)}
+            >
+              <Images className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            <div className="w-px h-5 bg-border" />
             {canReset && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Ver galería de fotos"
-                  onClick={() => setGalleryOpen(true)}
-                >
-                  <Images className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Reiniciar estado"
-                  disabled={!pet || busy}
-                  onClick={() => setResetDialogOpen(true)}
-                >
-                  <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Reiniciar estado"
+                title="Reiniciar estado"
+                disabled={!pet || busy}
+                onClick={() => setResetDialogOpen(true)}
+              >
+                <RotateCcw className="h-4 w-4 text-destructive" />
+              </Button>
             )}
           </div>
         </div>
