@@ -4,7 +4,7 @@ import { Camera, X, Move, Image, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { api } from '@/lib/axios'
+import api from '@/lib/axios'
 import { MOOD_SPRITE } from './petSprites'
 import type { PetMood } from '@/types/pet.types'
 
