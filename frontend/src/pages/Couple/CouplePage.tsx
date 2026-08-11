@@ -480,7 +480,7 @@ export default function CouplePage() {
           )}
 
           <TabsContent value="videos" className={TAB_CONTENT_CLASS}>
-            <VideosTab canManage={canManage} />
+            <VideosTab canManage={canManage} onExit={() => goToTab('citas')} />
           </TabsContent>
         </Tabs>
       </div>

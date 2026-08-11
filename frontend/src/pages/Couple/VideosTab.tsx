@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
-import { Loader2, Pause, Play, Trash2, Upload, VideoOff } from 'lucide-react'
+import { ChevronLeft, Loader2, Pause, Play, Trash2, Upload, VideoOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -26,13 +27,22 @@ function formatDuration(totalSeconds: number): string {
 
 interface Props {
   canManage: boolean
+  // Returns to the "citas" tab. VideosTab renders through a portal straight
+  // to <body>, so it sits above AppLayout's Sidebar/TopBar/padding entirely —
+  // there's no surrounding chrome left to provide a way back, so the feed
+  // needs its own back button wired to this.
+  onExit: () => void
 }
 
 // TikTok/Reels-style vertical scroll feed — one full-screen video per snap point.
-// Uses 100dvh (dynamic viewport height) so it truly fills the mobile screen.
-// Video element is always in DOM but hidden behind the thumbnail when paused;
-// thumbnail lifts to reveal the playing video underneath.
-export default function VideosTab({ canManage }: Props) {
+// Rendered through a portal to document.body (not inline in the tab tree):
+// AppLayout wraps routes in <main className="p-6"> under a TopBar, and
+// CouplePage's TabsContent adds its own mt-4/animate-in transform — every one
+// of those clips or insets a plain `fixed`/`100dvh` element, since a CSS
+// transform on any ancestor (even the identity one animate-in leaves behind)
+// creates a new containing block. Portaling to <body> sidesteps all of it and
+// gets a true edge-to-edge overlay, same as native TikTok/Reels.
+export default function VideosTab({ canManage, onExit }: Props) {
   const [entries, setEntries] = useState<VideoEntry[]>([])
   const [dates, setDates] = useState<CoupleDate[]>([])
   const [loading, setLoading] = useState(true)
@@ -155,16 +165,19 @@ export default function VideosTab({ canManage }: Props) {
   }
 
   if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
+    return createPortal(
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black text-muted-foreground">
+        <BackButton onExit={onExit} />
         <Loader2 size={24} className="animate-spin" />
-      </div>
+      </div>,
+      document.body
     )
   }
 
   if (entries.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+    return createPortal(
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black text-center text-muted-foreground">
+        <BackButton onExit={onExit} />
         <VideoOff className="h-10 w-10" />
         <p className="text-base font-medium">Todavía no hay videos</p>
         {canManage && <p className="text-sm">Usá el botón + para subir el primero</p>}
@@ -190,12 +203,15 @@ export default function VideosTab({ canManage }: Props) {
           onUpload={handleUpload}
           dates={dates}
         />
-      </div>
+      </div>,
+      document.body
     )
   }
 
-  return (
-    <>
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black">
+      <BackButton onExit={onExit} />
+
       {/* Vertical snap scroll — TikTok/Reels style, truly full-screen with 100dvh */}
       <div
         ref={scrollRef}
@@ -334,14 +350,18 @@ export default function VideosTab({ canManage }: Props) {
       </div>
 
       {/* Counter pill */}
-      <div className="pointer-events-none absolute top-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+      <div className="pointer-events-none fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
         {activeIndex + 1} / {entries.length}
       </div>
 
-      {/* Upload FAB */}
+      {/* Upload FAB — parked top-right (mirrors BackButton on the left) instead
+          of its usual bottom-right spot: down there it collides with the
+          per-video action rail (pause/delete), which claims that corner in
+          this feed. */}
       {canManage && (
         <FloatingActionButton
           label="Subir video"
+          className="top-[calc(env(safe-area-inset-top)+1rem)] bottom-auto"
           onClick={() => {
             setSelectedDateId('')
             setSelectedFileName('')
@@ -363,7 +383,24 @@ export default function VideosTab({ canManage }: Props) {
         onUpload={handleUpload}
         dates={dates}
       />
-    </>
+    </div>,
+    document.body
+  )
+}
+
+// Back button — top-left, mirrors the close affordance of native
+// TikTok/Reels. Needed because the fullscreen portal covers TopBar/Sidebar,
+// so there's no other way back to "citas" while a video is open.
+function BackButton({ onExit }: { onExit: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onExit}
+      aria-label="Volver"
+      className="fixed left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition-colors hover:bg-black/70"
+    >
+      <ChevronLeft className="h-6 w-6" />
+    </button>
   )
 }
 
