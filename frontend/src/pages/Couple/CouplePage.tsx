@@ -222,13 +222,16 @@ export default function CouplePage() {
   const { listDates, updateDate, deleteDate } = useCoupleApi()
   const role = useAuthStore((s) => s.user?.role)
   const pendingDeletes = useRef(new Map<number, number>())
-  // Estadísticas is admin-only — frontend gate only (same as canManage/
-  // canSeePrice below), no backend enforcement. Filtered out of the tab
-  // list itself (not just the panel) so a guest can't reach it via a
-  // ?tab=estadisticas URL param either — useActiveTab falls back to the
+  // Estadísticas/Poemas are admin-only — frontend gate only (same as
+  // canManage/canSeePrice below), no backend enforcement. Filtered out of
+  // the tab list itself (not just the panel) so a guest can't reach them via
+  // a ?tab=estadisticas URL param either — useActiveTab falls back to the
   // default tab for any value not in this list.
+  // Videos IS visible to guests — canManage (below) still gates the upload
+  // FAB/dialog and delete buttons inside VideosTab, and the backend mirrors
+  // that: POST/DELETE /couple/dates/{id}/videos require admin, GET doesn't.
   const canManage = role === 'admin'
-  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.value !== 'estadisticas' && t.value !== 'poemas' && t.value !== 'videos')
+  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.value !== 'estadisticas' && t.value !== 'poemas')
   const { tab, setSearchParams } = useActiveTab(visibleTabs, 'citas')
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 

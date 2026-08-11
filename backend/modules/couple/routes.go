@@ -34,11 +34,12 @@ func Routes(db *sql.DB, photoStorage *storage.Client) http.Handler {
 	r.Delete("/dates/{id}/photos/{photoId}", h.DeletePhoto)
 	r.Get("/photos", h.ListGalleryPhotos)
 
-	r.Post("/dates/{id}/videos", h.UploadVideo)
-	r.Get("/dates/{id}/videos", h.ListVideos)
-	// Admin-only: the module as a whole is mounted for both admin and guest
-	// (see main.go), so deletion needs its own explicit role gate — same
+	// Upload/delete admin-only, list open to both: the module as a whole is
+	// mounted for both admin and guest (see main.go), so viewing is the
+	// default and write actions need their own explicit role gate — same
 	// pattern as /api/db's admin-only mount.
+	r.With(middleware.RequireRole("admin")).Post("/dates/{id}/videos", h.UploadVideo)
+	r.Get("/dates/{id}/videos", h.ListVideos)
 	r.With(middleware.RequireRole("admin")).Delete("/dates/{id}/videos/{videoId}", h.DeleteVideo)
 
 	r.Get("/poems", h.ListPoems)
