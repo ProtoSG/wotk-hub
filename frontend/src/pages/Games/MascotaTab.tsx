@@ -193,9 +193,8 @@ export default function MascotaTab() {
   const [chatOpen, setChatOpen] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const [galleryPhotos, setGalleryPhotos] = useState<PetPhoto[]>([])
+  const [galleryPhotos, setGalleryPhotos] = useState<PetPhoto[] | null>(null)
   const [previewPhoto, setPreviewPhoto] = useState<PetPhoto | null>(null)
-  const [galleryLoading, setGalleryLoading] = useState(false)
   const [nameInput, setNameInput] = useState('')
   // Whether the shop's "Cambiar nombre" item has been tapped open to reveal
   // its input — starts collapsed so the shop's item list stays scannable
@@ -324,11 +323,17 @@ export default function MascotaTab() {
   // Fetch gallery photos when the gallery dialog opens.
   useEffect(() => {
     if (!galleryOpen) return
-    setGalleryLoading(true)
-    listPetPhotos()
-      .then(setGalleryPhotos)
-      .catch(() => toast.error('No se pudieron cargar las fotos'))
-      .finally(() => setGalleryLoading(false))
+    let cancelled = false
+    async function load() {
+      try {
+        const photos = await listPetPhotos()
+        if (!cancelled) setGalleryPhotos(photos)
+      } catch {
+        if (!cancelled) toast.error('No se pudieron cargar las fotos')
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [galleryOpen, listPetPhotos])
 
   function playReaction(kind: CareAction) {
@@ -776,7 +781,7 @@ export default function MascotaTab() {
           <DialogHeader>
             <DialogTitle className="font-pixel text-xl tracking-wide">Galería de fotos</DialogTitle>
           </DialogHeader>
-          {galleryLoading ? (
+          {galleryPhotos === null ? (
             <div className="grid grid-cols-3 gap-2">
               {[...Array(6)].map((_, i) => (
                 <Skeleton key={i} className="aspect-square rounded-sm" />
