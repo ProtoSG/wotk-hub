@@ -17,6 +17,7 @@ import {
   Pencil,
   MessageCircle,
   Camera,
+  Images,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { usePetApi } from '@/hooks/usePetApi'
+import type { PetPhoto } from '@/hooks/usePetApi'
 import { useAuthStore } from '@/store/authStore'
 import type { CareAction, PetActionStatus, PetMood, PetState } from '@/types/pet.types'
 import PetChat from './PetChat'
@@ -174,6 +176,7 @@ export default function MascotaTab() {
     buyStreakFreeze,
     renamePet,
     resetPet,
+    listPetPhotos,
   } = usePetApi()
   const role = useAuthStore((s) => s.user?.role)
   const canReset = role === 'admin'
@@ -189,6 +192,10 @@ export default function MascotaTab() {
   const [shopOpen, setShopOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [galleryPhotos, setGalleryPhotos] = useState<PetPhoto[]>([])
+  const [previewPhoto, setPreviewPhoto] = useState<PetPhoto | null>(null)
+  const [galleryLoading, setGalleryLoading] = useState(false)
   const [nameInput, setNameInput] = useState('')
   // Whether the shop's "Cambiar nombre" item has been tapped open to reveal
   // its input — starts collapsed so the shop's item list stays scannable
@@ -313,6 +320,16 @@ export default function MascotaTab() {
     // guard reads `pet` again, so there's no stale-closure risk either.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pet?.mood])
+
+  // Fetch gallery photos when the gallery dialog opens.
+  useEffect(() => {
+    if (!galleryOpen) return
+    setGalleryLoading(true)
+    listPetPhotos()
+      .then(setGalleryPhotos)
+      .catch(() => toast.error('No se pudieron cargar las fotos'))
+      .finally(() => setGalleryLoading(false))
+  }, [galleryOpen, listPetPhotos])
 
   function playReaction(kind: CareAction) {
     setReactingAction(kind)
@@ -445,15 +462,25 @@ export default function MascotaTab() {
               <Camera className="h-4 w-4 text-muted-foreground" />
             </Button>
             {canReset && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Reiniciar estado"
-                disabled={!pet || busy}
-                onClick={() => setResetDialogOpen(true)}
-              >
-                <RotateCcw className="h-4 w-4 text-muted-foreground" />
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Ver galería de fotos"
+                  onClick={() => setGalleryOpen(true)}
+                >
+                  <Images className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Reiniciar estado"
+                  disabled={!pet || busy}
+                  onClick={() => setResetDialogOpen(true)}
+                >
+                  <RotateCcw className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -740,6 +767,60 @@ export default function MascotaTab() {
           }}
         />
       )}
+
+      <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-pixel text-xl tracking-wide">Galería de fotos</DialogTitle>
+          </DialogHeader>
+          {galleryLoading ? (
+            <div className="grid grid-cols-3 gap-2">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="aspect-square rounded-sm" />
+              ))}
+            </div>
+          ) : galleryPhotos.length === 0 ? (
+            <p className="py-8 text-center font-pixel text-sm text-muted-foreground">
+              Aún no hay fotos. ¡Tómate una con la cámara!
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {galleryPhotos.map((photo) => (
+                <button
+                  key={photo.id}
+                  type="button"
+                  onClick={() => setPreviewPhoto(photo)}
+                  className="overflow-hidden rounded-sm border-2 transition-transform active:scale-[0.97]"
+                  style={{
+                    borderColor: 'color-mix(in oklch, var(--border) 70%, transparent)',
+                    boxShadow: '2px 2px 0 0 color-mix(in oklch, var(--foreground) 15%, transparent)',
+                  }}
+                >
+                  <img
+                    src={photo.url}
+                    alt={`Foto ${photo.id}`}
+                    className="h-full w-full object-cover"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!previewPhoto} onOpenChange={(open) => !open && setPreviewPhoto(null)}>
+        <DialogContent className="flex max-w-fit items-center justify-center p-4">
+          {previewPhoto && (
+            <img
+              src={previewPhoto.url}
+              alt={`Foto ${previewPhoto.id}`}
+              className="max-h-[80vh] max-w-full object-contain"
+              style={{ imageRendering: 'pixelated' }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </CozyCard>
   )
 }
