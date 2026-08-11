@@ -2,6 +2,12 @@ import { useCallback } from 'react'
 import api from '@/lib/axios'
 import type { PetState } from '@/types/pet.types'
 
+export interface PetPhoto {
+  id: number
+  url: string
+  createdAt: string
+}
+
 // Every function wrapped in useCallback with an empty dep array — api is a
 // stable module import, so nothing here legitimately changes across
 // renders. Without this, any effect listing one of these in its deps never
@@ -59,6 +65,23 @@ export function usePetApi() {
     return res.data
   }, [])
 
+  const uploadPetPhoto = useCallback(async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData()
+    formData.append('photo', file)
+    // Long timeout: camera captures are large and may be on slow connections.
+    const res = await api.post<{ url: string }>('/api/pet/photos', formData, { timeout: 120000 })
+    return res.data
+  }, [])
+
+  const listPetPhotos = useCallback(async (): Promise<PetPhoto[]> => {
+    const res = await api.get<{ photos: PetPhoto[] }>('/api/pet/photos')
+    return res.data.photos
+  }, [])
+
+  const deletePetPhoto = useCallback(async (photoId: number): Promise<void> => {
+    await api.delete(`/api/pet/photos/${photoId}`)
+  }, [])
+
   return {
     getPetState,
     bathePet,
@@ -69,5 +92,8 @@ export function usePetApi() {
     buyStreakFreeze,
     renamePet,
     resetPet,
+    uploadPetPhoto,
+    listPetPhotos,
+    deletePetPhoto,
   }
 }
