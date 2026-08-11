@@ -9,6 +9,7 @@ import (
 	"workhub/httpx"
 	"workhub/middleware"
 	"workhub/shared/team"
+	"workhub/storage"
 )
 
 type handler struct {
@@ -24,6 +25,10 @@ type handler struct {
 	// threaded in the same way as opencodeAPIKey/opencodeModel above.
 	elevenLabsAPIKey  string
 	elevenLabsVoiceID string
+	// storage backs the photo upload/list/delete handlers (photos.go).
+	// Nil when MINIO_ENDPOINT is unset — photo handlers check for nil and
+	// return 503, same pattern couple.Routes uses.
+	storage *storage.Client
 }
 
 // limaLoc is a deliberate duplicate of the same constant already living in
