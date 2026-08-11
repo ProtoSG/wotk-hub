@@ -240,7 +240,13 @@ export default function VideosTab({ canManage, onExit }: Props) {
                   else videoRefs.current.delete(entry.video.id)
                 }}
                 src={entry.video.url}
-                className="absolute inset-0 h-full w-full object-cover"
+                // object-contain, not object-cover: backend only scales
+                // height to 720 (scale=-2:720 in transcode720p), it never
+                // forces a portrait canvas, so a landscape upload stays
+                // landscape. Cover would crop its sides off to fill a 9:16
+                // screen; contain letterboxes instead — matches native
+                // TikTok/Reels behavior for non-vertical clips.
+                className="absolute inset-0 h-full w-full object-contain"
                 preload="metadata"
                 playsInline
                 muted
@@ -259,7 +265,7 @@ export default function VideosTab({ canManage, onExit }: Props) {
               <img
                 src={entry.video.thumbnailUrl}
                 alt=""
-                className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+                className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-300 ${
                   isPlaying ? 'pointer-events-none opacity-0' : 'opacity-100'
                 }`}
                 loading={index <= 2 ? 'eager' : 'lazy'}
