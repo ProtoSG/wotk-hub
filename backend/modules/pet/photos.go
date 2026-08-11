@@ -17,7 +17,6 @@ import (
 	"workhub/httpx"
 	"workhub/middleware"
 	"workhub/shared/team"
-	"workhub/storage"
 )
 
 // maxPhotoUploadBytes caps a single photo upload. httpx.DefaultMaxBodyBytes
