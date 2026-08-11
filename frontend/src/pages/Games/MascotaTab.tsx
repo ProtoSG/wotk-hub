@@ -20,7 +20,7 @@ import {
   Images,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent, CardHeader } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -442,8 +442,7 @@ export default function MascotaTab() {
   return (
     <CozyCard className="mx-auto max-w-md animate-card-in">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="font-pixel text-2xl tracking-wide">{pet?.name || 'Nuestra mascota'}</CardTitle>
+        <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-2">
             {pet && <SparksBadge sparks={pet.sparks} />}
             {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
@@ -477,20 +476,19 @@ export default function MascotaTab() {
             >
               <Images className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <div className="w-px h-5 bg-border" />
-            {canReset && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Reiniciar estado"
-                title="Reiniciar estado"
-                disabled={!pet || busy}
-                onClick={() => setResetDialogOpen(true)}
-              >
-                <RotateCcw className="h-4 w-4 text-destructive" />
-              </Button>
-            )}
           </div>
+          {canReset && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Reiniciar estado"
+              title="Reiniciar estado"
+              disabled={!pet || busy}
+              onClick={() => setResetDialogOpen(true)}
+            >
+              <RotateCcw className="h-4 w-4 text-destructive" />
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
