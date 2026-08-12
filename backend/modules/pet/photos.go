@@ -212,3 +212,46 @@ func (h *handler) DeletePetPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteSuccess(w, http.StatusOK)
 }
+
+// ClearPetPhotos deletes every pet photo for the team — both the DB rows and
+// their MinIO objects. Same "DB row wins, storage delete is best-effort"
+// policy as DeletePetPhoto, just fanned out over every photo instead of one.
+func (h *handler) ClearPetPhotos(w http.ResponseWriter, r *http.Request) {
+	if h.storage == nil {
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "photo storage not configured")
+		return
+	}
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("pet: resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+
+	rows, err := h.db.Query(`DELETE FROM pet_photos WHERE team_id = $1 RETURNING object_key`, teamID)
+	if err != nil {
+		log.Printf("pet: clear photos failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	var objectKeys []string
+	for rows.Next() {
+		var objectKey string
+		if err := rows.Scan(&objectKey); err != nil {
+			log.Printf("pet: scan cleared photo row failed: %v", err)
+			continue
+		}
+		objectKeys = append(objectKeys, objectKey)
+	}
+	rows.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	for _, objectKey := range objectKeys {
+		if err := h.storage.Delete(ctx, objectKey); err != nil {
+			log.Printf("pet: minio delete failed for %q during clear, DB row already gone: %v", objectKey, err)
+		}
+	}
+	log.Printf("pet: cleared %d photos for team %d", len(objectKeys), teamID)
+	httpx.WriteSuccess(w, http.StatusOK)
+}

@@ -78,8 +78,14 @@ export function usePetApi() {
     return res.data.photos
   }, [])
 
+  // Admin-only backend-side (see pet.DeletePetPhoto/ClearPetPhotos) — same
+  // reasoning as resetPet, not just a frontend-hidden button.
   const deletePetPhoto = useCallback(async (photoId: number): Promise<void> => {
     await api.delete(`/api/pet/photos/${photoId}`)
+  }, [])
+
+  const clearPetPhotos = useCallback(async (): Promise<void> => {
+    await api.delete('/api/pet/photos')
   }, [])
 
   return {
@@ -95,5 +101,6 @@ export function usePetApi() {
     uploadPetPhoto,
     listPetPhotos,
     deletePetPhoto,
+    clearPetPhotos,
   }
 }

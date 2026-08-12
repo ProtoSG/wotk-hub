@@ -3,6 +3,7 @@ package pet
 import (
 	"database/sql"
 	"net/http"
+	"workhub/middleware"
 	"workhub/storage"
 
 	chi "github.com/go-chi/chi/v5"
@@ -36,10 +37,14 @@ func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenL
 	r.Post("/chat", h.Chat)
 	r.Post("/speak", h.Speak)
 
-	// Photo routes — storage may be nil (see above).
+	// Photo routes — storage may be nil (see above). Delete/clear admin-only,
+	// same reasoning as couple.Routes' video delete: the module as a whole
+	// is mounted for both admin and guest, so destructive actions need their
+	// own explicit role gate.
 	r.Post("/photos", h.UploadPhoto)
 	r.Get("/photos", h.ListPetPhotos)
-	r.Delete("/photos/{photoId}", h.DeletePetPhoto)
+	r.With(middleware.RequireRole("admin")).Delete("/photos/{photoId}", h.DeletePetPhoto)
+	r.With(middleware.RequireRole("admin")).Delete("/photos", h.ClearPetPhotos)
 
 	return r
 }
