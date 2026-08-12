@@ -232,13 +232,15 @@ func main() {
 	}
 
 	// Background job: remind the couple when each of the pet's 5 daily care
-	// actions unlocks. Same "sleep until the next precise instant" shape as
-	// the riddle reminder above, just generalized to whichever of 5 fixed
-	// hours is soonest (see push.NextPetActionTime) instead of one fixed
-	// noon — a separate goroutine rather than folding into the loop above
-	// since the two reminders are unrelated features that happen to share
-	// the same scheduling shape, not because there's any actual dependency
-	// between them.
+	// actions unlocks — AND when each one's deadline passes still undone
+	// (the "last call" push for pet.applyMissedWindowDecay's care_score
+	// penalty, so that's not silent). Same "sleep until the next precise
+	// instant" shape as the riddle reminder above, just generalized to
+	// whichever of 10 fixed hours is soonest (see push.NextPetReminderTime)
+	// instead of one fixed noon — a separate goroutine rather than folding
+	// into the loop above since the two reminders are unrelated features
+	// that happen to share the same scheduling shape, not because there's
+	// any actual dependency between them.
 	var petPushStop, petPushDone chan struct{}
 	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
 		petPushStop = make(chan struct{})
@@ -246,11 +248,11 @@ func main() {
 		go func() {
 			defer close(petPushDone)
 			for {
-				action, at := push.NextPetActionTime()
+				event, at := push.NextPetReminderTime()
 				timer := time.NewTimer(time.Until(at))
 				select {
 				case <-timer.C:
-					if err := push.CheckPetActionAndNotify(appDB, action, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject); err != nil {
+					if err := push.CheckPetReminderAndNotify(appDB, event, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject); err != nil {
 						log.Printf("push: pet reminder check failed: %v", err)
 					}
 				case <-petPushStop:

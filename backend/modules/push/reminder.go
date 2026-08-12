@@ -164,16 +164,21 @@ func NotifyPartnerSolved(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubje
 	}
 }
 
-// petActionSchedule mirrors pet.careActions' unlock hours — duplicated here
+// petReminderEvent is one scheduled instant this file might push a
+// notification at — either a care action unlocking, or (below) its window's
+// deadline passing.
+type petReminderEvent struct {
+	action string
+	hour   int
+	body   string
+}
+
+// petUnlockSchedule mirrors pet.careActions' unlockHour — duplicated here
 // rather than importing the pet package. This file already avoids depending
 // on games/pet Go packages, querying their tables directly via raw SQL
 // instead (see CheckUnsolvedAndNotify above); this is the same tradeoff,
 // just for a 5-row static table instead of a single Lima-offset constant.
-var petActionSchedule = []struct {
-	action string
-	hour   int
-	body   string
-}{
+var petUnlockSchedule = []petReminderEvent{
 	{"bathe", 7, "Es hora del baño 🛁"},
 	{"breakfast", 8, "Es hora del desayuno ☕"},
 	{"lunch", 12, "Es hora del almuerzo 🍽️"},
@@ -181,42 +186,54 @@ var petActionSchedule = []struct {
 	{"dinner", 19, "Es hora de la cena 🌙"},
 }
 
-// NextPetActionTime returns whichever of the 5 pet care actions unlocks
-// soonest — today's occurrence if still upcoming, otherwise tomorrow's.
-// Same shape as NextLimaNoon, generalized from 1 fixed instant to whichever
-// of 5 is closest.
-func NextPetActionTime() (action string, at time.Time) {
+// petDeadlineSchedule mirrors pet.careActions' deadlineHour — the "last
+// call" half of pet.applyMissedWindowDecay's missed-window care_score
+// penalty. Without this, that penalty was silent: care_score would drop the
+// moment a window closed, but nobody knew until they happened to open the
+// app. Fires at the same hour the penalty itself lands, so the copy can
+// truthfully say it already cost something rather than just warning it's
+// about to.
+var petDeadlineSchedule = []petReminderEvent{
+	{"bathe", 8, "Se pasó la hora del baño — le costó ánimo a la mascota 🛁⏰"},
+	{"breakfast", 12, "Se pasó la hora del desayuno — le costó ánimo a la mascota ☕⏰"},
+	{"lunch", 16, "Se pasó la hora del almuerzo — le costó ánimo a la mascota 🍽️⏰"},
+	{"play", 19, "Se pasó la hora de jugar — le costó ánimo a la mascota 🎾⏰"},
+	{"dinner", 22, "Se pasó la hora de la cena — le costó ánimo a la mascota 🌙⏰"},
+}
+
+// NextPetReminderTime returns whichever of the 10 scheduled pet-care events
+// (5 unlocks + 5 deadlines) fires soonest — today's occurrence if still
+// upcoming, otherwise tomorrow's. Same shape as NextLimaNoon, generalized
+// from 1 fixed instant to whichever of 10 is closest.
+func NextPetReminderTime() (event petReminderEvent, at time.Time) {
 	now := time.Now().In(limaLoc)
-	for _, a := range petActionSchedule {
-		candidate := time.Date(now.Year(), now.Month(), now.Day(), a.hour, 0, 0, 0, limaLoc)
+	consider := func(e petReminderEvent) {
+		candidate := time.Date(now.Year(), now.Month(), now.Day(), e.hour, 0, 0, 0, limaLoc)
 		if !candidate.After(now) {
 			candidate = candidate.Add(24 * time.Hour)
 		}
-		if action == "" || candidate.Before(at) {
-			action, at = a.action, candidate
+		if at.IsZero() || candidate.Before(at) {
+			event, at = e, candidate
 		}
 	}
-	return action, at
+	for _, e := range petUnlockSchedule {
+		consider(e)
+	}
+	for _, e := range petDeadlineSchedule {
+		consider(e)
+	}
+	return event, at
 }
 
-// CheckPetActionAndNotify runs once — intended to be called right at the
-// unlock hour for `action` (see NextPetActionTime) — and pushes a reminder
-// to every subscribed device unless that action is already done today.
-// Unlike CheckUnsolvedAndNotify (per-user riddle progress), the pet is one
-// shared state for the whole team, so there's a single done/not-done check
-// and every subscriber gets notified, not a per-user loop.
-func CheckPetActionAndNotify(db *sql.DB, action, vapidPublicKey, vapidPrivateKey, vapidSubject string) error {
-	var body string
-	for _, a := range petActionSchedule {
-		if a.action == action {
-			body = a.body
-			break
-		}
-	}
-	if body == "" {
-		return fmt.Errorf("push: unknown pet action %q", action)
-	}
-
+// CheckPetReminderAndNotify runs once — intended to be called right at
+// event.hour (see NextPetReminderTime) — and pushes event.body to every
+// subscribed device unless event.action is already done today. Unlike
+// CheckUnsolvedAndNotify (per-user riddle progress), the pet is one shared
+// state for the whole team, so there's a single done/not-done check and
+// every subscriber gets notified, not a per-user loop. The same done-check
+// covers both unlock and deadline events — an already-done action is
+// equally pointless to remind about either way.
+func CheckPetReminderAndNotify(db *sql.DB, event petReminderEvent, vapidPublicKey, vapidPrivateKey, vapidSubject string) error {
 	teamID, err := team.ResolveTeamID(db)
 	if err != nil {
 		return err
@@ -225,7 +242,7 @@ func CheckPetActionAndNotify(db *sql.DB, action, vapidPublicKey, vapidPrivateKey
 	var done bool
 	if err := db.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM pet_care_log WHERE team_id = $1 AND action = $2 AND care_date = $3)`,
-		teamID, action, today,
+		teamID, event.action, today,
 	).Scan(&done); err != nil {
 		return err
 	}
@@ -251,7 +268,7 @@ func CheckPetActionAndNotify(db *sql.DB, action, vapidPublicKey, vapidPrivateKey
 		return err
 	}
 
-	payload, err := json.Marshal(map[string]string{"title": "Nuestra mascota", "body": body})
+	payload, err := json.Marshal(map[string]string{"title": "Nuestra mascota", "body": event.body})
 	if err != nil {
 		return err
 	}

@@ -64,9 +64,15 @@ func dateOnly(s string) string {
 const (
 	decayPerDay = 15
 	careBoost   = 6
-	maxCare     = 100
-	minCare     = 0
-	defaultCare = 70
+	// careMissPenalty costs exactly what careBoost would have gained —
+	// missing an action's window costs you what doing it on time would've
+	// earned. Applied once per action per day when its deadlineHour passes
+	// still undone (see applyMissedWindowDecay), on top of decayPerDay,
+	// which still handles fully-absent PAST days.
+	careMissPenalty = 6
+	maxCare         = 100
+	minCare         = 0
+	defaultCare     = 70
 	// perfectDaySparks is the shop currency payout for completing all 5
 	// actions in one calendar day — awarded exactly once, at the moment the
 	// 5th action of the day is newly logged (see care()).
@@ -95,24 +101,27 @@ func moodFor(careScore int) string {
 }
 
 // actionDef pairs a care action's key (matches pet_care_log.action and the
-// route path) with the Lima hour it unlocks at. Unlock semantics: an action
-// becomes available starting at its hour and stays available for the rest
-// of the calendar day — it never locks back up once unlocked. That's
-// deliberate, same "gets sad, never permanently lost" principle as the rest
-// of this feature (see MascotaTab's reset dialog copy): a hard time window
-// that locked you out entirely would contradict that if the couple opens
-// the app late.
+// route path) with its Lima unlock/deadline hours. Unlock semantics: an
+// action becomes available starting at unlockHour and stays TAPPABLE for
+// the rest of the calendar day — it never locks back up, so opening the app
+// late never locks you out of doing it. deadlineHour is a separate,
+// softer boundary: once it passes with the action still undone,
+// applyMissedWindowDecay costs care_score for it (once), but the action
+// itself stays open — missing the window costs you, it doesn't lock you
+// out. deadlineHour is the next action's unlockHour (dinner's is 22, Lima
+// bedtime — same hour MascotaTab's SLEEP_START_HOUR already uses).
 type actionDef struct {
-	key        string
-	unlockHour int
+	key          string
+	unlockHour   int
+	deadlineHour int
 }
 
 var careActions = []actionDef{
-	{"bathe", 7},
-	{"breakfast", 8},
-	{"lunch", 12},
-	{"play", 16},
-	{"dinner", 19},
+	{"bathe", 7, 8},
+	{"breakfast", 8, 12},
+	{"lunch", 12, 16},
+	{"play", 16, 19},
+	{"dinner", 19, 22},
 }
 
 // unlockHourFor looks up an action's configured unlock hour from
@@ -142,6 +151,12 @@ type petRow struct {
 	sparks        int
 	streakFreezes int
 	name          string
+	// freezeJustConsumed is NOT persisted — a transient flag set true only
+	// on the exact loadOrCreate call where a streak freeze got spent (see
+	// the daysPassed > 0 gate above), so respondState can surface it to the
+	// frontend once, for a "se usó un congelador" toast, instead of the
+	// freeze spend happening silently.
+	freezeJustConsumed bool
 }
 
 // loadOrCreate fetches the team's pet row, creating it with the default
@@ -201,25 +216,37 @@ func (h *handler) loadOrCreate(teamID int64) (*petRow, error) {
 	// care action landed (now a SQL MAX over pet_care_log, replacing the old
 	// 3-column latestDate scan) and only break the streak once a full day has
 	// gone by with none — i.e. more than 1 day since that last action.
-	lastCareOn, err := h.latestCareDate(teamID)
-	if err != nil {
-		return nil, err
-	}
+	//
+	// Gated behind daysPassed > 0 — same guard the score-decay block below
+	// uses, and for the same reason: this used to run unconditionally on
+	// EVERY call, including the 8s-interval status poll. lastCareOn doesn't
+	// change between polls during an ongoing neglect gap, so daysSinceCare > 1
+	// stayed true poll after poll — freezeConsumed fired again each time,
+	// draining every banked streak freeze in the time it took to glance at
+	// the screen, instead of spending exactly one per gap. Restricting this
+	// to the same "we're catching up to a new day" moment daysPassed already
+	// identifies makes it fire (at most) once per day, like the decay below.
 	newStreak := p.streak
 	freezeConsumed := false
-	if lastCareOn == "" {
-		newStreak = 0
-	} else if lastCare, parseErr := time.ParseInLocation("2006-01-02", lastCareOn, limaLoc); parseErr == nil {
-		if daysSinceCare := int(todayMidnight.Sub(lastCare).Hours() / 24); daysSinceCare > 1 {
-			// A real neglect gap — but a banked streak freeze absorbs it
-			// once, same idea as Duolingo's streak freeze: spend a token
-			// instead of losing the streak. Only spends one if there's an
-			// actual nonzero streak worth protecting; a freeze never fires
-			// against an already-zero streak.
-			if p.streak > 0 && p.streakFreezes > 0 {
-				freezeConsumed = true
-			} else {
-				newStreak = 0
+	if daysPassed > 0 {
+		lastCareOn, err := h.latestCareDate(teamID)
+		if err != nil {
+			return nil, err
+		}
+		if lastCareOn == "" {
+			newStreak = 0
+		} else if lastCare, parseErr := time.ParseInLocation("2006-01-02", lastCareOn, limaLoc); parseErr == nil {
+			if daysSinceCare := int(todayMidnight.Sub(lastCare).Hours() / 24); daysSinceCare > 1 {
+				// A real neglect gap — but a banked streak freeze absorbs it
+				// once, same idea as Duolingo's streak freeze: spend a token
+				// instead of losing the streak. Only spends one if there's an
+				// actual nonzero streak worth protecting; a freeze never fires
+				// against an already-zero streak.
+				if p.streak > 0 && p.streakFreezes > 0 {
+					freezeConsumed = true
+				} else {
+					newStreak = 0
+				}
 			}
 		}
 	}
@@ -232,12 +259,29 @@ func (h *handler) loadOrCreate(teamID int64) (*petRow, error) {
 		}
 		needsUpdate = true
 	}
+	// Per-window decay for TODAY specifically — daysPassed above only ever
+	// covers full calendar days strictly before today, so there's no double
+	// counting: by the time "today" becomes "yesterday" and gets swept by
+	// that block, every one of its 5 windows has already had its own
+	// individual chance to decay here first.
+	missedPenalty, err := h.applyMissedWindowDecay(teamID)
+	if err != nil {
+		return nil, err
+	}
+	if missedPenalty > 0 {
+		p.careScore -= missedPenalty
+		if p.careScore < minCare {
+			p.careScore = minCare
+		}
+		needsUpdate = true
+	}
 	if newStreak != p.streak {
 		p.streak = newStreak
 		needsUpdate = true
 	}
 	if freezeConsumed {
 		p.streakFreezes--
+		p.freezeJustConsumed = true
 		needsUpdate = true
 	}
 	if needsUpdate {
@@ -300,6 +344,69 @@ func (h *handler) todayActionAttribution(teamID int64) (map[string]string, error
 	return byAction, rows.Err()
 }
 
+// todayDoneActions returns the set of the 5 actions already logged today for
+// this team — a lighter version of todayActionAttribution (no users JOIN)
+// for callers that only need "was this done", not who did it.
+func (h *handler) todayDoneActions(teamID int64) (map[string]bool, error) {
+	rows, err := h.db.Query(
+		`SELECT action FROM pet_care_log WHERE team_id = $1 AND care_date = $2`,
+		teamID, today(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	done := make(map[string]bool, len(careActions))
+	for rows.Next() {
+		var action string
+		if err := rows.Scan(&action); err != nil {
+			return nil, err
+		}
+		done[action] = true
+	}
+	return done, rows.Err()
+}
+
+// applyMissedWindowDecay checks each of today's 5 actions whose deadlineHour
+// has already passed: if it's still undone AND this is the first time
+// that's been noticed (tracked via pet_missed_actions so a client polling
+// GetState every 8s doesn't reapply the penalty every tick — the UNIQUE
+// constraint makes each INSERT idempotent), it costs careMissPenalty.
+// Returns the total penalty newly applied this call (0 most of the time —
+// only nonzero in the exact tick a window first closes on an undone
+// action).
+func (h *handler) applyMissedWindowDecay(teamID int64) (int, error) {
+	doneToday, err := h.todayDoneActions(teamID)
+	if err != nil {
+		return 0, err
+	}
+	hour := time.Now().In(limaLoc).Hour()
+
+	total := 0
+	for _, a := range careActions {
+		if doneToday[a.key] || hour < a.deadlineHour {
+			continue
+		}
+		var inserted int
+		err := h.db.QueryRow(
+			`INSERT INTO pet_missed_actions (team_id, action, care_date)
+			 VALUES ($1, $2, $3)
+			 ON CONFLICT (team_id, action, care_date) DO NOTHING
+			 RETURNING 1`,
+			teamID, a.key, today(),
+		).Scan(&inserted)
+		if err == sql.ErrNoRows {
+			continue // already recorded earlier today — penalty already applied
+		}
+		if err != nil {
+			return total, err
+		}
+		total += careMissPenalty
+	}
+	return total, nil
+}
+
 // respondState builds and writes the full 5-action State for the given
 // caught-up pet row: today's per-action done/attribution from pet_care_log,
 // plus locked/unlocksAtHour computed from the current Lima hour so the
@@ -320,6 +427,7 @@ func (h *handler) respondState(w http.ResponseWriter, p *petRow) {
 		status := ActionStatus{
 			Done:          done,
 			Locked:        hour < a.unlockHour,
+			Missed:        !done && hour >= a.deadlineHour,
 			UnlocksAtHour: a.unlockHour,
 		}
 		if done {
@@ -332,18 +440,19 @@ func (h *handler) respondState(w http.ResponseWriter, p *petRow) {
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, stateResponse{Pet: State{
-		CareScore:     p.careScore,
-		Mood:          moodFor(p.careScore),
-		Name:          p.name,
-		Streak:        p.streak,
-		Sparks:        p.sparks,
-		StreakFreezes: p.streakFreezes,
-		PerfectDay:    perfectDay,
-		Bathe:         statuses["bathe"],
-		Breakfast:     statuses["breakfast"],
-		Lunch:         statuses["lunch"],
-		Play:          statuses["play"],
-		Dinner:        statuses["dinner"],
+		CareScore:          p.careScore,
+		Mood:               moodFor(p.careScore),
+		Name:               p.name,
+		Streak:             p.streak,
+		Sparks:             p.sparks,
+		StreakFreezes:      p.streakFreezes,
+		FreezeJustConsumed: p.freezeJustConsumed,
+		PerfectDay:         perfectDay,
+		Bathe:              statuses["bathe"],
+		Breakfast:          statuses["breakfast"],
+		Lunch:              statuses["lunch"],
+		Play:               statuses["play"],
+		Dinner:             statuses["dinner"],
 	}})
 }
 
@@ -618,6 +727,18 @@ func (h *handler) Reset(w http.ResponseWriter, r *http.Request) {
 		teamID, today(),
 	); err != nil {
 		log.Printf("pet: reset care log failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	// Same reasoning, for the missed-window idempotency ledger — otherwise
+	// a window that already missed-decayed once today would stay "already
+	// recorded" post-reset and never be eligible to (correctly) decay again
+	// if it's missed a second time.
+	if _, err := h.db.Exec(
+		`DELETE FROM pet_missed_actions WHERE team_id = $1 AND care_date = $2`,
+		teamID, today(),
+	); err != nil {
+		log.Printf("pet: reset missed actions failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}

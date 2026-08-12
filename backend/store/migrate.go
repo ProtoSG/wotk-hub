@@ -563,6 +563,22 @@ func Migrate(db *sql.DB) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_pet_photos_team_id ON pet_photos (team_id)`,
+		// Idempotency ledger for the per-action-window care decay (see
+		// applyMissedWindowDecay in pet/handlers.go): a row here means "this
+		// action's deadline had already passed, undone, as of some earlier
+		// check today" — the UNIQUE constraint is what lets a status poll
+		// running every 8s apply the care_score penalty exactly once instead
+		// of every tick, same INSERT ... ON CONFLICT DO NOTHING RETURNING
+		// idempotency shape pet_care_log already uses.
+		`CREATE TABLE IF NOT EXISTS pet_missed_actions (
+			id         BIGSERIAL PRIMARY KEY,
+			team_id    BIGINT NOT NULL REFERENCES users(id),
+			action     TEXT NOT NULL CHECK (action IN ('bathe','breakfast','lunch','play','dinner')),
+			care_date  DATE NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (team_id, action, care_date)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_missed_actions_team_date ON pet_missed_actions (team_id, care_date)`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

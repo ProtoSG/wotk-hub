@@ -1,6 +1,7 @@
 package push
 
 import (
+	"strconv"
 	"testing"
 	"time"
 )
@@ -26,37 +27,45 @@ func TestNextLimaNoon(t *testing.T) {
 	}
 }
 
-func TestNextPetActionTime(t *testing.T) {
+func TestNextPetReminderTime(t *testing.T) {
 	before := time.Now()
-	action, next := NextPetActionTime()
+	event, next := NextPetReminderTime()
 
-	wantHours := map[string]int{"bathe": 7, "breakfast": 8, "lunch": 12, "play": 16, "dinner": 19}
-	wantHour, ok := wantHours[action]
-	if !ok {
-		t.Fatalf("NextPetActionTime() action = %q, want one of bathe/breakfast/lunch/play/dinner", action)
+	// Valid (action, hour) pairs across BOTH schedules — unlock and
+	// deadline. Unlike the single-schedule version this replaced, the same
+	// action now has two legitimate hours (e.g. "bathe" at unlock hour 7 or
+	// deadline hour 8), so a simple map[string]int no longer captures every
+	// valid combination.
+	valid := map[string]bool{}
+	for _, e := range petUnlockSchedule {
+		valid[e.action+":"+strconv.Itoa(e.hour)] = true
 	}
-	if got := next.Hour(); got != wantHour {
-		t.Errorf("NextPetActionTime() hour = %d, want %d for action %q", got, wantHour, action)
+	for _, e := range petDeadlineSchedule {
+		valid[e.action+":"+strconv.Itoa(e.hour)] = true
+	}
+	gotHour := next.Hour()
+	if !valid[event.action+":"+strconv.Itoa(gotHour)] {
+		t.Fatalf("NextPetReminderTime() = (action %q, hour %d), want a valid unlock/deadline pair", event.action, gotHour)
 	}
 	if got := next.Minute(); got != 0 {
-		t.Errorf("NextPetActionTime() minute = %d, want 0", got)
+		t.Errorf("NextPetReminderTime() minute = %d, want 0", got)
 	}
 	if got := next.Location().String(); got != "America/Lima" {
-		t.Errorf("NextPetActionTime() location = %s, want America/Lima", got)
+		t.Errorf("NextPetReminderTime() location = %s, want America/Lima", got)
 	}
 	if !next.After(before) {
-		t.Errorf("NextPetActionTime() = %v, want a time after %v", next, before)
+		t.Errorf("NextPetReminderTime() = %v, want a time after %v", next, before)
 	}
 	if until := next.Sub(before); until > 24*time.Hour {
-		t.Errorf("NextPetActionTime() is %v away, want at most 24h", until)
+		t.Errorf("NextPetReminderTime() is %v away, want at most 24h", until)
 	}
 
-	// The 5 unlock hours span the whole day (7..19), so whichever one is
-	// "next" should never be more than the largest gap between consecutive
-	// hours away — a loose upper bound that'd catch NextPetActionTime
-	// picking the wrong one entirely (e.g. always returning tomorrow's
-	// bathe regardless of the current hour).
-	if until := next.Sub(before); until > 12*time.Hour {
-		t.Errorf("NextPetActionTime() is %v away, want at most 12h given hourly spread 7..19", until)
+	// The combined unlock+deadline hours span the whole day (7..22), so
+	// whichever one is "next" should never be more than the largest gap
+	// between consecutive hours away — a loose upper bound that'd catch
+	// NextPetReminderTime picking the wrong one entirely (e.g. always
+	// returning tomorrow's bathe regardless of the current hour).
+	if until := next.Sub(before); until > 15*time.Hour {
+		t.Errorf("NextPetReminderTime() is %v away, want at most 15h given hourly spread 7..22", until)
 	}
 }
