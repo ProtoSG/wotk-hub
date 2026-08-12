@@ -441,54 +441,49 @@ export default function MascotaTab() {
 
   return (
     <CozyCard className="mx-auto max-w-md animate-card-in">
+      {/* HUD layout: currency/streak stats pinned top-left, action buttons
+          pinned top-right in a vertical stack — flex justify-between with
+          items-start (not absolute positioning) so the header's height
+          still comes from its tallest column naturally, no magic min-height
+          needed to fit the button stack. */}
       <CardHeader>
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between">
+          <div className="flex flex-wrap items-center gap-1.5">
             {pet && <SparksBadge sparks={pet.sparks} />}
             {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
             {!!pet?.streak && pet.streak > 0 && <StreakBadge streak={pet.streak} />}
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Chatear con la mascota"
-              title="Chatear con la mascota"
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            <HudIconButton
+              icon={MessageCircle}
+              label="Chatear con la mascota"
+              accent="--chart-2"
               disabled={!pet}
               onClick={() => setChatOpen(true)}
-            >
-              <MessageCircle className="h-4 w-4 text-muted-foreground" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Tomar foto con la mascota"
-              title="Tomar foto con la mascota"
+            />
+            <HudIconButton
+              icon={Camera}
+              label="Tomar foto con la mascota"
+              accent="--chart-4"
               disabled={!pet}
               onClick={() => setCameraOpen(true)}
-            >
-              <Camera className="h-4 w-4 text-muted-foreground" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Ver galería de fotos"
-              title="Ver galería de fotos"
+            />
+            <HudIconButton
+              icon={Images}
+              label="Ver galería de fotos"
+              accent="--chart-7"
               onClick={() => setGalleryOpen(true)}
-            >
-              <Images className="h-4 w-4 text-muted-foreground" />
-            </Button>
+            />
+            {canReset && (
+              <HudIconButton
+                icon={RotateCcw}
+                label="Reiniciar estado"
+                accent="--destructive"
+                disabled={!pet || busy}
+                onClick={() => setResetDialogOpen(true)}
+              />
+            )}
           </div>
-          {canReset && (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Reiniciar estado"
-              title="Reiniciar estado"
-              disabled={!pet || busy}
-              onClick={() => setResetDialogOpen(true)}
-            >
-              <RotateCcw className="h-4 w-4 text-destructive" />
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -828,6 +823,44 @@ export default function MascotaTab() {
         </DialogContent>
       </Dialog>
     </CozyCard>
+  )
+}
+
+// HUD action button — chat/camera/gallery/reset in the header's top-right
+// stack. Same pixel-game material as TurnCard/the Tienda button (color-mix
+// wash, hard-edged pixelShadow, border-2) instead of the plain ghost Button
+// these used before, so the whole header reads as one consistent HUD
+// instead of mixing a shadcn-default icon button in with the rest.
+function HudIconButton({
+  icon: Icon,
+  label,
+  accent,
+  onClick,
+  disabled,
+}: {
+  icon: typeof MessageCircle
+  label: string
+  accent: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm border-2 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+      style={{
+        backgroundColor: `color-mix(in oklch, var(${accent}) 22%, var(--card))`,
+        borderColor: `color-mix(in oklch, var(${accent}) 70%, var(--border))`,
+        color: `var(${accent})`,
+        boxShadow: pixelShadow(accent, 2),
+      }}
+    >
+      <Icon className="h-5 w-5" />
+    </button>
   )
 }
 
