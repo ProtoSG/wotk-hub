@@ -23,7 +23,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { CardContent, CardHeader } from '@/components/ui/card'
+import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -500,6 +500,11 @@ export default function MascotaTab() {
           default). They don't visually collide with the sprite since it's
           horizontally centered while the buttons hug the right edge. */}
       <CardHeader className="relative">
+        {/* Pet's name — was here originally (see git history), dropped
+            somewhere during an earlier header restructure before this
+            session touched the file. Restored: pr-14 clears the absolute
+            button stack the same way the badge row below already does. */}
+        <CardTitle className="pr-14 font-pixel text-2xl tracking-wide">{pet?.name || 'Nuestra mascota'}</CardTitle>
         <div className="flex flex-wrap items-center gap-1.5 pr-14">
           {pet && <SparksBadge sparks={pet.sparks} />}
           {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
@@ -1221,7 +1226,7 @@ function TurnCard({
           </p>
         )}
         {!status.locked && missed && (
-          <p className="mt-1 font-pixel text-sm tracking-wide opacity-80">Se pasó la hora — igual suma si lo hacés</p>
+          <p className="mt-1 font-pixel text-sm tracking-wide opacity-80">Se pasó la hora</p>
         )}
       </div>
       {!status.locked && <span className="font-pixel text-sm opacity-70">Tocar</span>}

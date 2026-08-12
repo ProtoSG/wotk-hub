@@ -14,7 +14,10 @@ import (
 // elevenLabsVoiceID back the /speak route (see speak.go). photoStorage backs
 // the photo routes (photos.go); it may be nil, in which case photo handlers
 // return 503 — same pattern couple.Routes uses for its own photo storage.
-func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenLabsVoiceID string, photoStorage *storage.Client) http.Handler {
+// vapidPublicKey/vapidPrivateKey/vapidSubject are empty when push isn't
+// configured — care() checks before attempting a partner notification, same
+// pattern games.Routes already uses for its own solved-riddle push.
+func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenLabsVoiceID string, photoStorage *storage.Client, vapidPublicKey, vapidPrivateKey, vapidSubject string) http.Handler {
 	h := &handler{
 		db:                db,
 		opencodeAPIKey:    opencodeAPIKey,
@@ -22,6 +25,9 @@ func Routes(db *sql.DB, opencodeAPIKey, opencodeModel, elevenLabsAPIKey, elevenL
 		elevenLabsAPIKey:  elevenLabsAPIKey,
 		elevenLabsVoiceID: elevenLabsVoiceID,
 		storage:           photoStorage,
+		vapidPublicKey:    vapidPublicKey,
+		vapidPrivateKey:   vapidPrivateKey,
+		vapidSubject:      vapidSubject,
 	}
 	r := chi.NewRouter()
 

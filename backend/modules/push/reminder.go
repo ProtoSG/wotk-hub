@@ -164,6 +164,73 @@ func NotifyPartnerSolved(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubje
 	}
 }
 
+// careActionBody has the "someone just did this" phrasing for each of the
+// 5 care actions — a %s for the actor's name, a %s for the pet's name.
+// Separate from petUnlockSchedule/petDeadlineSchedule's bodies, which are
+// phrased as "it's time to do this" / "you missed doing this", not "your
+// partner already did this".
+var careActionBody = map[string]string{
+	"bathe":     "%s bañó a %s 🛁",
+	"breakfast": "%s le dio el desayuno a %s ☕",
+	"lunch":     "%s le dio el almuerzo a %s 🍽️",
+	"play":      "%s jugó con %s 🎾",
+	"dinner":    "%s le dio la cena a %s 🌙",
+}
+
+// NotifyPartnerCareAction pushes "your partner just took care of the pet"
+// to every subscribed device belonging to anyone OTHER than actorUserID.
+// Same "fire from a goroutine, log-only on failure" contract as
+// NotifyPartnerSolved — a failed celebratory notification shouldn't be
+// visible as an API error to whoever just did the action. petName is passed
+// in by the caller (pet.care already has it loaded) rather than queried
+// here, unlike petDisplayName above — this fires from inside a request that
+// already paid for that read, no reason to pay for it twice.
+func NotifyPartnerCareAction(db *sql.DB, vapidPublicKey, vapidPrivateKey, vapidSubject string, actorUserID int64, actorName, action, petName string) {
+	tmpl, ok := careActionBody[action]
+	if !ok {
+		log.Printf("push: unknown care action %q, skipping partner notification", action)
+		return
+	}
+	name := petName
+	if name == "" {
+		name = "la mascota"
+	}
+
+	rows, err := db.Query(
+		`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id != $1`, actorUserID,
+	)
+	if err != nil {
+		log.Printf("push: load partner subscriptions failed: %v", err)
+		return
+	}
+	var subs []webpush.Subscription
+	for rows.Next() {
+		var s webpush.Subscription
+		if err := rows.Scan(&s.Endpoint, &s.Keys.P256dh, &s.Keys.Auth); err != nil {
+			log.Printf("push: scan partner subscription failed: %v", err)
+			continue
+		}
+		subs = append(subs, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		log.Printf("push: load partner subscriptions failed: %v", err)
+		return
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"title": name,
+		"body":  fmt.Sprintf(tmpl, actorName, name),
+	})
+	if err != nil {
+		log.Printf("push: marshal care action notification failed: %v", err)
+		return
+	}
+	for _, sub := range subs {
+		sendPush(db, sub, vapidPublicKey, vapidPrivateKey, vapidSubject, payload)
+	}
+}
+
 // petReminderEvent is one scheduled instant this file might push a
 // notification at — either a care action unlocking, or (below) its window's
 // deadline passing.
@@ -225,6 +292,24 @@ func NextPetReminderTime() (event petReminderEvent, at time.Time) {
 	return event, at
 }
 
+// petDisplayName reads pet_state.name for a team, raw SQL rather than
+// importing the pet package (same tradeoff every other pet.* query in this
+// file already takes — see petUnlockSchedule's comment). Falls back to
+// "Nuestra mascota" for an unnamed pet or a team whose pet_state row
+// doesn't exist yet — same fallback MascotaTab's own CardTitle uses
+// (`pet?.name || 'Nuestra mascota'`), so a push title and the in-app title
+// never disagree.
+func petDisplayName(db *sql.DB, teamID int64) string {
+	var name string
+	if err := db.QueryRow(`SELECT name FROM pet_state WHERE team_id = $1`, teamID).Scan(&name); err != nil {
+		return "Nuestra mascota"
+	}
+	if name == "" {
+		return "Nuestra mascota"
+	}
+	return name
+}
+
 // CheckPetReminderAndNotify runs once — intended to be called right at
 // event.hour (see NextPetReminderTime) — and pushes event.body to every
 // subscribed device unless event.action is already done today. Unlike
@@ -268,7 +353,10 @@ func CheckPetReminderAndNotify(db *sql.DB, event petReminderEvent, vapidPublicKe
 		return err
 	}
 
-	payload, err := json.Marshal(map[string]string{"title": "Nuestra mascota", "body": event.body})
+	// Was a hardcoded "Nuestra mascota" literal — ignored a rename entirely,
+	// so a couple who'd renamed their pet still got reminders titled with
+	// the generic fallback name forever. petDisplayName reads the real one.
+	payload, err := json.Marshal(map[string]string{"title": petDisplayName(db, teamID), "body": event.body})
 	if err != nil {
 		return err
 	}
