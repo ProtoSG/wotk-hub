@@ -11,9 +11,16 @@ type ActionStatus struct {
 	// By is the display name (users.name) of whoever logged this action
 	// today, nil if nobody has yet. Pointer rather than "" so the frontend
 	// can tell "not done" apart from a name that happened to be empty.
-	By            *string `json:"by,omitempty"`
-	Locked        bool    `json:"locked"`
-	UnlocksAtHour int     `json:"unlocksAtHour"`
+	By     *string `json:"by,omitempty"`
+	Locked bool    `json:"locked"`
+	// Missed is true once this action's window has closed (current Lima
+	// hour past its deadlineHour — see careActions) and it's still undone
+	// today. Doesn't lock the action out — it's still tappable for its
+	// normal boost — but the frontend uses this to flag it instead of
+	// showing it as a plain still-open turn: care_score already took the
+	// missed-window penalty for it (see applyMissedWindowDecay).
+	Missed        bool `json:"missed"`
+	UnlocksAtHour int  `json:"unlocksAtHour"`
 }
 
 // State is the shared couple pet's current status. CareScore itself isn't
@@ -40,6 +47,11 @@ type State struct {
 	// StreakFreezes is how many streak-protection tokens the team currently
 	// owns, bought in the shop.
 	StreakFreezes int `json:"streakFreezes"`
+	// FreezeJustConsumed is true only in the one response where a freeze was
+	// spent to protect the streak from a neglect gap — see petRow's
+	// freezeJustConsumed. The frontend uses this to toast it once instead of
+	// the spend happening silently.
+	FreezeJustConsumed bool `json:"freezeJustConsumed"`
 	// PerfectDay is true once all 5 actions are done today.
 	PerfectDay bool         `json:"perfectDay"`
 	Bathe      ActionStatus `json:"bathe"`

@@ -20,6 +20,7 @@ import {
   Images,
   Trash2,
   Loader2,
+  Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader } from '@/components/ui/card'
@@ -268,6 +269,7 @@ export default function MascotaTab() {
         const { pet: p } = await getPetState()
         setPet(p)
         setNameInput(p.name)
+        if (p.freezeJustConsumed) petToast(Snowflake, '--chart-3', 'Se usó un congelador de racha')
       } catch {
         toast.error('No se pudo cargar la mascota')
       }
@@ -289,6 +291,7 @@ export default function MascotaTab() {
       try {
         const { pet: p } = await getPetState()
         setPet(p)
+        if (p.freezeJustConsumed) petToast(Snowflake, '--chart-3', 'Se usó un congelador de racha')
       } catch {
         // Silent — a failed background poll isn't worth interrupting
         // whoever's looking at the screen with an error toast; the next
@@ -468,14 +471,20 @@ export default function MascotaTab() {
   // its real reaction, not the sleeping sprite.
   const showSleep = !reactionSprite && isSleepingNow()
 
-  // One action on stage at a time, in CARE_ACTIONS order — the first one
-  // not yet done today, whether or not its window is open yet. If it's
-  // open, it's the tappable turn; if not, it renders as "next up" so the
-  // couple can see what's coming without a whole grid of buttons. Multiple
-  // actions can be genuinely open at once (windows never re-lock — see
-  // CareActionConfig), so finishing the current turn just reveals whichever
-  // one is next in line, open or not.
-  const currentTurn = pet ? CARE_ACTIONS.find((a) => !pet[a.key].done) : undefined
+  // One action on stage at a time. Used to be strictly "first undone in
+  // CARE_ACTIONS order", which meant missing bathe (7am) in the morning
+  // pinned it on stage all day — you couldn't get to dinner (7pm), still
+  // wide open and on time, without tapping through the stale missed one
+  // first, even though nothing backend-side actually requires that order.
+  // Priority now: earliest still-on-time open action first, so the couple
+  // always sees something actionable-right-now; only if every open action
+  // is already missed does it fall back to the earliest missed one; only if
+  // NOTHING is open yet does it fall back to the earliest locked one, as a
+  // "next up" preview (same as before).
+  const undone = pet ? CARE_ACTIONS.filter((a) => !pet[a.key].done) : []
+  const currentTurn = pet
+    ? (undone.find((a) => !pet[a.key].locked && !pet[a.key].missed) ?? undone.find((a) => !pet[a.key].locked) ?? undone[0])
+    : undefined
 
   return (
     <CozyCard className="mx-auto max-w-md animate-card-in">
@@ -651,7 +660,7 @@ export default function MascotaTab() {
                   }}
                 >
                   <PartyPopper className="h-6 w-6 shrink-0" />
-                  <p className="font-pixel text-xl leading-none tracking-wide">Todo listo por hoy</p>
+                  <p className="font-pixel text-xl leading-none tracking-wide">¡Día completo!</p>
                 </div>
               )}
               <button
@@ -1074,14 +1083,47 @@ function healthTone(careScore: number): string {
   return '--destructive'
 }
 
+// Segments the bar into discrete pixel-HP-style blocks (Zelda/Metroid/
+// Stardew) instead of one continuously-tweened width — this was the only
+// surface in the whole feature with a smooth CSS width transition and no
+// pixelShadow, every other piece (Store, TurnCard, badges, TurnTracker) is
+// a hard-edged offset-shadow block. Each block is 10 care points; they snap
+// filled/empty rather than interpolate width, only their color fades.
+const HEALTH_SEGMENTS = 10
+
+// Heart + gold frame, RPG-HP-bar style — but flat, not the glossy beveled/
+// gradient gem look of a reference screenshot this was modeled on: this
+// project has an explicit "no skeuomorphic/glossy chrome" preference
+// elsewhere (a gold chip icon got rejected once), and staying flat/hard-
+// edged keeps this consistent with pixelShadow's own "flat offset block,
+// not a soft 3D bevel" material instead of quietly re-introducing it here.
+// --chart-3 (gold/mustard) reused for the frame — it's already this
+// feature's established identity (Tienda), not a new one-off color.
 function HealthBar({ careScore }: { careScore: number }) {
   const tone = healthTone(careScore)
+  const filled = Math.round((careScore / 100) * HEALTH_SEGMENTS)
   return (
-    <div className="h-3 w-full overflow-hidden rounded-sm border-2 border-border bg-muted">
-      <div
-        className="h-full transition-all duration-500"
-        style={{ width: `${careScore}%`, backgroundColor: `var(${tone})` }}
+    <div className="flex items-center gap-1.5">
+      <Heart
+        className="h-5 w-5 shrink-0 transition-colors duration-300"
+        style={{ color: `var(${tone})`, fill: `var(${tone})` }}
       />
+      <div
+        className="flex h-4 flex-1 gap-0.5 border-2 p-0.5"
+        style={{
+          borderColor: `color-mix(in oklch, var(--chart-3) 70%, var(--border))`,
+          backgroundColor: `color-mix(in oklch, var(--chart-3) 12%, var(--muted))`,
+          boxShadow: pixelShadow('--chart-3', 2),
+        }}
+      >
+        {Array.from({ length: HEALTH_SEGMENTS }, (_, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-xs transition-colors duration-300"
+            style={{ backgroundColor: i < filled ? `var(${tone})` : 'transparent' }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -1094,23 +1136,32 @@ function TurnTracker({ actions, pet }: { actions: CareActionConfig[]; pet: PetSt
     <div className="flex items-center justify-center gap-1.5">
       {actions.map((a) => {
         const status = pet[a.key]
-        const Icon = status.done ? Check : status.locked ? Lock : a.icon
+        // missed only matters once done/locked are ruled out — it never
+        // overrides a completed action, and a still-locked one can't have
+        // missed its window yet.
+        const missed = !status.done && !status.locked && status.missed
+        const Icon = status.done ? Check : status.locked ? Lock : missed ? Clock : a.icon
         const title = status.done
           ? `${a.label} — ${status.by}`
           : status.locked
             ? `${a.label}: desde las ${status.unlocksAtHour}:00`
-            : a.label
+            : missed
+              ? `${a.label}: se pasó la hora`
+              : a.label
+        const accent = missed ? '--destructive' : a.accent
         return (
           <div
             key={a.key}
             title={title}
             className="flex h-7 w-7 items-center justify-center rounded-sm border"
             style={{
-              backgroundColor: status.done ? `color-mix(in oklch, var(${a.accent}) 20%, var(--card))` : 'var(--muted)',
-              borderColor: status.done ? `color-mix(in oklch, var(${a.accent}) 60%, var(--border))` : 'var(--border)',
-              color: status.done ? `var(${a.accent})` : 'var(--muted-foreground)',
+              backgroundColor:
+                status.done || missed ? `color-mix(in oklch, var(${accent}) 20%, var(--card))` : 'var(--muted)',
+              borderColor:
+                status.done || missed ? `color-mix(in oklch, var(${accent}) 60%, var(--border))` : 'var(--border)',
+              color: status.done || missed ? `var(${accent})` : 'var(--muted-foreground)',
               opacity: status.locked ? 0.5 : 1,
-              boxShadow: status.done ? pixelShadow(a.accent, 2) : NEUTRAL_PIXEL_SHADOW,
+              boxShadow: status.done || missed ? pixelShadow(accent, 2) : NEUTRAL_PIXEL_SHADOW,
             }}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -1138,7 +1189,12 @@ function TurnCard({
   busy: boolean
   onAct: () => void
 }) {
-  const Icon = status.locked ? Lock : config.icon
+  // status.missed doesn't lock the action out — it's a "this already cost
+  // you points" flag, not a "you can't do this anymore" one — so it only
+  // changes the card's color/copy, never `disabled`.
+  const missed = status.missed
+  const accent = missed ? '--destructive' : config.accent
+  const Icon = status.locked ? Lock : missed ? Clock : config.icon
   return (
     <button
       type="button"
@@ -1150,10 +1206,10 @@ function TurnCard({
         status.locked && 'cursor-not-allowed'
       )}
       style={{
-        backgroundColor: `color-mix(in oklch, var(${config.accent}) ${status.locked ? 12 : 24}%, var(--card))`,
-        borderColor: `color-mix(in oklch, var(${config.accent}) ${status.locked ? 35 : 70}%, var(--border))`,
-        color: `var(${config.accent})`,
-        boxShadow: status.locked ? NEUTRAL_PIXEL_SHADOW : pixelShadow(config.accent),
+        backgroundColor: `color-mix(in oklch, var(${accent}) ${status.locked ? 12 : 24}%, var(--card))`,
+        borderColor: `color-mix(in oklch, var(${accent}) ${status.locked ? 35 : 70}%, var(--border))`,
+        color: `var(${accent})`,
+        boxShadow: status.locked ? NEUTRAL_PIXEL_SHADOW : pixelShadow(accent),
       }}
     >
       <Icon className="h-6 w-6 shrink-0" />
@@ -1163,6 +1219,9 @@ function TurnCard({
           <p className="mt-1 font-pixel text-sm tracking-wide text-muted-foreground">
             Disponible desde las {status.unlocksAtHour}:00
           </p>
+        )}
+        {!status.locked && missed && (
+          <p className="mt-1 font-pixel text-sm tracking-wide opacity-80">Se pasó la hora — igual suma si lo hacés</p>
         )}
       </div>
       {!status.locked && <span className="font-pixel text-sm opacity-70">Tocar</span>}
