@@ -8,6 +8,7 @@ import (
 	"time"
 	"workhub/httpx"
 	"workhub/middleware"
+	"workhub/modules/push"
 	"workhub/shared/team"
 	"workhub/storage"
 )
@@ -29,6 +30,13 @@ type handler struct {
 	// Nil when MINIO_ENDPOINT is unset — photo handlers check for nil and
 	// return 503, same pattern couple.Routes uses.
 	storage *storage.Client
+	// vapidPublicKey/vapidPrivateKey/vapidSubject back care()'s "your
+	// partner just did this" push (see push.NotifyPartnerCareAction) — empty
+	// when push isn't configured, same pattern games.handler already uses
+	// for its own partner-notification push.
+	vapidPublicKey  string
+	vapidPrivateKey string
+	vapidSubject    string
 }
 
 // limaLoc is a deliberate duplicate of the same constant already living in
@@ -577,6 +585,20 @@ func (h *handler) care(w http.ResponseWriter, r *http.Request, action string) {
 			log.Printf("pet: apply care action failed: %v", err)
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 			return
+		}
+
+		// Let the partner know — fired in the background so a slow/
+		// unreachable push service can't add latency to the action response
+		// itself. Skipped entirely when push isn't configured (see
+		// routes.go), same pattern games.SubmitRiddleGuess already uses for
+		// its own "partner solved it" push.
+		if h.vapidPublicKey != "" && h.vapidPrivateKey != "" {
+			var actorName string
+			if err := h.db.QueryRow(`SELECT name FROM users WHERE id = $1`, userID).Scan(&actorName); err != nil {
+				log.Printf("pet: load actor name for notification failed: %v", err)
+			} else {
+				go push.NotifyPartnerCareAction(h.db, h.vapidPublicKey, h.vapidPrivateKey, h.vapidSubject, userID, actorName, action, p.name)
+			}
 		}
 	case insertErr == sql.ErrNoRows:
 		// Already done today — idempotent no-op, nothing to apply.

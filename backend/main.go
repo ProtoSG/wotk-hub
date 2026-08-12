@@ -151,7 +151,7 @@ func main() {
 			pr.Mount("/api/push", push.Routes(appDB, cfg.VAPIDPublicKey))
 		}
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB, photoStorage))
-		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/pet", pet.Routes(appDB, cfg.OpencodeAPIKey, cfg.OpencodeModel, cfg.ElevenLabsAPIKey, cfg.ElevenLabsVoiceID, photoStorage))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/pet", pet.Routes(appDB, cfg.OpencodeAPIKey, cfg.OpencodeModel, cfg.ElevenLabsAPIKey, cfg.ElevenLabsVoiceID, photoStorage, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL, cfg.YtdlpPotProviderURL))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
 	})
