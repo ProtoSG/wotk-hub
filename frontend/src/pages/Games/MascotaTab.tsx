@@ -18,6 +18,8 @@ import {
   MessageCircle,
   Camera,
   Images,
+  Trash2,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader } from '@/components/ui/card'
@@ -177,8 +179,12 @@ export default function MascotaTab() {
     renamePet,
     resetPet,
     listPetPhotos,
+    deletePetPhoto,
+    clearPetPhotos,
   } = usePetApi()
   const role = useAuthStore((s) => s.user?.role)
+  // Named after the reset button originally — reused below to gate the
+  // gallery's delete/clear actions too, same admin-only semantics.
   const canReset = role === 'admin'
   const [pet, setPet] = useState<PetState | null>(null)
   const [busy, setBusy] = useState(false)
@@ -195,6 +201,9 @@ export default function MascotaTab() {
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [galleryPhotos, setGalleryPhotos] = useState<PetPhoto[] | null>(null)
   const [previewPhoto, setPreviewPhoto] = useState<PetPhoto | null>(null)
+  const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null)
+  const [clearGalleryDialogOpen, setClearGalleryDialogOpen] = useState(false)
+  const [clearingGallery, setClearingGallery] = useState(false)
   const [nameInput, setNameInput] = useState('')
   // Whether the shop's "Cambiar nombre" item has been tapped open to reveal
   // its input — starts collapsed so the shop's item list stays scannable
@@ -418,6 +427,35 @@ export default function MascotaTab() {
     }
   }
 
+  async function handleDeletePhoto(photo: PetPhoto) {
+    setDeletingPhotoId(photo.id)
+    try {
+      await deletePetPhoto(photo.id)
+      setGalleryPhotos((prev) => (prev ? prev.filter((p) => p.id !== photo.id) : prev))
+      if (previewPhoto?.id === photo.id) setPreviewPhoto(null)
+      toast.success('Foto eliminada')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la foto')
+    } finally {
+      setDeletingPhotoId(null)
+    }
+  }
+
+  async function handleClearGallery() {
+    setClearingGallery(true)
+    try {
+      await clearPetPhotos()
+      setGalleryPhotos([])
+      setPreviewPhoto(null)
+      setClearGalleryDialogOpen(false)
+      toast.success('Galería vaciada')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo vaciar la galería')
+    } finally {
+      setClearingGallery(false)
+    }
+  }
+
   const reactionSprite = reactingAction
     ? CARE_ACTIONS.find((a) => a.key === reactingAction)?.reactionSprite
     : undefined
@@ -441,49 +479,53 @@ export default function MascotaTab() {
 
   return (
     <CozyCard className="mx-auto max-w-md animate-card-in">
-      {/* HUD layout: currency/streak stats pinned top-left, action buttons
-          pinned top-right in a vertical stack — flex justify-between with
-          items-start (not absolute positioning) so the header's height
-          still comes from its tallest column naturally, no magic min-height
-          needed to fit the button stack. */}
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {pet && <SparksBadge sparks={pet.sparks} />}
-            {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
-            {!!pet?.streak && pet.streak > 0 && <StreakBadge streak={pet.streak} />}
-          </div>
-          <div className="flex flex-col items-center gap-1.5">
+      {/* HUD layout: badges top-left in normal flow, action buttons
+          absolutely pinned top-right instead — up to 4 stacked HudIconButton
+          (~194px) is taller than the badge row (~30px), so keeping both in
+          the same flex row (the previous approach) stretched CardHeader to
+          the buttons' height and pushed the pet sprite below down by that
+          difference. Absolute takes the button stack out of layout flow
+          entirely: CardHeader's height now comes from the badges alone, and
+          the buttons float over the top of CardContent instead (no z-index
+          needed — positioned descendants paint over in-flow siblings by
+          default). They don't visually collide with the sprite since it's
+          horizontally centered while the buttons hug the right edge. */}
+      <CardHeader className="relative">
+        <div className="flex flex-wrap items-center gap-1.5 pr-14">
+          {pet && <SparksBadge sparks={pet.sparks} />}
+          {!!pet?.streakFreezes && pet.streakFreezes > 0 && <FreezeBadge count={pet.streakFreezes} />}
+          {!!pet?.streak && pet.streak > 0 && <StreakBadge streak={pet.streak} />}
+        </div>
+        <div className="absolute right-6 top-6 flex flex-col items-center gap-1.5">
+          <HudIconButton
+            icon={MessageCircle}
+            label="Chatear con la mascota"
+            accent="--chart-2"
+            disabled={!pet}
+            onClick={() => setChatOpen(true)}
+          />
+          <HudIconButton
+            icon={Camera}
+            label="Tomar foto con la mascota"
+            accent="--chart-4"
+            disabled={!pet}
+            onClick={() => setCameraOpen(true)}
+          />
+          <HudIconButton
+            icon={Images}
+            label="Ver galería de fotos"
+            accent="--chart-7"
+            onClick={() => setGalleryOpen(true)}
+          />
+          {canReset && (
             <HudIconButton
-              icon={MessageCircle}
-              label="Chatear con la mascota"
-              accent="--chart-2"
-              disabled={!pet}
-              onClick={() => setChatOpen(true)}
+              icon={RotateCcw}
+              label="Reiniciar estado"
+              accent="--destructive"
+              disabled={!pet || busy}
+              onClick={() => setResetDialogOpen(true)}
             />
-            <HudIconButton
-              icon={Camera}
-              label="Tomar foto con la mascota"
-              accent="--chart-4"
-              disabled={!pet}
-              onClick={() => setCameraOpen(true)}
-            />
-            <HudIconButton
-              icon={Images}
-              label="Ver galería de fotos"
-              accent="--chart-7"
-              onClick={() => setGalleryOpen(true)}
-            />
-            {canReset && (
-              <HudIconButton
-                icon={RotateCcw}
-                label="Reiniciar estado"
-                accent="--destructive"
-                disabled={!pet || busy}
-                onClick={() => setResetDialogOpen(true)}
-              />
-            )}
-          </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -772,7 +814,20 @@ export default function MascotaTab() {
       <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-pixel text-xl tracking-wide">Galería de fotos</DialogTitle>
+            <div className="flex items-center justify-between gap-2 pr-6">
+              <DialogTitle className="font-pixel text-xl tracking-wide">Galería de fotos</DialogTitle>
+              {canReset && !!galleryPhotos?.length && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 font-pixel text-xs tracking-wide text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setClearGalleryDialogOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Vaciar
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           {galleryPhotos === null ? (
             <div className="grid grid-cols-3 gap-2">
@@ -787,38 +842,105 @@ export default function MascotaTab() {
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {galleryPhotos.map((photo) => (
-                <button
-                  key={photo.id}
-                  type="button"
-                  onClick={() => setPreviewPhoto(photo)}
-                  className="overflow-hidden rounded-sm border-2 transition-transform active:scale-[0.97]"
-                  style={{
-                    borderColor: 'color-mix(in oklch, var(--border) 70%, transparent)',
-                    boxShadow: '2px 2px 0 0 color-mix(in oklch, var(--foreground) 15%, transparent)',
-                  }}
-                >
-                  <img
-                    src={photo.url}
-                    alt={`Foto ${photo.id}`}
-                    className="h-full w-full object-cover"
-                    style={{ imageRendering: 'pixelated' }}
-                  />
-                </button>
+                <div key={photo.id} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPhoto(photo)}
+                    className="block w-full overflow-hidden rounded-sm border-2 transition-transform active:scale-[0.97]"
+                    style={{
+                      borderColor: 'color-mix(in oklch, var(--border) 70%, transparent)',
+                      boxShadow: '2px 2px 0 0 color-mix(in oklch, var(--foreground) 15%, transparent)',
+                    }}
+                  >
+                    <img
+                      src={photo.url}
+                      alt={`Foto ${photo.id}`}
+                      className="aspect-square h-full w-full object-cover"
+                      style={{ imageRendering: 'pixelated' }}
+                    />
+                  </button>
+                  {canReset && (
+                    <button
+                      type="button"
+                      aria-label="Eliminar foto"
+                      title="Eliminar foto"
+                      disabled={deletingPhotoId === photo.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeletePhoto(photo)
+                      }}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-sm bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-destructive disabled:opacity-50"
+                    >
+                      {deletingPhotoId === photo.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
         </DialogContent>
       </Dialog>
 
+      <Dialog open={clearGalleryDialogOpen} onOpenChange={(open) => !clearingGallery && setClearGalleryDialogOpen(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixel text-xl tracking-wide">Vaciar galería</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Elimina todas las fotos de la galería para siempre. No se puede deshacer.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              className="font-pixel tracking-wide"
+              onClick={() => setClearGalleryDialogOpen(false)}
+              disabled={clearingGallery}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="font-pixel tracking-wide"
+              variant="destructive"
+              onClick={handleClearGallery}
+              disabled={clearingGallery}
+            >
+              {clearingGallery ? 'Vaciando…' : 'Vaciar galería'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!previewPhoto} onOpenChange={(open) => !open && setPreviewPhoto(null)}>
-        <DialogContent className="flex max-w-fit items-center justify-center p-4">
+        <DialogContent className="flex max-w-fit flex-col items-center gap-3 p-4">
           {previewPhoto && (
-            <img
-              src={previewPhoto.url}
-              alt={`Foto ${previewPhoto.id}`}
-              className="max-h-[80vh] max-w-full object-contain"
-              style={{ imageRendering: 'pixelated' }}
-            />
+            <>
+              <img
+                src={previewPhoto.url}
+                alt={`Foto ${previewPhoto.id}`}
+                className="max-h-[80vh] max-w-full object-contain"
+                style={{ imageRendering: 'pixelated' }}
+              />
+              {canReset && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 self-end font-pixel text-xs tracking-wide text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  disabled={deletingPhotoId === previewPhoto.id}
+                  onClick={() => handleDeletePhoto(previewPhoto)}
+                >
+                  {deletingPhotoId === previewPhoto.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  Eliminar
+                </Button>
+              )}
+            </>
           )}
         </DialogContent>
       </Dialog>
