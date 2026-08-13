@@ -143,6 +143,8 @@ interface CareActionConfig {
   reactionSprite?: string
   apiCall: () => Promise<{ pet: PetState }>
   successMessage: string
+  // Shown in the button tooltip when the action is locked (not yet its time window).
+  lockedHint?: string
 }
 
 // A game-HUD-style reward popup for this feature only — bouncier and more
@@ -224,6 +226,7 @@ export default function MascotaTab() {
       reactionSprite: '/pet/react-clean.gif',
       apiCall: bathePet,
       successMessage: 'Quedó reluciente',
+      lockedHint: 'Aún no necesita baño',
     },
     {
       key: 'breakfast',
@@ -233,6 +236,7 @@ export default function MascotaTab() {
       reactionSprite: '/pet/react-eat.gif',
       apiCall: breakfastPet,
       successMessage: 'Le diste el desayuno',
+      lockedHint: 'Aún no tiene hambre',
     },
     {
       key: 'lunch',
@@ -242,6 +246,7 @@ export default function MascotaTab() {
       reactionSprite: '/pet/react-eat.gif',
       apiCall: lunchPet,
       successMessage: 'Le diste el almuerzo',
+      lockedHint: 'Aún no tiene hambre',
     },
     {
       key: 'play',
@@ -251,6 +256,7 @@ export default function MascotaTab() {
       reactionSprite: '/pet/react-play.gif',
       apiCall: playWithPet,
       successMessage: '¡Jugaron juntos!',
+      lockedHint: 'Aún no quiere jugar',
     },
     {
       key: 'dinner',
@@ -260,6 +266,7 @@ export default function MascotaTab() {
       reactionSprite: '/pet/react-eat.gif',
       apiCall: dinnerPet,
       successMessage: 'Le diste la cena',
+      lockedHint: 'Aún no tiene hambre',
     },
   ]
 
@@ -1149,7 +1156,7 @@ function TurnTracker({ actions, pet }: { actions: CareActionConfig[]; pet: PetSt
         const title = status.done
           ? `${a.label} — ${status.by}`
           : status.locked
-            ? `${a.label}: desde las ${status.unlocksAtHour}:00`
+            ? a.lockedHint ?? `${a.label} — aún no`
             : missed
               ? `${a.label}: se pasó la hora`
               : a.label
