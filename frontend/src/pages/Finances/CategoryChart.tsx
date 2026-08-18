@@ -95,9 +95,14 @@ function CategoryTooltip({ active, payload }: TooltipContentProps) {
 
 interface Props {
   data: CategoryAmount[]
+  /** Drill-down: clicking a slice jumps to Movimientos filtered by that
+   * category. Omitted for slices that fold two+ raw categories together
+   * (the synthetic "Otros" overflow, or a rare label collision — see the
+   * byLabel comment below) since there's no single category to filter by. */
+  onCategoryClick?: (category: string) => void
 }
 
-export default function CategoryChart({ data }: Props) {
+export default function CategoryChart({ data, onCategoryClick }: Props) {
   const { data: categoriesByKind } = useCategories()
 
   const categoryLabelMap: Record<string, string> = {}
@@ -110,13 +115,26 @@ export default function CategoryChart({ data }: Props) {
   // category colliding with the synthetic overflow slice above. Recharts
   // keys its internal Pie/Legend entries off `name`, so a collision here
   // produces duplicate-key React warnings and undefined render behavior.
-  // Merge by label instead of trusting slugs to be 1:1 with labels.
-  const byLabel = new Map<string, number>()
+  // Merge by label instead of trusting slugs to be 1:1 with labels — and
+  // track how many raw slugs fed each label, since only a 1:1 label is
+  // safe to drill down into.
+  const byLabel = new Map<string, { value: number; rawCategories: string[] }>()
   for (const c of foldIntoOtros(data)) {
     const label = categoryLabelMap[c.category] ?? c.category
-    byLabel.set(label, (byLabel.get(label) ?? 0) + c.amountCents)
+    const existing = byLabel.get(label)
+    if (existing) {
+      existing.value += c.amountCents
+      existing.rawCategories.push(c.category)
+    } else {
+      byLabel.set(label, { value: c.amountCents, rawCategories: [c.category] })
+    }
   }
-  const chartData = [...byLabel.entries()].map(([name, value]) => ({ name, value }))
+  const chartData = [...byLabel.entries()].map(([name, { value, rawCategories }]) => ({
+    name,
+    value,
+    rawCategory: rawCategories.length === 1 ? rawCategories[0] : null,
+  }))
+  const total = chartData.reduce((sum, c) => sum + c.value, 0)
 
   return (
     <CozyCard className="animate-card-in [animation-delay:60ms]">
@@ -141,11 +159,43 @@ export default function CategoryChart({ data }: Props) {
                 isAnimationActive={false}
                 label={renderSliceLabel}
                 labelLine={{ stroke: 'var(--border)' }}
+                cursor={onCategoryClick ? 'pointer' : undefined}
+                onClick={(_, index) => {
+                  const d = chartData[index]
+                  if (d.rawCategory) onCategoryClick?.(d.rawCategory)
+                }}
               >
                 {chartData.map((_, i) => (
                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                 ))}
               </Pie>
+              {/* Donut center — classic "total at a glance" pattern for a
+                  ring chart, instead of leaving that space empty. Same
+                  50%/50% anchor Recharts uses for the Pie itself by
+                  default, so it lines up with the ring's actual center. */}
+              <text
+                x="50%"
+                y="47%"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={17}
+                fontWeight={700}
+                fontFamily="var(--font-sans)"
+                className="fill-foreground"
+              >
+                {formatPEN(total)}
+              </text>
+              <text
+                x="50%"
+                y="58%"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={11}
+                fontFamily="var(--font-sans)"
+                className="fill-muted-foreground"
+              >
+                Total
+              </text>
               <Tooltip content={CategoryTooltip} />
               <Legend
                 iconType="circle"

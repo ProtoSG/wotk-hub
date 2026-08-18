@@ -53,6 +53,19 @@ export default function FinancesPage() {
 
   const viewState = cardsPending ? 'loading' : cardsList.length === 0 ? 'onboarding' : 'ready'
 
+  // Drill-down from Resumen's charts. `month` lives here (not the URL), so
+  // a month-bar click sets it directly; `tab` is always included alongside
+  // any other param because setSearchParams(plainObject) replaces the
+  // whole query string rather than merging (same reason the FAB's ?new=1
+  // below always spells out `tab` too).
+  function handleMonthClick(m: string) {
+    setMonth(m)
+    setSearchParams({ tab: 'movimientos' }, { replace: true })
+  }
+  function handleCategoryClick(category: string) {
+    setSearchParams({ tab: 'movimientos', category }, { replace: true })
+  }
+
   return (
     <>
       <div className="space-y-6 pb-24 sm:pb-0">
@@ -99,6 +112,8 @@ export default function FinancesPage() {
                 cards={cardsList}
                 goals={goals}
                 isLoading={resumenLoading}
+                onMonthClick={handleMonthClick}
+                onCategoryClick={handleCategoryClick}
               />
             </TabsContent>
             <TabsContent value="movimientos" className="mt-4 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:zoom-in-95">

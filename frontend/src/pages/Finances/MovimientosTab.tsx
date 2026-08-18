@@ -17,6 +17,7 @@ import {
 import { transactionsKey, cardsKey } from './financeKeys'
 import { useUndoableDelete } from './useUndoableDelete'
 import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
+import { useCategoryFilterOnQueryParam } from './useCategoryFilterOnQueryParam'
 import TransactionForm from './TransactionForm'
 import TransactionsTable from './TransactionsTable'
 import TransactionsMobileList from './TransactionsMobileList'
@@ -68,6 +69,7 @@ export default function MovimientosTab({ month }: Props) {
     setEditing(null)
     setFormOpen(true)
   })
+  useCategoryFilterOnQueryParam(setCategoryFilter)
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
