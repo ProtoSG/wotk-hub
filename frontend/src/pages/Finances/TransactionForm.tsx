@@ -126,25 +126,25 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
           <DialogTitle>{editing ? 'Editar movimiento' : 'Nuevo movimiento'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="min-w-0 space-y-1">
-              <Label>Tipo</Label>
-              <Select
-                value={type}
-                onValueChange={(v) => {
-                  setValue('type', v as TransactionType)
+          <div className="flex rounded-lg bg-muted p-1">
+            {(['expense', 'income'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  setValue('type', v)
                   setValue('category', v === 'income' ? 'sueldo' : 'comida')
                 }}
+                className={cn(
+                  'flex-1 rounded-md py-1.5 text-sm font-medium transition-colors',
+                  type === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="expense">Gasto</SelectItem>
-                  <SelectItem value="income">Ingreso</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {v === 'expense' ? 'Gasto' : 'Ingreso'}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
               <Label>Monto</Label>
               <div className="relative">
@@ -162,8 +162,6 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
               </div>
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
             </div>
-          </div>
-          <div className={cn('grid gap-2', editing ? 'grid-cols-2' : 'grid-cols-1')}>
             <div className="min-w-0 space-y-1">
               <Label>Categoría</Label>
               <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
@@ -179,14 +177,14 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
                 </SelectContent>
               </Select>
             </div>
-            {editing && (
-              <div className="min-w-0 space-y-1">
-                <Label>Fecha</Label>
-                <Input type="date" {...register('date')} />
-                {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
-              </div>
-            )}
           </div>
+          {editing && (
+            <div className="space-y-1">
+              <Label>Fecha</Label>
+              <Input type="date" {...register('date')} />
+              {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Descripción</Label>
             <Input placeholder="Almuerzo, taxi, etc." {...register('description')} />

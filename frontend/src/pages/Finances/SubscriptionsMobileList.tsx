@@ -79,14 +79,6 @@ export default function SubscriptionsMobileList({
                   {s.type === 'income' ? '+' : '-'}
                   {formatPEN(s.amountCents)}
                 </span>
-                {/* Visible switch, same as desktop's table — toggling active
-                    shouldn't cost an extra tap into the overflow menu just
-                    because the screen is narrower. */}
-                <Switch
-                  checked={s.active}
-                  onCheckedChange={(v) => onToggleActive(s, v)}
-                  aria-label={`${s.active ? 'Desactivar' : 'Activar'} ${s.name}`}
-                />
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -98,6 +90,17 @@ export default function SubscriptionsMobileList({
                   <DropdownMenuItem onClick={() => onEdit(s)}>
                     <Pencil className="h-4 w-4" />
                     Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => e.preventDefault()}
+                    className="flex items-center gap-2"
+                  >
+                    <Switch
+                      checked={s.active}
+                      onCheckedChange={(v) => onToggleActive(s, v)}
+                      aria-label={`${s.active ? 'Desactivar' : 'Activar'} ${s.name}`}
+                    />
+                    <span>{s.active ? 'Desactivar' : 'Activar'}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => onDelete(s)}
