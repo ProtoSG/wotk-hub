@@ -11,15 +11,9 @@ import { useFinanceApi } from '@/hooks/useFinanceApi'
 import type { Card } from '@/types/finance.types'
 import { CARD_ICON_MAP, CARD_ICON_OPTIONS } from './cardIcons'
 
-// Derived from the app's --chart-1..8 tokens (index.css) so card swatches
-// stay in the same warm terracotta family as the rest of the UI instead of
-// the stock Tailwind rainbow. chart-1/3/4/6/7 were darkened just enough to
-// clear 4.5:1 contrast against the white overlay text used on card faces
-// (CardCarousel/TarjetasTab/MovimientosTab chip) — the chart tokens were
-// only validated for contrast against the app background, not white text.
 const CARD_COLORS = [
   '#b95c38', '#3d4f99', '#93702b', '#07819e',
-  '#8b4aa6', '#49844b', '#b8586a', '#a6512a',
+  '#8b4aa6', '#49844b', '#b8586a', '#a6512a', '#7c6a5b',
 ]
 
 const cardSchema = z.object({
@@ -29,7 +23,6 @@ const cardSchema = z.object({
   color: z.string(),
   icon: z.string(),
   initialBalance: z.number().min(0, 'No puede ser negativo').optional(),
-  creditLimit: z.number().min(0, 'No puede ser negativo').optional(),
 })
 
 type CardFormValues = z.infer<typeof cardSchema>
@@ -42,7 +35,6 @@ function cardDefaults(editCard?: Card): CardFormValues {
     color: editCard?.color ?? CARD_COLORS[0],
     icon: editCard?.icon ?? 'credit-card',
     initialBalance: 0,
-    creditLimit: editCard ? editCard.creditLimitCents / 100 : 0,
   }
 }
 
@@ -52,10 +44,6 @@ interface CardFormFieldsProps {
   onClose?: () => void
 }
 
-// Reusable card form body. Rendered inside the CardForm Dialog (TarjetasTab)
-// and inline in the FinancesPage onboarding gate. Each open is a fresh mount
-// (see `key` in the Dialog wrapper) so defaultValues apply cleanly and no
-// manual reset effect is needed.
 export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsProps) {
   const { createCard, updateCard } = useFinanceApi()
   const [saving, setSaving] = useState(false)
@@ -83,11 +71,9 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
         last4: values.last4,
         color: values.color,
         icon: values.icon,
-        creditLimitCents: Math.round((values.creditLimit ?? 0) * 100),
+        creditLimitCents: 0,
       }
       if (editCard) {
-        // Balance isn't editable here — it's derived from transactions
-        // (gastos/transferencias), not a field you overwrite.
         await updateCard(editCard.id, input)
         toast.success('Tarjeta actualizada')
       } else {
@@ -124,30 +110,9 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
           {errors.last4 && <p className="text-xs text-destructive">{errors.last4.message}</p>}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {!editCard && (
-          <div className="min-w-0 space-y-1">
-            <Label>Saldo inicial (opcional)</Label>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                S/
-              </span>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                className="pl-8"
-                {...register('initialBalance', { valueAsNumber: true })}
-                placeholder="0.00"
-              />
-            </div>
-            {errors.initialBalance && (
-              <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
-            )}
-          </div>
-        )}
-        <div className="min-w-0 space-y-1">
-          <Label>Límite de crédito (opcional)</Label>
+      {!editCard && (
+        <div className="space-y-1">
+          <Label>Saldo inicial (opcional)</Label>
           <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
               S/
@@ -157,58 +122,60 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
               step="0.01"
               min="0"
               className="pl-8"
-              {...register('creditLimit', { valueAsNumber: true })}
+              {...register('initialBalance', { valueAsNumber: true })}
               placeholder="0.00"
             />
           </div>
-          {errors.creditLimit && (
-            <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
+          {errors.initialBalance && (
+            <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
           )}
         </div>
-      </div>
-      <div className="space-y-1">
-        <Label>Icono</Label>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {CARD_ICON_OPTIONS.map((opt) => {
-            const Icon = CARD_ICON_MAP[opt.value]
-            const selected = icon === opt.value
-            return (
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <Label>Icono</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {CARD_ICON_OPTIONS.map((opt) => {
+              const Icon = CARD_ICON_MAP[opt.value]
+              const selected = icon === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setValue('icon', opt.value)}
+                  aria-label={opt.label}
+                  title={opt.label}
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 ${
+                    selected ? 'border-primary bg-primary/10 text-primary' : 'border-transparent bg-muted text-muted-foreground'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              )
+            })}
+          </div>
+          {errors.icon && <p className="text-xs text-destructive">{errors.icon.message}</p>}
+        </div>
+        <div className="space-y-1">
+          <Label>Color</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {CARD_COLORS.map((c) => (
               <button
-                key={opt.value}
+                key={c}
                 type="button"
-                onClick={() => setValue('icon', opt.value)}
-                aria-label={opt.label}
-                title={opt.label}
-                className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 ${
-                  selected ? 'border-primary bg-primary/10 text-primary' : 'border-transparent bg-muted text-muted-foreground'
-                }`}
+                onClick={() => setValue('color', c)}
+                aria-label={c}
+                className="flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-110"
               >
-                <Icon className="h-5 w-5" />
+                <span
+                  className="h-7 w-7 rounded-full border-2"
+                  style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
+                />
               </button>
-            )
-          })}
+            ))}
+          </div>
+          {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
         </div>
-        {errors.icon && <p className="text-xs text-destructive">{errors.icon.message}</p>}
-      </div>
-      <div className="space-y-1">
-        <Label>Color</Label>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {CARD_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setValue('color', c)}
-              aria-label={c}
-              className="flex h-11 w-11 items-center justify-center rounded-full transition-transform hover:scale-110"
-            >
-              <span
-                className="h-8 w-8 rounded-full border-2"
-                style={{ backgroundColor: c, borderColor: color === c ? '#000' : 'transparent' }}
-              />
-            </button>
-          ))}
-        </div>
-        {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
       </div>
       <DialogFooter>
         {onClose && (
@@ -238,8 +205,6 @@ export default function CardForm({ open, onClose, onSaved, editCard }: CardFormP
         <DialogHeader>
           <DialogTitle>{editCard ? 'Editar tarjeta' : 'Nueva tarjeta'}</DialogTitle>
         </DialogHeader>
-        {/* key forces a fresh mount every time the dialog opens, so useForm
-            defaultValues apply cleanly without a manual reset-on-open effect. */}
         {open && (
           <CardFormFields
             key="open"

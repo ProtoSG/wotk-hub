@@ -150,14 +150,15 @@ export const GOAL_ICONS = [
 export type GoalIcon = (typeof GOAL_ICONS)[number]
 
 export const GOAL_COLORS = [
-  '#10b981',
-  '#3b82f6',
-  '#f59e0b',
-  '#ef4444',
-  '#8b5cf6',
-  '#06b6d4',
-  '#ec4899',
-  '#84cc16',
+  '#b95c38',
+  '#3d4f99',
+  '#93702b',
+  '#07819e',
+  '#8b4aa6',
+  '#49844b',
+  '#b8586a',
+  '#a6512a',
+  '#7c6a5b',
 ] as const
 export type GoalColor = (typeof GOAL_COLORS)[number]
 
