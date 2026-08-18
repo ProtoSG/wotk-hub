@@ -18,6 +18,7 @@ import (
 	"workhub/modules/finances"
 	"workhub/modules/games"
 	"workhub/modules/gym"
+	"workhub/modules/permissions"
 	"workhub/modules/pet"
 	"workhub/modules/push"
 	"workhub/modules/ytdlp"
@@ -152,8 +153,19 @@ func main() {
 		}
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/couple", couple.Routes(appDB, photoStorage))
 		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/pet", pet.Routes(appDB, cfg.OpencodeAPIKey, cfg.OpencodeModel, cfg.ElevenLabsAPIKey, cfg.ElevenLabsVoiceID, photoStorage, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject))
-		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL, cfg.YtdlpPotProviderURL))
-		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/gym", gym.Routes(appDB))
+		// gym/ytdlp are also gated by an admin-configured module grant (see
+		// permissions.RequireModule) — Citas/Juegos above have none, they're
+		// on for every account by design. Finanzas has no module gate here:
+		// it splits public/protected internally (finances.Routes) rather
+		// than through this shared group, and its rows are already strictly
+		// owner-scoped either way, so a guest reaching it without the grant
+		// costs nothing beyond the UI toggle being bypassable — see
+		// Configuración's own module list for the frontend-only exception.
+		pr.With(middleware.RequireRole("admin", "guest"), permissions.RequireModule(appDB, "ytdlp")).
+			Mount("/api/ytdlp", ytdlp.Routes(cfg.YtdlpCookiesPath, cfg.YtdlpProxyURL, cfg.YtdlpPotProviderURL))
+		pr.With(middleware.RequireRole("admin", "guest"), permissions.RequireModule(appDB, "gym")).
+			Mount("/api/gym", gym.Routes(appDB))
+		pr.With(middleware.RequireRole("admin", "guest")).Mount("/api/permissions", permissions.Routes(appDB))
 	})
 
 	// Unauthenticated by design (token-gated, not JWT) — for sharing with

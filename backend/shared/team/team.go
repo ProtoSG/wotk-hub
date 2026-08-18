@@ -16,3 +16,13 @@ func ResolveTeamID(db *sql.DB) (int64, error) {
 	err := db.QueryRow(`SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`).Scan(&id)
 	return id, err
 }
+
+// ResolveGuestID returns the couple's guest account id — the counterpart to
+// ResolveTeamID, for features that act ON the guest rather than anchoring
+// shared state to the admin (e.g. the admin granting the guest module
+// access). Same single-couple assumption: there's at most one guest.
+func ResolveGuestID(db *sql.DB) (int64, error) {
+	var id int64
+	err := db.QueryRow(`SELECT id FROM users WHERE role = 'guest' ORDER BY id LIMIT 1`).Scan(&id)
+	return id, err
+}

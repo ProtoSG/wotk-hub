@@ -50,7 +50,7 @@ export const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: (
-          <RequireRole roles={['admin']}>
+          <RequireRole roles={['admin', 'guest']} module="dashboard">
             <Suspense fallback={<RouteFallback />}>
               <DashboardPage />
             </Suspense>
@@ -70,7 +70,7 @@ export const router = createBrowserRouter([
       {
         path: 'finances',
         element: (
-          <RequireRole roles={['admin']}>
+          <RequireRole roles={['admin', 'guest']} module="finances">
             <Suspense fallback={<RouteFallback />}>
               <FinancesPage />
             </Suspense>
@@ -80,7 +80,7 @@ export const router = createBrowserRouter([
       {
         path: 'finances/categories',
         element: (
-          <RequireRole roles={['admin']}>
+          <RequireRole roles={['admin', 'guest']} module="finances">
             <Suspense fallback={<RouteFallback />}>
               <CategoriesPage />
             </Suspense>
@@ -106,7 +106,7 @@ export const router = createBrowserRouter([
       {
         path: 'gym',
         element: (
-          <RequireRole roles={['admin']}>
+          <RequireRole roles={['admin', 'guest']} module="gym">
             <Suspense fallback={<RouteFallback />}>
               <GymPage />
             </Suspense>
@@ -116,7 +116,7 @@ export const router = createBrowserRouter([
       {
         path: 'ytdlp',
         element: (
-          <RequireRole roles={['admin']}>
+          <RequireRole roles={['admin', 'guest']} module="ytdlp">
             <Suspense fallback={<RouteFallback />}>
               <YtdlpPage />
             </Suspense>
