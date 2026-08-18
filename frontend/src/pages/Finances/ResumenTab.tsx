@@ -1,6 +1,7 @@
-import { Wallet, TrendingUp, TrendingDown, Repeat, CreditCard } from 'lucide-react'
+import { CreditCard, Repeat, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { IconChip } from '@/components/ui/icon-chip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCountUp } from '@/hooks/useCountUp'
 import { formatPEN } from '@/lib/currency'
@@ -21,6 +22,7 @@ interface Tile {
   cents: number
   icon: typeof Wallet
   color?: string
+  accent: string // IconChip token, e.g. '--income'
   primary?: boolean
 }
 
@@ -81,6 +83,7 @@ export default function ResumenTab({ summary, committed, cards, goals, isLoading
       cents: disponibleCents,
       icon: Wallet,
       color: disponibleCents >= 0 ? 'text-income' : 'text-expense',
+      accent: disponibleCents >= 0 ? '--income' : '--expense',
       primary: true,
     },
     {
@@ -88,14 +91,16 @@ export default function ResumenTab({ summary, committed, cards, goals, isLoading
       cents: summary?.monthIncomeCents ?? 0,
       icon: TrendingUp,
       color: 'text-income',
+      accent: '--income',
     },
     {
       label: 'Gastos del mes',
       cents: summary?.monthExpenseCents ?? 0,
       icon: TrendingDown,
       color: 'text-expense',
+      accent: '--expense',
     },
-    { label: 'Comprometido mensual', cents: committed, icon: Repeat },
+    { label: 'Suscripciones mensuales', cents: committed, icon: Repeat, accent: '--primary' },
   ]
 
   if (isLoading && summary === null) {
@@ -115,7 +120,7 @@ export default function ResumenTab({ summary, committed, cards, goals, isLoading
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {tiles.map(({ label, cents, icon: Icon, color, primary }, i) => (
+        {tiles.map(({ label, cents, icon: Icon, color, accent, primary }, i) => (
           <CozyCard
             key={label}
             className="animate-card-in"
@@ -123,7 +128,7 @@ export default function ResumenTab({ summary, committed, cards, goals, isLoading
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-              <Icon size={16} className={color ?? 'text-muted-foreground'} />
+              <IconChip icon={Icon} accent={accent} size="sm" />
             </CardHeader>
             <CardContent>
               <div className={`${primary ? 'text-3xl' : 'text-2xl'} font-bold ${color ?? ''}`}>
@@ -138,7 +143,7 @@ export default function ResumenTab({ summary, committed, cards, goals, isLoading
         <CozyCard className="animate-card-in" style={{ animationDelay: '200ms' }}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Saldos en tarjetas</CardTitle>
-            <CreditCard size={16} className="text-muted-foreground" />
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-2">
             {cards.map((card) => (

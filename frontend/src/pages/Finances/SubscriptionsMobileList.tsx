@@ -1,15 +1,18 @@
-import { MoreVertical, Pencil, Trash2, Repeat, Power, Calendar } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Calendar, MoreVertical, Pencil, Repeat, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { IconChip } from '@/components/ui/icon-chip'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
 import { FREQUENCY_LABELS, type Subscription } from '@/types/finance.types'
 
 interface Props {
   subscriptions: Subscription[]
+  categoryLabelMap: Record<string, string>
   onEdit: (s: Subscription) => void
   onDelete: (s: Subscription) => void
   onToggleActive: (s: Subscription, active: boolean) => void
@@ -28,6 +31,7 @@ function formatShortLocalDate(dateOnly: string): string {
 
 export default function SubscriptionsMobileList({
   subscriptions,
+  categoryLabelMap,
   onEdit,
   onDelete,
   onToggleActive,
@@ -52,13 +56,16 @@ export default function SubscriptionsMobileList({
                 !s.active && 'opacity-50'
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Repeat className="h-5 w-5" />
-              </div>
+              <IconChip
+                icon={s.type === 'income' ? ArrowUpRight : ArrowDownRight}
+                accent={s.type === 'income' ? '--income' : '--expense'}
+                size="sm"
+                className="shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{s.name}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {s.category} · {FREQUENCY_LABELS[s.frequency]}
+                  {categoryLabelMap[s.category] ?? s.category} · {FREQUENCY_LABELS[s.frequency]}
                 </div>
                 <div className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                   <Calendar className="h-3 w-3 shrink-0" />
@@ -66,22 +73,31 @@ export default function SubscriptionsMobileList({
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
-                <span className="text-sm font-semibold">{formatPEN(s.amountCents)}</span>
+                <span
+                  className={`text-sm font-semibold ${s.type === 'income' ? 'text-income' : 'text-expense'}`}
+                >
+                  {s.type === 'income' ? '+' : '-'}
+                  {formatPEN(s.amountCents)}
+                </span>
+                {/* Visible switch, same as desktop's table — toggling active
+                    shouldn't cost an extra tap into the overflow menu just
+                    because the screen is narrower. */}
+                <Switch
+                  checked={s.active}
+                  onCheckedChange={(v) => onToggleActive(s, v)}
+                  aria-label={`${s.active ? 'Desactivar' : 'Activar'} ${s.name}`}
+                />
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="shrink-0" aria-label="Más acciones">
-                    <MoreVertical className="h-4 w-4" />
+                    <MoreVertical className="h-4 w-4 rotate-90" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => onEdit(s)}>
                     <Pencil className="h-4 w-4" />
                     Editar
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onToggleActive(s, !s.active)}>
-                    <Power className="h-4 w-4" />
-                    {s.active ? 'Desactivar' : 'Activar'}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => onDelete(s)}

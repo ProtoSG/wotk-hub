@@ -33,11 +33,11 @@ func TestCreateSubscription_RequiresCardID(t *testing.T) {
 	}{
 		{
 			name: "missing cardId rejected",
-			body: map[string]any{"name": "Netflix", "amountCents": 1000, "frequency": "monthly", "category": "suscripciones", "nextBillingOn": "2026-08-01"},
+			body: map[string]any{"name": "Netflix", "amountCents": 1000, "frequency": "monthly", "type": "expense", "category": "suscripciones", "nextBillingOn": "2026-08-01"},
 		},
 		{
 			name: "cardId=0 rejected",
-			body: map[string]any{"name": "Netflix", "amountCents": 1000, "frequency": "monthly", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": 0},
+			body: map[string]any{"name": "Netflix", "amountCents": 1000, "frequency": "monthly", "type": "expense", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": 0},
 		},
 	}
 	for _, c := range cases {
@@ -54,7 +54,7 @@ func TestCreateSubscription_RequiresCardID(t *testing.T) {
 
 	// Sanity: a valid subscription WITH a card is accepted.
 	w := do(t, db, http.MethodPost, "/subscriptions", map[string]any{
-		"name": "ok", "amountCents": 1000, "frequency": "monthly", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": deb,
+		"name": "ok", "amountCents": 1000, "frequency": "monthly", "type": "expense", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": deb,
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("valid subscription status = %d want 201 (body %s)", w.Code, w.Body.String())
@@ -68,7 +68,7 @@ func TestCreateSubscription_NonExistentCardRejected(t *testing.T) {
 	db := setupTestDB(t)
 	resetFinanceTables(t, db)
 	w := do(t, db, http.MethodPost, "/subscriptions", map[string]any{
-		"name": "x", "amountCents": 1000, "frequency": "monthly", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": 999999,
+		"name": "x", "amountCents": 1000, "frequency": "monthly", "type": "expense", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": 999999,
 	})
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d want 404 for non-existent card (body %s)", w.Code, w.Body.String())
@@ -82,7 +82,7 @@ func TestUpdateSubscription_RequiresCardID(t *testing.T) {
 	deb := insertCard(t, db, "debito")
 	// Seed a subscription to update.
 	w := do(t, db, http.MethodPost, "/subscriptions", map[string]any{
-		"name": "orig", "amountCents": 1000, "frequency": "monthly", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": deb,
+		"name": "orig", "amountCents": 1000, "frequency": "monthly", "type": "expense", "category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": deb,
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("seed subscription status = %d want 201 (body %s)", w.Code, w.Body.String())
@@ -96,7 +96,7 @@ func TestUpdateSubscription_RequiresCardID(t *testing.T) {
 
 	// Update without cardId → 400 "cardId requerido".
 	w = do(t, db, http.MethodPut, "/subscriptions/"+itoa(int(created.ID)), map[string]any{
-		"name": "renamed", "amountCents": 2000, "frequency": "monthly", "category": "suscripciones", "nextBillingOn": "2026-09-01",
+		"name": "renamed", "amountCents": 2000, "frequency": "monthly", "type": "expense", "category": "suscripciones", "nextBillingOn": "2026-09-01",
 	})
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("update without cardId status = %d want 400 (body %s)", w.Code, w.Body.String())
@@ -173,7 +173,7 @@ func TestCreateSubscription_CreditoCardAllowed(t *testing.T) {
 	cred := insertCard(t, db, "credito")
 
 	w := do(t, db, http.MethodPost, "/subscriptions", map[string]any{
-		"name": "Spotify", "amountCents": 1099, "frequency": "monthly",
+		"name": "Spotify", "amountCents": 1099, "frequency": "monthly", "type": "expense",
 		"category": "suscripciones", "nextBillingOn": "2026-08-01", "cardId": cred,
 	})
 	if w.Code != http.StatusCreated {
@@ -206,7 +206,7 @@ func TestProcessDue_CreditoSubscriptionEmitsExpense(t *testing.T) {
 	// Past nextBillingOn so processDue fires immediately.
 	pastDate := time.Now().AddDate(0, -1, 0).Format("2006-01-02")
 	w := do(t, db, http.MethodPost, "/subscriptions", map[string]any{
-		"name": "Netflix", "amountCents": 1500, "frequency": "monthly",
+		"name": "Netflix", "amountCents": 1500, "frequency": "monthly", "type": "expense",
 		"category": "suscripciones", "nextBillingOn": pastDate, "cardId": cred,
 	})
 	if w.Code != http.StatusCreated {

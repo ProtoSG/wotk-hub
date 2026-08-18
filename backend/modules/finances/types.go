@@ -106,6 +106,7 @@ type Subscription struct {
 	Name          string `json:"name"`
 	AmountCents   int64  `json:"amountCents"`
 	Frequency     string `json:"frequency"`
+	Type          string `json:"type"`
 	Category      string `json:"category"`
 	NextBillingOn string `json:"nextBillingOn"`
 	Active        bool   `json:"active"`
@@ -117,6 +118,7 @@ type subscriptionRequest struct {
 	Name          string `json:"name"`
 	AmountCents   int64  `json:"amountCents"`
 	Frequency     string `json:"frequency"`
+	Type          string `json:"type"`
 	Category      string `json:"category"`
 	NextBillingOn string `json:"nextBillingOn"`
 	Active        *bool  `json:"active"`
@@ -132,6 +134,9 @@ func (r subscriptionRequest) validate() (time.Time, error) {
 	}
 	if r.Frequency != "weekly" && r.Frequency != "monthly" && r.Frequency != "yearly" {
 		return time.Time{}, fmt.Errorf("invalid frequency: %s", r.Frequency)
+	}
+	if r.Type != "income" && r.Type != "expense" {
+		return time.Time{}, fmt.Errorf("invalid type: %s", r.Type)
 	}
 	if r.Category == "" {
 		return time.Time{}, fmt.Errorf("category is required")
@@ -401,8 +406,14 @@ type listCategoriesResponse struct {
 }
 
 type listSubscriptionsResponse struct {
-	Subscriptions         []Subscription `json:"subscriptions"`
-	MonthlyCommittedCents int64          `json:"monthlyCommittedCents"`
+	Subscriptions []Subscription `json:"subscriptions"`
+	// MonthlyCommittedCents is expense-type subscriptions only — "what
+	// recurring cost am I on the hook for", unaffected by recurring income.
+	MonthlyCommittedCents int64 `json:"monthlyCommittedCents"`
+	// MonthlyRecurringIncomeCents is the income-side mirror — active
+	// income-type subscriptions (e.g. a fixed paycheck), normalized the same
+	// way (monthlyCents).
+	MonthlyRecurringIncomeCents int64 `json:"monthlyRecurringIncomeCents"`
 }
 
 type listBudgetsResponse struct {

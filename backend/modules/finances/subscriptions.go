@@ -6,13 +6,14 @@ import (
 	"net/http"
 	"time"
 	"workhub/httpx"
+	"workhub/middleware"
 )
 
 func scanSubscription(row interface{ Scan(...any) error }) (Subscription, error) {
 	var s Subscription
 	var nextBilling, createdAt time.Time
 	var cardID sql.NullInt64
-	err := row.Scan(&s.ID, &s.Name, &s.AmountCents, &s.Frequency, &s.Category, &nextBilling, &createdAt, &s.Active, &cardID)
+	err := row.Scan(&s.ID, &s.Name, &s.AmountCents, &s.Frequency, &s.Type, &s.Category, &nextBilling, &createdAt, &s.Active, &cardID)
 	if err != nil {
 		return s, err
 	}
@@ -61,7 +62,7 @@ func (h *handler) processDue() error {
 	defer tx.Rollback()
 
 	rows, err := tx.Query(
-		`SELECT id, name, amount_cents, frequency, category, next_billing_on, card_id
+		`SELECT id, name, amount_cents, frequency, type, category, next_billing_on, card_id, created_by
 		 FROM subscriptions
 		 WHERE active AND next_billing_on <= $1
 		 FOR UPDATE`, today)
@@ -74,14 +75,16 @@ func (h *handler) processDue() error {
 		name        string
 		amountCents int64
 		frequency   string
+		txType      string
 		category    string
 		next        time.Time
 		cardID      int64 // NOT NULL in the DB since slice 1a — no Null path here
+		createdBy   sql.NullInt64
 	}
 	var dues []due
 	for rows.Next() {
 		var d due
-		if err := rows.Scan(&d.id, &d.name, &d.amountCents, &d.frequency, &d.category, &d.next, &d.cardID); err != nil {
+		if err := rows.Scan(&d.id, &d.name, &d.amountCents, &d.frequency, &d.txType, &d.category, &d.next, &d.cardID, &d.createdBy); err != nil {
 			rows.Close()
 			return err
 		}
@@ -95,17 +98,23 @@ func (h *handler) processDue() error {
 	// account goes negative. Blocking it here would silently skip a
 	// commitment that already happened while still advancing
 	// next_billing_on, which is worse than a card balance going negative.
+	// Same reasoning applies symmetrically to an income-type subscription
+	// (a paycheck posts on schedule regardless of the account's state).
 	//
 	// card_id is always bound: subscriptions.card_id is NOT NULL (slice 1a
 	// migration) and Create/Update enforce a valid cardId, so every due
 	// charge tags a real card — "no untagged money" holds for this path.
+	// The generated transaction inherits the subscription's own created_by
+	// so it lands in the right owner's ledger now that subscriptions are
+	// per-user — legacy subscriptions with a NULL created_by still produce
+	// a NULL-owner transaction, same as before this scoping existed.
 	for _, d := range dues {
 		next := d.next
 		for !next.After(today) {
 			if _, err := tx.Exec(
-				`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, card_id)
-				 VALUES ('expense', $1, $2, $3, $4, $5)`,
-				d.amountCents, d.category, d.name+" (suscripción)", next, d.cardID); err != nil {
+				`INSERT INTO transactions (type, amount_cents, category, description, occurred_on, card_id, created_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				d.txType, d.amountCents, d.category, d.name+" (suscripción)", next, d.cardID, d.createdBy); err != nil {
 				return err
 			}
 			next = advance(next, d.frequency)
@@ -139,9 +148,18 @@ func monthlyCents(amountCents int64, frequency string) int64 {
 // @Success 200 {object} listSubscriptionsResponse
 // @Router /finances/subscriptions [get]
 func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(
-		`SELECT id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id
-		 FROM subscriptions ORDER BY next_billing_on ASC, id ASC`)
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	// scopeToOwner appends "AND created_by = $N" onto an existing boolean
+	// clause — subscriptions has no soft-delete column to anchor on like
+	// other tables do, so "WHERE true" is that anchor.
+	query, args := scopeToOwner(
+		`SELECT id, name, amount_cents, frequency, type, category, next_billing_on, created_at, active, card_id
+		 FROM subscriptions WHERE true`, []any{}, role, userID)
+	rows, err := h.db.Query(query+" ORDER BY next_billing_on ASC, id ASC", args...)
 	if err != nil {
 		log.Printf("finances: list subscriptions failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -150,7 +168,7 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	subscriptions := []Subscription{}
-	var committed int64
+	var committed, recurringIncome int64
 	for rows.Next() {
 		s, err := scanSubscription(rows)
 		if err != nil {
@@ -159,24 +177,28 @@ func (h *handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if s.Active {
-			committed += monthlyCents(s.AmountCents, s.Frequency)
+			switch s.Type {
+			case "income":
+				recurringIncome += monthlyCents(s.AmountCents, s.Frequency)
+			default:
+				committed += monthlyCents(s.AmountCents, s.Frequency)
+			}
 		}
 		subscriptions = append(subscriptions, s)
 	}
 	httpx.WriteJSON(w, http.StatusOK, listSubscriptionsResponse{
-		Subscriptions:         subscriptions,
-		MonthlyCommittedCents: committed,
+		Subscriptions:               subscriptions,
+		MonthlyCommittedCents:       committed,
+		MonthlyRecurringIncomeCents: recurringIncome,
 	})
 }
 
-// subscriptionCardExists checks the card exists and isn't archived.
-// Unscoped by owner — subscriptions have no ownership model of their own
-// (see ListSubscriptions/UpdateSubscription/DeleteSubscription, none of
-// which check created_by either), so gatekeeping just this field would be
-// an inconsistent, partial fix to that larger gap rather than this change.
-func (h *handler) subscriptionCardExists(cardID int64) error {
-	var got int64
-	return h.db.QueryRow(`SELECT id FROM cards WHERE id = $1 AND deleted_at IS NULL`, cardID).Scan(&got)
+// subscriptionCardExists checks the card exists, isn't archived, and — now
+// that subscriptions carry their own created_by — is owned by the caller
+// (or the caller is admin), same as cardOwned. Reuses cardOwned directly
+// rather than duplicating the query.
+func (h *handler) subscriptionCardExists(cardID int64, role string, userID int64) error {
+	return h.cardOwned(cardID, role, userID)
 }
 
 // CreateSubscription creates a recurring subscription tied to a card.
@@ -192,6 +214,11 @@ func (h *handler) subscriptionCardExists(cardID int64) error {
 // @Failure 404 {object} httpx.APIError "card not found"
 // @Router /finances/subscriptions [post]
 func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	var req subscriptionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
@@ -202,7 +229,7 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
-	if err := h.categoryExists(req.Category, "expense"); err == sql.ErrNoRows {
+	if err := h.categoryExists(req.Category, req.Type); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+req.Category)
 		return
 	} else if err != nil {
@@ -213,7 +240,7 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	// CardId is mandatory (see validate); always confirm the card exists
 	// and isn't archived before opening the write. A bogus or unowned card
 	// surfaces as a clean 404, not a FK violation 500.
-	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {
+	if err := h.subscriptionCardExists(req.CardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	} else if err != nil {
@@ -222,10 +249,10 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := h.db.QueryRow(
-		`INSERT INTO subscriptions (name, amount_cents, frequency, category, next_billing_on, active, card_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
-		 RETURNING id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id`,
-		req.Name, req.AmountCents, req.Frequency, req.Category, next, req.isActive(), req.CardID,
+		`INSERT INTO subscriptions (name, amount_cents, frequency, type, category, next_billing_on, active, card_id, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 RETURNING id, name, amount_cents, frequency, type, category, next_billing_on, created_at, active, card_id`,
+		req.Name, req.AmountCents, req.Frequency, req.Type, req.Category, next, req.isActive(), req.CardID, userID,
 	)
 	s, err := scanSubscription(row)
 	if err != nil {
@@ -251,6 +278,11 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /finances/subscriptions/{id} [put]
 func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r)
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -266,7 +298,7 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
-	if err := h.categoryExists(req.Category, "expense"); err == sql.ErrNoRows {
+	if err := h.categoryExists(req.Category, req.Type); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid category: "+req.Category)
 		return
 	} else if err != nil {
@@ -274,7 +306,7 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
-	if err := h.subscriptionCardExists(req.CardID); err == sql.ErrNoRows {
+	if err := h.subscriptionCardExists(req.CardID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "card not found")
 		return
 	} else if err != nil {
@@ -283,8 +315,9 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lookupQuery, lookupArgs := scopeToOwner(`SELECT active FROM subscriptions WHERE id = $1`, []any{id}, role, userID)
 	var wasActive bool
-	err = h.db.QueryRow(`SELECT active FROM subscriptions WHERE id = $1`, id).Scan(&wasActive)
+	err = h.db.QueryRow(lookupQuery, lookupArgs...).Scan(&wasActive)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
 		return
@@ -306,13 +339,13 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	row := h.db.QueryRow(
-		`UPDATE subscriptions
-		 SET name = $1, amount_cents = $2, frequency = $3, category = $4, next_billing_on = $5, active = $6, card_id = $7
-		 WHERE id = $8
-		 RETURNING id, name, amount_cents, frequency, category, next_billing_on, created_at, active, card_id`,
-		req.Name, req.AmountCents, req.Frequency, req.Category, next, req.isActive(), req.CardID, id,
-	)
+	updateQuery := `UPDATE subscriptions
+		 SET name = $1, amount_cents = $2, frequency = $3, type = $4, category = $5, next_billing_on = $6, active = $7, card_id = $8
+		 WHERE id = $9`
+	updateArgs := []any{req.Name, req.AmountCents, req.Frequency, req.Type, req.Category, next, req.isActive(), req.CardID, id}
+	updateQuery, updateArgs = scopeToOwner(updateQuery, updateArgs, role, userID)
+	updateQuery += ` RETURNING id, name, amount_cents, frequency, type, category, next_billing_on, created_at, active, card_id`
+	row := h.db.QueryRow(updateQuery, updateArgs...)
 	s, err := scanSubscription(row)
 	if err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "subscription not found")
@@ -338,12 +371,18 @@ func (h *handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /finances/subscriptions/{id} [delete]
 func (h *handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r)
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
-	res, err := h.db.Exec(`DELETE FROM subscriptions WHERE id = $1`, id)
+	query, args := scopeToOwner(`DELETE FROM subscriptions WHERE id = $1`, []any{id}, role, userID)
+	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		log.Printf("finances: delete subscription failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")

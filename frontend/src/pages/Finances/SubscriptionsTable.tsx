@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Repeat } from 'lucide-react'
+import { Pencil, Repeat, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import { FREQUENCY_LABELS, type Subscription } from '@/types/finance.types'
 
 interface Props {
   subscriptions: Subscription[]
+  categoryLabelMap: Record<string, string>
   onEdit: (s: Subscription) => void
   onDelete: (s: Subscription) => void
   onToggleActive: (s: Subscription, active: boolean) => void
@@ -18,6 +19,7 @@ interface Props {
 
 export default function SubscriptionsTable({
   subscriptions,
+  categoryLabelMap,
   onEdit,
   onDelete,
   onToggleActive,
@@ -54,10 +56,15 @@ export default function SubscriptionsTable({
               subscriptions.map((s) => (
                 <TableRow key={s.id} className={s.active ? '' : 'opacity-50'}>
                   <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>{s.category}</TableCell>
+                  <TableCell>{categoryLabelMap[s.category] ?? s.category}</TableCell>
                   <TableCell>{FREQUENCY_LABELS[s.frequency]}</TableCell>
                   <TableCell className="whitespace-nowrap">{s.nextBillingOn}</TableCell>
-                  <TableCell className="text-right font-medium">{formatPEN(s.amountCents)}</TableCell>
+                  <TableCell
+                    className={`text-right font-medium ${s.type === 'income' ? 'text-income' : 'text-expense'}`}
+                  >
+                    {s.type === 'income' ? '+' : '-'}
+                    {formatPEN(s.amountCents)}
+                  </TableCell>
                   <TableCell>
                     <Switch checked={s.active} onCheckedChange={(v) => onToggleActive(s, v)} />
                   </TableCell>
@@ -69,7 +76,7 @@ export default function SubscriptionsTable({
                         aria-label={`Editar suscripción ${s.name}`}
                         onClick={() => onEdit(s)}
                       >
-                        <Pencil size={14} />
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -77,7 +84,7 @@ export default function SubscriptionsTable({
                         aria-label={`Eliminar suscripción ${s.name}`}
                         onClick={() => onDelete(s)}
                       >
-                        <Trash2 size={14} />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </TableCell>

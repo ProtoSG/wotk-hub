@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, CreditCard, ArrowLeftRight, MoreVertical } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CreditCard, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { IconChip } from '@/components/ui/icon-chip'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { Card } from '@/types/finance.types'
@@ -12,6 +14,7 @@ import { cardsKey } from './financeKeys'
 import { useUndoableDelete } from './useUndoableDelete'
 import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
 import { getCardUtilization } from './cardUtilization'
+import { CARD_ICON_MAP } from './cardIcons'
 import CardForm from './CardForm'
 import TransferForm from './TransferForm'
 
@@ -77,7 +80,7 @@ export default function TarjetasTab() {
             setFormOpen(true)
           }}
         >
-          <Plus size={14} />
+          <Plus className="h-4 w-4" />
           Nueva tarjeta
         </Button>
       </div>
@@ -101,10 +104,8 @@ export default function TarjetasTab() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card, i) => {
-            const { hasCreditLimit, utilization, utilizationColor, isLastCard } = getCardUtilization(
-              card,
-              cards.length
-            )
+            const { hasCreditLimit, utilization, utilizationColor, isOverLimit, isNearLimit, isLastCard } =
+              getCardUtilization(card, cards.length)
 
             return (
               <CozyCard
@@ -113,41 +114,58 @@ export default function TarjetasTab() {
                 style={{ animationDelay: `${Math.min(i * 40, 320)}ms`, borderTop: `4px solid ${card.color}` }}
               >
                 <CardHeader className="flex flex-row items-start justify-between pb-2">
-                  <div>
-                    <CardTitle className="text-sm font-medium">{card.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {card.bank ? `${card.bank}` : ''}
-                      {card.bank && card.last4 ? ` · ` : ''}
-                      {card.last4 ? `${card.last4}` : ''}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <IconChip icon={CARD_ICON_MAP[card.icon] ?? CreditCard} accent={card.color} size="sm" />
+                    <div>
+                      <CardTitle className="text-sm font-medium">{card.name}</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {card.bank ? `${card.bank}` : ''}
+                        {card.bank && card.last4 ? ` · ` : ''}
+                        {card.last4 ? `${card.last4}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label={`Más acciones para ${card.name}`}>
-                        <MoreVertical size={14} />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setEditCard(card)
-                          setFormOpen(true)
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={isLastCard}
-                        title={isLastCard ? 'No podés archivar tu última tarjeta activa' : undefined}
-                        onClick={() => handleDelete(card)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {isOverLimit && (
+                      <Badge variant="destructive" className="gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Límite alcanzado
+                      </Badge>
+                    )}
+                    {!isOverLimit && isNearLimit && (
+                      <Badge variant="outline" className="gap-1 border-warning text-warning">
+                        <AlertTriangle className="h-3 w-3" />
+                        Cerca del límite
+                      </Badge>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label={`Más acciones para ${card.name}`}>
+                          <MoreVertical className="h-3.5 w-3.5 rotate-90" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditCard(card)
+                            setFormOpen(true)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={isLastCard}
+                          title={isLastCard ? 'No podés archivar tu última tarjeta activa' : undefined}
+                          onClick={() => handleDelete(card)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-end justify-between">

@@ -55,6 +55,7 @@ export interface Subscription {
   name: string
   amountCents: number
   frequency: Frequency
+  type: TransactionType
   category: string
   nextBillingOn: string // YYYY-MM-DD
   active: boolean
@@ -66,6 +67,7 @@ export interface SubscriptionInput {
   name: string
   amountCents: number
   frequency: Frequency
+  type: TransactionType
   category: string
   nextBillingOn: string
   active: boolean
