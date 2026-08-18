@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Plus, MoreVertical, Plug, Pencil, Trash2 } from 'lucide-react'
+import { MoreVertical, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -57,7 +57,7 @@ export default function ConnectionsSidebar() {
           onClick={() => { setEditing(null); setFormOpen(true) }}
           aria-label="Add connection"
         >
-          <Plus size={14} />
+          <Plus className="h-4 w-4" />
         </Button>
       </div>
       <ScrollArea className="flex-1">
@@ -97,22 +97,22 @@ export default function ConnectionsSidebar() {
                       className="h-11 w-11 opacity-0 group-hover:opacity-100"
                       aria-label={`Connection options for ${conn.name}`}
                     >
-                      <MoreVertical size={12} />
+                      <MoreVertical className="h-3 w-3 rotate-90" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleConnect(conn) }}>
-                      <Plug size={12} /> Connect
+                      <Plug className="h-3 w-3" /> Connect
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditing(conn); setFormOpen(true) }}>
-                      <Pencil size={12} /> Edit
+                      <Pencil className="h-3 w-3" /> Edit
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive"
                       onClick={(e) => { e.stopPropagation(); removeConnection(conn.id) }}
                     >
-                      <Trash2 size={12} /> Delete
+                      <Trash2 className="h-3 w-3" /> Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

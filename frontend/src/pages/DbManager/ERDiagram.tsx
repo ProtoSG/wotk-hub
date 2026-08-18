@@ -1,3 +1,4 @@
+import { Loader2, RefreshCw } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   ReactFlow,
@@ -14,7 +15,6 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from '@dagrejs/dagre'
-import { Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useDbStore } from '@/store/dbStore'
@@ -209,7 +209,7 @@ export default function ERDiagram() {
     <div className="relative h-full w-full">
       <div className="absolute top-3 right-3 z-10">
         <Button variant="outline" size="sm" onClick={loadDiagram} disabled={loading}>
-          {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           Refresh
         </Button>
       </div>
@@ -222,7 +222,7 @@ export default function ERDiagram() {
 
       {loading && nodes.length === 0 ? (
         <div className="flex h-full items-center justify-center gap-2">
-          <Loader2 size={16} className="animate-spin text-muted-foreground" />
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Loading diagram…</span>
         </div>
       ) : (

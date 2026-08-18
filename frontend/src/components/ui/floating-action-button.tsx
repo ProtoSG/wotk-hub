@@ -25,7 +25,7 @@ export function FloatingActionButton({ onClick, label, className }: FloatingActi
         className
       )}
     >
-      <Plus className="h-6 w-6" />
+      <Plus className="h-7 w-7" />
     </button>
   )
 }

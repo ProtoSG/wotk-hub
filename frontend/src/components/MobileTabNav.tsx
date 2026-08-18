@@ -1,10 +1,10 @@
-import type { LucideIcon } from 'lucide-react'
+import type { ComponentType } from 'react'
 import { cn } from '@/lib/utils'
 
 interface Tab {
   value: string
   label: string
-  icon: LucideIcon
+  icon: ComponentType<{ className?: string }>
 }
 
 interface Props {

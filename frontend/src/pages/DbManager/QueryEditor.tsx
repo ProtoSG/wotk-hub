@@ -1,4 +1,4 @@
-import { Loader2, Play, Trash2, Clock, CheckCircle2, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Loader2, Play, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -289,11 +289,11 @@ export default function QueryEditor() {
 
         <div className="flex gap-2">
           <Button size="sm" onClick={handleRun} disabled={isExecuting || !activeConn}>
-            {isExecuting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             {isExecuting ? 'Running…' : 'Run'}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => { setCurrentQuery(''); setResultSets([]) }}>
-            <Trash2 size={14} />
+            <Trash2 className="h-3.5 w-3.5" />
             Clear
           </Button>
           {resultSets.length > 0 && !isExecuting && (
@@ -339,7 +339,7 @@ export default function QueryEditor() {
                 >
                   <p className="font-mono text-xs truncate">{entry.sql}</p>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <Clock size={10} />
+                    <Clock className="h-2.5 w-2.5" />
                     <span>{new Date(entry.executedAt).toLocaleTimeString()}</span>
                     <span>·</span>
                     <span>{entry.rowCount} rows</span>
@@ -363,8 +363,8 @@ function ResultSetBlock({ index, set, total }: { index: number; set: QueryResult
     <div className="rounded-md border overflow-hidden">
       <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 border-b">
         {set.error
-          ? <XCircle size={13} className="text-destructive shrink-0" />
-          : <CheckCircle2 size={13} className="text-success shrink-0" />}
+          ? <XCircle className="h-[13px] w-[13px] text-destructive shrink-0" />
+          : <CheckCircle2 className="h-[13px] w-[13px] text-success shrink-0" />}
         {total > 1 && (
           <span className="text-[11px] font-medium text-muted-foreground shrink-0">#{index + 1}</span>
         )}

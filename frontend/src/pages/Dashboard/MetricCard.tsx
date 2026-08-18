@@ -1,5 +1,5 @@
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import type { CSSProperties } from 'react'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -30,7 +30,7 @@ export default function MetricCard({ label, value, change, trend, primary, style
         </div>
         {change && (
           <div className={`flex items-center gap-1 mt-1 text-xs ${trendColor}`}>
-            <TrendIcon size={12} />
+            <TrendIcon className="h-3 w-3" />
             <span>{change} desde la semana pasada</span>
           </div>
         )}

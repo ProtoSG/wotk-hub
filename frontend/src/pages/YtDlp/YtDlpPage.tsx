@@ -1,7 +1,8 @@
-import { Music, Download, Loader2 } from 'lucide-react'
+import { Download, Loader2, Music } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { IconChip } from '@/components/ui/icon-chip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useYtdlpApi } from '@/hooks/useYtdlpApi'
@@ -21,9 +22,7 @@ export default function YtDlpPage() {
       <div className="mx-auto w-full max-w-lg">
         <CozyCard className="animate-card-in">
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Music size={18} strokeWidth={2.25} />
-            </span>
+            <IconChip icon={Music} accent="--primary" size="sm" />
             <CardTitle className="text-base font-semibold">Descargar audio</CardTitle>
           </CardHeader>
           <CardContent>

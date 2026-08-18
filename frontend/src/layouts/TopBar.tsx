@@ -1,4 +1,4 @@
-import { Moon, Sun, Menu, LogOut } from 'lucide-react'
+import { LogOut, Menu, Moon, Sun } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useThemeStore } from '@/store/themeStore'
@@ -45,7 +45,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         aria-label="Abrir menú de navegación"
         onClick={onMenuClick}
       >
-        <Menu size={18} />
+        <Menu className="h-[18px] w-[18px]" />
       </Button>
 
       <div className="flex flex-1 items-center justify-between">
@@ -70,12 +70,16 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
-                {theme === 'dark' ? <Sun size={14} className="mr-2" /> : <Moon size={14} className="mr-2" />}
+                {theme === 'dark' ? (
+                  <Sun className="mr-2 h-3.5 w-3.5" />
+                ) : (
+                  <Moon className="mr-2 h-3.5 w-3.5" />
+                )}
                 {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
-                <LogOut size={14} className="mr-2" />
+                <LogOut className="mr-2 h-3.5 w-3.5" />
                 Cerrar sesión
               </DropdownMenuItem>
             </DropdownMenuContent>

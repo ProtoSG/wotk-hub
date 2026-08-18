@@ -287,7 +287,7 @@ export default function RoutineForm({ open, routineId, onClose }: RoutineFormPro
           )}
 
           <Button variant="outline" className="w-full" onClick={() => setPicking(true)}>
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1 h-5 w-5" />
             Agregar ejercicio
           </Button>
         </div>

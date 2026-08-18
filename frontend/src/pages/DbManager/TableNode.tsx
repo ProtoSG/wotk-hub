@@ -50,8 +50,7 @@ export default function TableNode({ table, connection }: Props) {
     <Collapsible open={open} onOpenChange={handleOpen}>
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs hover:bg-accent group">
         <ChevronRight
-          size={12}
-          className="transition-transform group-data-[state=open]:rotate-90 text-muted-foreground"
+          className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90 text-muted-foreground"
         />
         <span className="font-medium">{table}</span>
       </CollapsibleTrigger>

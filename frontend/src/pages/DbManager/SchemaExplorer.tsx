@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -73,7 +73,7 @@ export default function SchemaExplorer() {
       </ScrollArea>
       {loading && (
         <div className="flex items-center gap-1 border-t px-3 py-1.5 text-xs text-muted-foreground">
-          <Loader2 size={10} className="animate-spin" />
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
           Loading schema…
         </div>
       )}

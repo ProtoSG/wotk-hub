@@ -100,14 +100,14 @@ export default function RutinasTab({
                 onClick={() => onStart(routine)}
                 disabled={starting || routine.exerciseCount === 0}
               >
-                <Play className="mr-1 h-4 w-4" />
+                <Play className="mr-1 h-5 w-5" />
                 Empezar
               </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label={`Opciones de ${routine.name}`}>
-                    <MoreVertical className="h-4 w-4" />
+                    <MoreVertical className="h-4 w-4 rotate-90" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -131,7 +131,7 @@ export default function RutinasTab({
 
       {routines.length > 0 && (
         <Button variant="outline" className="hidden w-full sm:flex" onClick={openNew}>
-          <Plus className="mr-1 h-4 w-4" />
+          <Plus className="mr-1 h-5 w-5" />
           Nueva rutina
         </Button>
       )}

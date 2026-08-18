@@ -1,9 +1,9 @@
+import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -147,7 +147,7 @@ export default function ConnectionForm({ open, onClose, editing }: Props) {
               Cancel
             </Button>
             <Button type="submit" disabled={testing}>
-              {testing && <Loader2 size={14} className="animate-spin" />}
+              {testing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {testing ? 'Testing…' : 'Test & Save'}
             </Button>
           </DialogFooter>
