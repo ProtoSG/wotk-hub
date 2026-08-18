@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 	"workhub/httpx"
+	"workhub/middleware"
 )
 
 // ExerciseProgress returns one point per session that logged this exercise,
@@ -26,6 +27,11 @@ import (
 // @Failure 400 {object} httpx.APIError
 // @Router /gym/progress/exercises/{id} [get]
 func (h *handler) ExerciseProgress(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	exerciseID, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -48,6 +54,11 @@ func (h *handler) ExerciseProgress(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, value)
 		where += " AND s.occurred_on " + f.op + " $" + strconv.Itoa(len(args))
+	}
+	// Your own progress, not the household's combined lifts.
+	if role != "admin" {
+		args = append(args, userID)
+		where += " AND s.created_by = $" + strconv.Itoa(len(args))
 	}
 
 	// `worked` narrows to this exercise's real sets once; `top` picks the
@@ -120,9 +131,16 @@ func (h *handler) ExerciseProgress(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} ProgressSummaryResponse
 // @Router /gym/progress/summary [get]
 func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	var summary ProgressSummaryResponse
 
-	err := h.db.QueryRow(`
+	// Every query below is your own training summary, not the household's
+	// combined one — each gets its own AND s.created_by = $N for non-admin.
+	sessionsQuery, sessionsArgs := scopeToOwner(`
 		SELECT COUNT(DISTINCT s.id),
 		       COALESCE(SUM(CASE WHEN st.is_warmup = false AND st.completed
 		                         THEN st.reps * st.weight_grams ELSE 0 END), 0)
@@ -130,7 +148,9 @@ func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN session_exercises se ON se.session_id = s.id
 		LEFT JOIN exercise_sets st ON st.session_exercise_id = se.id
 		WHERE date_trunc('month', s.occurred_on) = date_trunc('month', CURRENT_DATE)`,
-	).Scan(&summary.SessionsThisMonth, &summary.VolumeThisMonthGrams)
+		[]any{}, role, userID)
+	err := h.db.QueryRow(sessionsQuery, sessionsArgs...).
+		Scan(&summary.SessionsThisMonth, &summary.VolumeThisMonthGrams)
 	if err != nil {
 		log.Printf("gym: progress summary failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -142,12 +162,12 @@ func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
 	// single week and mean nothing. row_number() against the week index gives
 	// a constant per unbroken run; the run containing this week (or the last
 	// finished one) is the current streak.
-	err = h.db.QueryRow(`
-		WITH weeks AS (
-			SELECT DISTINCT date_trunc('week', occurred_on)::date AS week
-			FROM workout_sessions
-			WHERE occurred_on <= CURRENT_DATE
-		),
+	weeksQuery, weeksArgs := scopeToOwner(
+		`SELECT DISTINCT date_trunc('week', occurred_on)::date AS week
+		 FROM workout_sessions
+		 WHERE occurred_on <= CURRENT_DATE`, []any{}, role, userID)
+	streakQuery := `
+		WITH weeks AS (` + weeksQuery + `),
 		runs AS (
 			SELECT week,
 			       week - (row_number() OVER (ORDER BY week))::int * 7 AS run_key
@@ -159,8 +179,8 @@ func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
 			SELECT run_key FROM runs
 			WHERE week >= date_trunc('week', CURRENT_DATE)::date - 7
 			ORDER BY week DESC LIMIT 1
-		)`,
-	).Scan(&summary.WeekStreak)
+		)`
+	err = h.db.QueryRow(streakQuery, weeksArgs...).Scan(&summary.WeekStreak)
 	if err != nil {
 		log.Printf("gym: week streak failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -169,19 +189,18 @@ func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
 
 	// Most-trained muscle over the trailing 90 days — long enough to describe
 	// a training block, short enough to reflect what is being worked now.
-	var topMuscle *string
-	err = h.db.QueryRow(`
+	muscleQuery, muscleArgs := scopeToOwner(`
 		SELECT e.primary_muscle
 		FROM exercise_sets st
 		JOIN session_exercises se ON se.id = st.session_exercise_id
 		JOIN workout_sessions s ON s.id = se.session_id
 		JOIN exercises e ON e.id = se.exercise_id
 		WHERE st.is_warmup = false AND st.completed
-		  AND s.occurred_on >= CURRENT_DATE - INTERVAL '90 days'
-		GROUP BY e.primary_muscle
-		ORDER BY COUNT(*) DESC, e.primary_muscle
-		LIMIT 1`,
-	).Scan(&topMuscle)
+		  AND s.occurred_on >= CURRENT_DATE - INTERVAL '90 days'`,
+		[]any{}, role, userID)
+	var topMuscle *string
+	err = h.db.QueryRow(muscleQuery+` GROUP BY e.primary_muscle ORDER BY COUNT(*) DESC, e.primary_muscle LIMIT 1`, muscleArgs...).
+		Scan(&topMuscle)
 	if err != nil && err.Error() != "sql: no rows in result set" {
 		log.Printf("gym: top muscle failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -204,17 +223,26 @@ func (h *handler) ProgressSummary(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} listExercisesResponse
 // @Router /gym/progress/exercises [get]
 func (h *handler) LoggedExercises(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	// Correlated subquery scoped to caller's own sessions — the picker
+	// should offer what YOU have logged, not the household's combined set.
+	existsQuery, existsArgs := scopeToOwner(`
+		SELECT 1
+		FROM session_exercises se
+		JOIN workout_sessions s ON s.id = se.session_id
+		JOIN exercise_sets st ON st.session_exercise_id = se.id
+		WHERE se.exercise_id = e.id AND st.is_warmup = false AND st.completed`,
+		[]any{}, role, userID)
 	rows, err := h.db.Query(`
 		SELECT e.id, e.name, e.equipment, e.primary_muscle, e.secondary_muscle,
 		       e.description, e.tracking_type, e.media_url, e.media_type, e.is_custom
 		FROM exercises e
-		WHERE EXISTS (
-			SELECT 1
-			FROM session_exercises se
-			JOIN exercise_sets st ON st.session_exercise_id = se.id
-			WHERE se.exercise_id = e.id AND st.is_warmup = false AND st.completed
-		)
-		ORDER BY e.name`)
+		WHERE EXISTS (`+existsQuery+`)
+		ORDER BY e.name`, existsArgs...)
 	if err != nil {
 		log.Printf("gym: logged exercises failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")

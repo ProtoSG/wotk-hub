@@ -18,13 +18,18 @@ import (
 // @Success 200 {object} listRoutinesResponse
 // @Router /gym/routines [get]
 func (h *handler) ListRoutines(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(`
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	query, args := scopeToOwner(`
 		SELECT r.id, r.name, r.notes, r.color, r.icon, r.archived, COUNT(re.id)
 		FROM routines r
 		LEFT JOIN routine_exercises re ON re.routine_id = r.id
-		WHERE r.archived = false
-		GROUP BY r.id
-		ORDER BY r.name`)
+		WHERE r.archived = false`, []any{}, role, userID)
+	rows, err := h.db.Query(query+` GROUP BY r.id ORDER BY r.name`, args...)
 	if err != nil {
 		log.Printf("gym: list routines failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -61,9 +66,22 @@ func (h *handler) ListRoutines(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/routines/{id} [get]
 func (h *handler) GetRoutine(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.routineOwned(id, role, userID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "routine not found")
+		return
+	} else if err != nil {
+		log.Printf("gym: get routine ownership check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -156,6 +174,11 @@ func (h *handler) CreateRoutine(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/routines/{id} [put]
 func (h *handler) UpdateRoutine(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -179,10 +202,12 @@ func (h *handler) UpdateRoutine(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(
+	updateQuery, updateArgs := scopeToOwner(
 		`UPDATE routines SET name = $1, notes = $2, color = $3, icon = $4 WHERE id = $5`,
-		req.Name, req.Notes, defaultTo(req.Color, defaultRoutineColor), defaultTo(req.Icon, defaultRoutineIcon), id,
+		[]any{req.Name, req.Notes, defaultTo(req.Color, defaultRoutineColor), defaultTo(req.Icon, defaultRoutineIcon), id},
+		role, userID,
 	)
+	res, err := tx.Exec(updateQuery, updateArgs...)
 	if err != nil {
 		log.Printf("gym: update routine failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -226,13 +251,19 @@ func (h *handler) UpdateRoutine(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/routines/{id} [delete]
 func (h *handler) DeleteRoutine(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
-	res, err := h.db.Exec(`DELETE FROM routines WHERE id = $1`, id)
+	query, args := scopeToOwner(`DELETE FROM routines WHERE id = $1`, []any{id}, role, userID)
+	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		log.Printf("gym: delete routine failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -259,6 +290,15 @@ func insertRoutineExercises(tx *sql.Tx, routineID int64, exercises []routineExer
 		}
 	}
 	return nil
+}
+
+// routineOwned checks the routine exists and is owned by the caller (or the
+// caller is admin), 404ing otherwise without revealing existence — same
+// pattern as finances' cardOwned.
+func (h *handler) routineOwned(id int64, role string, userID int64) error {
+	query, args := scopeToOwner(`SELECT id FROM routines WHERE id = $1`, []any{id}, role, userID)
+	var got int64
+	return h.db.QueryRow(query, args...).Scan(&got)
 }
 
 func (h *handler) loadRoutine(id int64) (*Routine, error) {

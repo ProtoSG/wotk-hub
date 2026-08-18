@@ -25,6 +25,12 @@ import (
 // @Failure 400 {object} httpx.APIError
 // @Router /gym/sessions [get]
 func (h *handler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
 	where := " WHERE 1 = 1"
 	args := []any{}
 	for _, f := range []struct {
@@ -41,6 +47,10 @@ func (h *handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, value)
 		where += " AND s.occurred_on " + f.op + " $" + strconv.Itoa(len(args))
+	}
+	if role != "admin" {
+		args = append(args, userID)
+		where += " AND s.created_by = $" + strconv.Itoa(len(args))
 	}
 
 	rows, err := h.db.Query(`
@@ -90,10 +100,16 @@ func (h *handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} activeSessionResponse
 // @Router /gym/sessions/active [get]
 func (h *handler) ActiveSession(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+
+	query, args := scopeToOwner(
+		`SELECT id FROM workout_sessions WHERE finished_at IS NULL`, []any{}, role, userID)
 	var id int64
-	err := h.db.QueryRow(
-		`SELECT id FROM workout_sessions WHERE finished_at IS NULL ORDER BY started_at DESC LIMIT 1`,
-	).Scan(&id)
+	err := h.db.QueryRow(query+` ORDER BY started_at DESC LIMIT 1`, args...).Scan(&id)
 	if err == sql.ErrNoRows {
 		httpx.WriteJSON(w, http.StatusOK, activeSessionResponse{Session: nil})
 		return
@@ -124,9 +140,22 @@ func (h *handler) ActiveSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id} [get]
 func (h *handler) GetSession(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.sessionOwned(id, role, userID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "session not found")
+		return
+	} else if err != nil {
+		log.Printf("gym: get session ownership check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -157,6 +186,11 @@ func (h *handler) GetSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} httpx.APIError "a session is already in progress"
 // @Router /gym/sessions [post]
 func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	var req sessionRequest
 	if err := httpx.DecodeJSON(w, r, &req, httpx.DefaultMaxBodyBytes); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
@@ -167,10 +201,14 @@ func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// One workout at a time: a second in-progress session would leave the
-	// logging UI with no single answer for "what am I doing right now".
+	// One workout at a time per person — not app-wide: two partners training
+	// at the same time shouldn't block each other, only a second in-progress
+	// session for the SAME caller (the logging UI has no single answer for
+	// "what am I doing right now" otherwise).
+	openQuery, openArgs := scopeToOwner(
+		`SELECT id FROM workout_sessions WHERE finished_at IS NULL`, []any{}, role, userID)
 	var openID int64
-	err := h.db.QueryRow(`SELECT id FROM workout_sessions WHERE finished_at IS NULL LIMIT 1`).Scan(&openID)
+	err := h.db.QueryRow(openQuery+` LIMIT 1`, openArgs...).Scan(&openID)
 	if err == nil {
 		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, "a session is already in progress")
 		return
@@ -181,7 +219,16 @@ func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, _, _ := middleware.UserFromContext(r.Context())
+	if req.RoutineID != nil {
+		if err := h.routineOwned(*req.RoutineID, role, userID); err == sql.ErrNoRows {
+			httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "routine not found")
+			return
+		} else if err != nil {
+			log.Printf("gym: create session routine ownership check failed: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+			return
+		}
+	}
 
 	tx, err := h.db.Begin()
 	if err != nil {
@@ -195,6 +242,7 @@ func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	if req.RoutineID != nil {
 		// The routine's name is snapshotted onto the session so the history
 		// still reads correctly after the template is renamed or deleted.
+		// Ownership was already checked above, before the transaction opened.
 		var routineName string
 		err := tx.QueryRow(`SELECT name FROM routines WHERE id = $1`, *req.RoutineID).Scan(&routineName)
 		if err == sql.ErrNoRows {
@@ -260,6 +308,11 @@ func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id} [put]
 func (h *handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -275,10 +328,10 @@ func (h *handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.db.Exec(
+	query, args := scopeToOwner(
 		`UPDATE workout_sessions SET name = $1, occurred_on = $2, notes = $3 WHERE id = $4`,
-		req.Name, req.OccurredOn, req.Notes, id,
-	)
+		[]any{req.Name, req.OccurredOn, req.Notes, id}, role, userID)
+	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		log.Printf("gym: update session failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -311,9 +364,22 @@ func (h *handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id}/finish [post]
 func (h *handler) FinishSession(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.sessionOwned(id, role, userID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "session not found")
+		return
+	} else if err != nil {
+		log.Printf("gym: finish session ownership check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -354,13 +420,19 @@ func (h *handler) FinishSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id} [delete]
 func (h *handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
-	res, err := h.db.Exec(`DELETE FROM workout_sessions WHERE id = $1`, id)
+	query, args := scopeToOwner(`DELETE FROM workout_sessions WHERE id = $1`, []any{id}, role, userID)
+	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		log.Printf("gym: delete session failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
@@ -431,6 +503,15 @@ func materializeRoutine(tx *sql.Tx, sessionID, routineID int64) error {
 		}
 	}
 	return nil
+}
+
+// sessionOwned checks the session exists and is owned by the caller (or the
+// caller is admin), 404ing otherwise without revealing existence — same
+// pattern as routineOwned/finances' cardOwned. Used by sets.go too.
+func (h *handler) sessionOwned(id int64, role string, userID int64) error {
+	query, args := scopeToOwner(`SELECT id FROM workout_sessions WHERE id = $1`, []any{id}, role, userID)
+	var got int64
+	return h.db.QueryRow(query, args...).Scan(&got)
 }
 
 // loadSession reads a session and its nested exercises and sets. Two queries

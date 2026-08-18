@@ -219,6 +219,11 @@ func (h *handler) CreateExercise(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} httpx.APIError
 // @Router /gym/exercises/{id} [put]
 func (h *handler) UpdateExercise(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -250,17 +255,26 @@ func (h *handler) UpdateExercise(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row := h.db.QueryRow(
+	// "propios" is enforced for real here: a custom exercise is only
+	// editable by whoever created it (or admin) — the exercise catalog is a
+	// shared read, but a partner's custom addition isn't yours to rewrite.
+	query, args := scopeToOwner(
 		`UPDATE exercises
 		 SET name = $1, equipment = $2, primary_muscle = $3, secondary_muscle = $4, description = $5,
 		     tracking_type = $6
-		 WHERE id = $7
-		 RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, tracking_type, media_url, media_type, is_custom`,
-		strings.TrimSpace(req.Name), strings.TrimSpace(req.Equipment),
-		strings.TrimSpace(req.PrimaryMuscle), strings.TrimSpace(req.SecondaryMuscle),
-		strings.TrimSpace(req.Description), defaultTo(req.TrackingType, TrackingWeightReps), id,
-	)
+		 WHERE id = $7`,
+		[]any{
+			strings.TrimSpace(req.Name), strings.TrimSpace(req.Equipment),
+			strings.TrimSpace(req.PrimaryMuscle), strings.TrimSpace(req.SecondaryMuscle),
+			strings.TrimSpace(req.Description), defaultTo(req.TrackingType, TrackingWeightReps), id,
+		}, role, userID)
+	query += ` RETURNING id, name, equipment, primary_muscle, secondary_muscle, description, tracking_type, media_url, media_type, is_custom`
+	row := h.db.QueryRow(query, args...)
 	exercise, err := scanExercise(row)
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "exercise not found")
+		return
+	}
 	if pqErr, ok := err.(*pq.Error); ok && string(pqErr.Code) == exerciseUniqueViolation {
 		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, "ya existe un ejercicio con ese nombre")
 		return
@@ -336,6 +350,11 @@ func (h *handler) UpdateExerciseDescription(w http.ResponseWriter, r *http.Reque
 // @Failure 409 {object} httpx.APIError "the exercise is seeded or still in use"
 // @Router /gym/exercises/{id} [delete]
 func (h *handler) DeleteExercise(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	id, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -374,7 +393,10 @@ func (h *handler) DeleteExercise(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.db.Exec(`DELETE FROM exercises WHERE id = $1`, id)
+	// Same "propios" enforcement as UpdateExercise — only the creator (or
+	// admin) can delete their own custom exercise.
+	query, args := scopeToOwner(`DELETE FROM exercises WHERE id = $1`, []any{id}, role, userID)
+	res, err := h.db.Exec(query, args...)
 	if err != nil {
 		log.Printf("gym: delete exercise failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
