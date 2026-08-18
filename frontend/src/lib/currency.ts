@@ -3,9 +3,22 @@ const penFormatter = new Intl.NumberFormat('es-PE', {
   currency: 'PEN',
 })
 
+const penCompactFormatter = new Intl.NumberFormat('es-PE', {
+  style: 'currency',
+  currency: 'PEN',
+  notation: 'compact',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 /** Formats integer cents as "S/ 1,234.56" */
 export function formatPEN(cents: number): string {
   return penFormatter.format(cents / 100)
+}
+
+/** Formats integer cents compactly as "S/ 10.00" or "S/ 1.20 K" — narrow layouts (mobile KPI tiles) where the full "S/ 1,234.56" wouldn't fit. Always 2 decimals for consistency with formatPEN. */
+export function formatPENCompact(cents: number): string {
+  return penCompactFormatter.format(cents / 100)
 }
 
 /** Converts a soles amount (e.g. 25.5) to integer cents */

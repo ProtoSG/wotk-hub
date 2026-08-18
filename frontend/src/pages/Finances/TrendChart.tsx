@@ -1,7 +1,8 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CozyCard, paperSurfaceStyle } from '@/components/ui/cozy-card'
+import { CozyCard } from '@/components/ui/cozy-card'
+import { ChartTooltip } from '@/components/ui/chart-tooltip'
 import { formatPEN } from '@/lib/currency'
 import type { TrendPoint } from '@/types/finance.types'
 
@@ -9,19 +10,10 @@ interface Props {
   data: TrendPoint[]
 }
 
-/**
- * Custom tooltip content styled as a small warm-paper card (same surface
- * treatment as CozyCard) rather than Recharts' plain bordered box — keeps
- * the chart chrome part of the cozy system instead of a stock default.
- */
 function TrendTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload?.length) return null
   return (
-    <div
-      className="rounded-[var(--radius)] px-3 py-2 text-sm shadow-[0_1px_2px_oklch(0.35_0.03_40/0.07),0_12px_28px_-10px_oklch(0.35_0.06_40/0.18)]"
-      style={paperSurfaceStyle}
-    >
-      <p className="mb-1 font-medium text-foreground">{label}</p>
+    <ChartTooltip label={label}>
       {payload.map((entry, i) => (
         <p key={i} className="flex items-center gap-1.5 text-muted-foreground">
           <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
@@ -31,7 +23,7 @@ function TrendTooltip({ active, payload, label }: TooltipContentProps) {
           </span>
         </p>
       ))}
-    </div>
+    </ChartTooltip>
   )
 }
 

@@ -165,7 +165,19 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
             </div>
             <div className="min-w-0 space-y-1">
               <Label>Categoría</Label>
-              <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
+              {/* key={type}: Radix Select has a documented bug where changing
+                  `value` and its `<SelectItem>` list in the same render (as
+                  happens switching Gasto/Ingreso) races its internal item
+                  registry — it doesn't see the new items yet, decides the
+                  value is invalid, and self-corrects to '' for real (not
+                  just a display glitch). Remounting the whole Select on
+                  type change sidesteps that race entirely. */}
+              <Select
+                key={type}
+                value={category}
+                onValueChange={(v) => setValue('category', v)}
+                disabled={categoriesLoading}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
                 </SelectTrigger>
