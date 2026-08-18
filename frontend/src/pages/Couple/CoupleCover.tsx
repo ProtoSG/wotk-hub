@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Plus, MoreHorizontal, Images } from 'lucide-react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Images, MoreHorizontal, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -16,8 +17,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
-import type { Poem } from '@/types/couple.types'
 import { useAuthStore } from '@/store/authStore'
+import { todayPoemKey } from './coupleKeys'
 
 const STORAGE_KEY = 'couple-cover-image-url'
 
@@ -59,21 +60,26 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
   const [imageUrl, setImageUrl] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [urlInput, setUrlInput] = useState('')
-  const [todayPoem, setTodayPoem] = useState<Poem | null>(null)
 
   const { todayPoem: fetchTodayPoem } = useCoupleApi()
   const role = useAuthStore((s) => s.user?.role)
   const canManage = role === 'admin'
 
-  useEffect(() => {
-    if (!canManage) {
-      fetchTodayPoem()
-        .then((res) => setTodayPoem(res.poem ?? null))
-        // Silently ignore — non-admin guests see the normal cover on error
-        .catch(() => {})
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage])
+  // Silently ignore fetch errors — non-admin guests see the normal cover on
+  // error, so the queryFn swallows them itself rather than letting the
+  // global QueryCache onError toast fire.
+  const { data: todayPoem = null } = useQuery({
+    queryKey: todayPoemKey(),
+    queryFn: async () => {
+      try {
+        const res = await fetchTodayPoem()
+        return res.poem ?? null
+      } catch {
+        return null
+      }
+    },
+    enabled: !canManage,
+  })
 
   function openImageDialog() {
     setUrlInput(imageUrl)
@@ -235,7 +241,7 @@ export default function CoupleCover({ onNewDate }: CoupleCoverProps) {
               {onNewDate && (
                 <div className="hidden sm:block">
                   <Button onClick={onNewDate}>
-                    <Plus size={14} />
+                    <Plus className="h-4 w-4" />
                     Nueva cita
                   </Button>
                 </div>

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { ImageOff, Loader2, Trash2, Upload } from 'lucide-react'
+import { useRef, useState, type ChangeEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Loader2, Trash2, Upload, ImageOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import type { CoupleDatePhoto } from '@/types/couple.types'
+import { photosKey } from './coupleKeys'
 
 // Matches the backend's allowedPhotoTypes in modules/couple/photos.go.
 const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,image/gif'
@@ -19,52 +21,57 @@ interface Props {
 // attach photos to yet. No lightbox library: clicking a thumbnail opens the
 // same full-size image in a plain dialog, since this app doesn't need one.
 export default function DatePhotos({ dateId }: Props) {
-  const [photos, setPhotos] = useState<CoupleDatePhoto[]>([])
-  const [loading, setLoading] = useState(true)
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [preview, setPreview] = useState<CoupleDatePhoto | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { listPhotos, uploadPhoto, deletePhoto } = useCoupleApi()
+  const queryClient = useQueryClient()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      setPhotos(await listPhotos(dateId))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las fotos')
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateId])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as CouplePage
-    load()
-  }, [load])
+  const { data: photos = [], isPending } = useQuery({
+    queryKey: photosKey(dateId),
+    queryFn: () => listPhotos(dateId),
+  })
 
   // Multiple files upload concurrently rather than one-at-a-time — each is
   // an independent POST, so a slow/failing file doesn't block the rest.
   // Progress is a simple done/total counter rather than per-file percentage;
   // good enough for the handful of photos someone picks from a gallery at
   // once, and much simpler than tracking individual upload progress events.
+  const uploadMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      setUploadProgress({ done: 0, total: files.length })
+      return Promise.allSettled(
+        files.map((file) =>
+          uploadPhoto(dateId, file).then((photo) => {
+            queryClient.setQueryData<CoupleDatePhoto[]>(photosKey(dateId), (prev = []) => [photo, ...prev])
+            setUploadProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
+            return photo
+          })
+        )
+      )
+    },
+    onSettled: () => setUploadProgress(null),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (photo: CoupleDatePhoto) => deletePhoto(dateId, photo.id),
+    onSuccess: (_data, photo) => {
+      queryClient.setQueryData<CoupleDatePhoto[]>(photosKey(dateId), (prev = []) =>
+        prev.filter((p) => p.id !== photo.id)
+      )
+      setPreview((prev) => (prev?.id === photo.id ? null : prev))
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la foto')
+    },
+  })
+
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
     e.target.value = ''
     if (files.length === 0) return
 
-    setUploadProgress({ done: 0, total: files.length })
-    const results = await Promise.allSettled(
-      files.map((file) =>
-        uploadPhoto(dateId, file).then((photo) => {
-          setPhotos((prev) => [photo, ...prev])
-          setUploadProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
-          return photo
-        })
-      )
-    )
-    setUploadProgress(null)
+    const results = await uploadMutation.mutateAsync(files)
 
     const failed = results.filter((r) => r.status === 'rejected').length
     if (failed > 0) {
@@ -83,17 +90,8 @@ export default function DatePhotos({ dateId }: Props) {
     }
   }
 
-  async function handleDelete(photo: CoupleDatePhoto) {
-    setDeletingId(photo.id)
-    try {
-      await deletePhoto(dateId, photo.id)
-      setPhotos((prev) => prev.filter((p) => p.id !== photo.id))
-      setPreview((prev) => (prev?.id === photo.id ? null : prev))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la foto')
-    } finally {
-      setDeletingId(null)
-    }
+  function handleDelete(photo: CoupleDatePhoto) {
+    deleteMutation.mutate(photo)
   }
 
   return (
@@ -107,7 +105,7 @@ export default function DatePhotos({ dateId }: Props) {
           disabled={uploadProgress != null}
           onClick={() => fileInputRef.current?.click()}
         >
-          {uploadProgress != null ? <Loader2 size={14} className="animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploadProgress != null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-4 w-4" />}
           {uploadProgress != null ? `Subiendo ${uploadProgress.done}/${uploadProgress.total}…` : 'Agregar fotos'}
         </Button>
         <input
@@ -120,9 +118,9 @@ export default function DatePhotos({ dateId }: Props) {
         />
       </div>
 
-      {loading ? (
+      {isPending ? (
         <div className="flex items-center justify-center py-6 text-muted-foreground">
-          <Loader2 size={18} className="animate-spin" />
+          <Loader2 className="h-[18px] w-[18px] animate-spin" />
         </div>
       ) : photos.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-md border border-dashed py-6 text-muted-foreground">
@@ -139,11 +137,15 @@ export default function DatePhotos({ dateId }: Props) {
               <button
                 type="button"
                 aria-label="Eliminar foto"
-                disabled={deletingId === p.id}
+                disabled={deleteMutation.isPending && deleteMutation.variables?.id === p.id}
                 onClick={() => handleDelete(p)}
                 className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
               >
-                {deletingId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                {deleteMutation.isPending && deleteMutation.variables?.id === p.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
               </button>
             </div>
           ))}
