@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/ui/date-field'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -132,7 +133,7 @@ export default function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormP
             </div>
             <div className="min-w-0 space-y-1">
               <Label>Fecha límite (opcional)</Label>
-              <Input type="date" {...register('deadline')} />
+              <DateField value={watch('deadline') ?? ''} onChange={(v) => setValue('deadline', v)} />
             </div>
           </div>
           <div className="min-w-0 space-y-1">

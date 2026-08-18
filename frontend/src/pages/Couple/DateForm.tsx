@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/ui/date-field'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -142,10 +143,7 @@ export default function DateForm({ open, onClose, editing }: Props) {
           <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
               <Label>Fecha</Label>
-              <Input
-                type="date"
-                {...register('occurredOn', { onChange: (e) => handleOccurredOnChange(e.target.value) })}
-              />
+              <DateField value={watch('occurredOn')} onChange={handleOccurredOnChange} />
               {errors.occurredOn && <p className="text-xs text-destructive">{errors.occurredOn.message}</p>}
             </div>
             <div className="min-w-0 space-y-1">

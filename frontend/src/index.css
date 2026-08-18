@@ -226,22 +226,43 @@
   /* iOS Safari renders input[type=date] internals with their own padding/
      line-height/alignment, ignoring the input's own px-3 py-1 — this
      resets those webkit-only pseudo-elements so the date text lines up
-     like a normal text input. */
+     like a normal text input.
+     Two extra iOS-only quirks fixed below:
+     - The shared Input component sets `display:flex` on the <input>
+       itself (for icon alignment), which makes iOS Safari treat the date/
+       time fragments as flex items with `min-width:auto`, so the native
+       picker ignores our width and sizes itself (WebKit flex-item
+       min-width quirk). `min-width: 0` on each fragment fixes it.
+     - Empty (unfilled) date inputs report a shorter intrinsic height than
+       filled ones on iOS (WebKit bug 198959), causing a height jump vs.
+       sibling inputs. `min-height` alone only sets a floor though — iOS
+       still grows the box past h-9 because the native calendar-picker
+       icon has its own ~24px intrinsic size and stretches the flex row
+       taller. Locking `height` and capping the icon's own size below
+       closes both ends. */
   input[type='date'] {
     -webkit-appearance: none;
     appearance: none;
+    height: 2.25rem;
   }
   input[type='date']::-webkit-date-and-time-value {
+    min-width: 0;
     text-align: left;
   }
   input[type='date']::-webkit-datetime-edit {
+    min-width: 0;
     padding: 0;
     line-height: 1;
   }
   input[type='date']::-webkit-datetime-edit-fields-wrapper {
+    min-width: 0;
     padding: 0;
   }
   input[type='date']::-webkit-calendar-picker-indicator {
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    padding: 0;
     margin-left: 0.25rem;
   }
 

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/ui/date-field'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
@@ -221,7 +222,7 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
             </div>
             <div className="min-w-0 space-y-1">
               <Label>Próximo cobro</Label>
-              <Input type="date" {...register('nextBillingOn')} />
+              <DateField value={watch('nextBillingOn')} onChange={(v) => setValue('nextBillingOn', v)} />
               {errors.nextBillingOn && (
                 <p className="text-xs text-destructive">{errors.nextBillingOn.message}</p>
               )}
