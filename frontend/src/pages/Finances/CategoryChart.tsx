@@ -1,7 +1,8 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import type { PieLabelRenderProps } from 'recharts'
+import type { PieLabelRenderProps, TooltipContentProps } from 'recharts'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { ChartTooltip } from '@/components/ui/chart-tooltip'
 import { formatPEN } from '@/lib/currency'
 import type { CategoryAmount } from '@/types/finance.types'
 import { useCategories } from '@/hooks/useCategories'
@@ -78,6 +79,20 @@ function renderSliceLabel({ cx, cy, midAngle, outerRadius, percent }: PieLabelRe
   )
 }
 
+function CategoryTooltip({ active, payload }: TooltipContentProps) {
+  if (!active || !payload?.length) return null
+  const entry = payload[0]
+  return (
+    <ChartTooltip>
+      <p className="flex items-center gap-1.5 text-muted-foreground">
+        <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+        {entry.name}:{' '}
+        <span className="font-medium text-foreground">{formatPEN(entry.value as number)}</span>
+      </p>
+    </ChartTooltip>
+  )
+}
+
 interface Props {
   data: CategoryAmount[]
 }
@@ -131,15 +146,7 @@ export default function CategoryChart({ data }: Props) {
                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(value) => formatPEN(value as number)}
-                contentStyle={{
-                  backgroundColor: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  color: 'var(--foreground)',
-                }}
-              />
+              <Tooltip content={CategoryTooltip} />
               <Legend
                 iconType="circle"
                 iconSize={8}

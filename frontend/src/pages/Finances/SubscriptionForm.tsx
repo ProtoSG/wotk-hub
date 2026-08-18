@@ -172,7 +172,16 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
           <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
               <Label>Categoría</Label>
-              <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
+              {/* key={type}: see TransactionForm.tsx's identical comment —
+                  Radix Select races changing `value` and `<SelectItem>`
+                  list together, self-correcting the value to '' for real.
+                  Remounting on type change sidesteps it. */}
+              <Select
+                key={type}
+                value={category}
+                onValueChange={(v) => setValue('category', v)}
+                disabled={categoriesLoading}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
                 </SelectTrigger>
