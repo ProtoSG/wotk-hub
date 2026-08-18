@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+// No reasonable Solar Linear equivalent for a "no video" glyph exists
+// (verified: no video/camera icon with an off/slash/cross/remove variant
+// in @iconify-json/solar) — left on lucide-react per the rare-exception rule.
 import { ChevronLeft, Loader2, Pause, Play, Trash2, Upload, VideoOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import type { CoupleDate, Video } from '@/types/couple.types'
+import { datesKey, videoFeedKey } from './coupleKeys'
 
 // Matches the backend's allowedVideoTypes in modules/couple/videos.go.
 const ACCEPTED_TYPES = 'video/mp4,video/quicktime,video/x-msvideo,video/webm'
@@ -43,49 +48,69 @@ interface Props {
 // creates a new containing block. Portaling to <body> sidesteps all of it and
 // gets a true edge-to-edge overlay, same as native TikTok/Reels.
 export default function VideosTab({ canManage, onExit }: Props) {
-  const [entries, setEntries] = useState<VideoEntry[]>([])
-  const [dates, setDates] = useState<CoupleDate[]>([])
-  const [loading, setLoading] = useState(true)
   const [activeIndex, setActiveIndex] = useState(0)
   const [playingId, setPlayingId] = useState<number | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [selectedDateId, setSelectedDateId] = useState('')
   const [selectedFileName, setSelectedFileName] = useState('')
-  const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map())
 
   const { listDates, listVideos, uploadVideo, deleteVideo } = useCoupleApi()
+  const queryClient = useQueryClient()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const allDates = await listDates()
-      setDates(allDates)
+  const { data: dates = [], isPending: datesPending } = useQuery({
+    queryKey: datesKey(),
+    queryFn: () => listDates(),
+  })
+
+  const { data: entries = [], isPending: entriesPending } = useQuery({
+    queryKey: videoFeedKey(),
+    queryFn: async () => {
       const perDate = await Promise.all(
-        allDates.map(async (date) => {
+        dates.map(async (date) => {
           const videos = await listVideos(date.id)
           return videos.map((video) => ({ video, date }))
         }),
       )
-      const flat = perDate
-        .flat()
-        .sort((a, b) => b.video.createdAt.localeCompare(a.video.createdAt))
-      setEntries(flat)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los videos')
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      return perDate.flat().sort((a, b) => b.video.createdAt.localeCompare(a.video.createdAt))
+    },
+    enabled: dates.length > 0,
+  })
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount
-    load()
-  }, [load])
+  const loading = datesPending || (dates.length > 0 && entriesPending)
+
+  const uploadMutation = useMutation({
+    mutationFn: ({ dateId, file }: { dateId: number; file: File }) => uploadVideo(dateId, file),
+    onSuccess: (video, { dateId }) => {
+      const date = dates.find((d) => d.id === dateId)
+      if (date) {
+        queryClient.setQueryData<VideoEntry[]>(videoFeedKey(), (prev = []) => [{ video, date }, ...prev])
+      }
+      toast.success('¡Video subido!')
+      setUploadOpen(false)
+      setSelectedDateId('')
+      setSelectedFileName('')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo subir el video')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (entry: VideoEntry) => deleteVideo(entry.date.id, entry.video.id),
+    onSuccess: (_data, entry) => {
+      queryClient.setQueryData<VideoEntry[]>(videoFeedKey(), (prev = []) =>
+        prev.filter((e) => e.video.id !== entry.video.id)
+      )
+      toast.success('Video eliminado')
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el video')
+    },
+  })
 
   // Pause videos that are no longer in view
   useEffect(() => {
@@ -123,41 +148,15 @@ export default function VideosTab({ canManage, onExit }: Props) {
     }
   }
 
-  async function handleUpload() {
+  function handleUpload() {
     const file = fileInputRef.current?.files?.[0]
     const dateId = Number(selectedDateId)
     if (!file || !dateId) return
-
-    setUploading(true)
-    try {
-      const video = await uploadVideo(dateId, file)
-      const date = dates.find((d) => d.id === dateId)
-      if (date) {
-        setEntries((prev) => [{ video, date }, ...prev])
-      }
-      toast.success('¡Video subido!')
-      setUploadOpen(false)
-      setSelectedDateId('')
-      setSelectedFileName('')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo subir el video')
-    } finally {
-      setUploading(false)
-    }
+    uploadMutation.mutate({ dateId, file })
   }
 
-  async function handleDelete(entry: VideoEntry) {
-    setDeletingId(entry.video.id)
-    try {
-      await deleteVideo(entry.date.id, entry.video.id)
-      setEntries((prev) => prev.filter((e) => e.video.id !== entry.video.id))
-      toast.success('Video eliminado')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el video')
-    } finally {
-      setDeletingId(null)
-    }
+  function handleDelete(entry: VideoEntry) {
+    deleteMutation.mutate(entry)
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -168,7 +167,7 @@ export default function VideosTab({ canManage, onExit }: Props) {
     return createPortal(
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black text-muted-foreground">
         <BackButton onExit={onExit} />
-        <Loader2 size={24} className="animate-spin" />
+        <Loader2 className="h-6 w-6 animate-spin" />
       </div>,
       document.body
     )
@@ -199,7 +198,7 @@ export default function VideosTab({ canManage, onExit }: Props) {
           selectedFileName={selectedFileName}
           fileInputRef={fileInputRef}
           onFileChange={handleFileChange}
-          uploading={uploading}
+          uploading={uploadMutation.isPending}
           onUpload={handleUpload}
           dates={dates}
         />
@@ -286,7 +285,7 @@ export default function VideosTab({ canManage, onExit }: Props) {
                   aria-label="Reproducir video"
                 >
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-black/50 backdrop-blur-md transition-transform hover:scale-110">
-                    <Play className="h-10 w-10 fill-white text-white" strokeWidth={0} />
+                    <Play className="h-10 w-10 fill-white text-white" />
                   </div>
                 </button>
               )}
@@ -317,7 +316,7 @@ export default function VideosTab({ canManage, onExit }: Props) {
                         className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 backdrop-blur-md transition-colors hover:bg-black/70"
                         aria-label="Pausar video"
                       >
-                        <Pause className="h-6 w-6 fill-white text-white" strokeWidth={0} />
+                        <Pause className="h-6 w-6 fill-white text-white" />
                       </button>
                     )}
 
@@ -329,11 +328,11 @@ export default function VideosTab({ canManage, onExit }: Props) {
                           e.stopPropagation()
                           handleDelete(entry)
                         }}
-                        disabled={deletingId === entry.video.id}
+                        disabled={deleteMutation.isPending && deleteMutation.variables?.video.id === entry.video.id}
                         className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition-colors hover:bg-red-500/60 disabled:opacity-50"
                         aria-label="Eliminar video"
                       >
-                        {deletingId === entry.video.id ? (
+                        {deleteMutation.isPending && deleteMutation.variables?.video.id === entry.video.id ? (
                           <Loader2 className="h-5 w-5 animate-spin" />
                         ) : (
                           <Trash2 className="h-5 w-5" />
@@ -388,7 +387,7 @@ export default function VideosTab({ canManage, onExit }: Props) {
         selectedFileName={selectedFileName}
         fileInputRef={fileInputRef}
         onFileChange={handleFileChange}
-        uploading={uploading}
+        uploading={uploadMutation.isPending}
         onUpload={handleUpload}
         dates={dates}
       />

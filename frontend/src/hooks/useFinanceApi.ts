@@ -46,10 +46,13 @@ export function useFinanceApi() {
   async function listSubscriptions(): Promise<{
     subscriptions: Subscription[]
     monthlyCommittedCents: number
+    monthlyRecurringIncomeCents: number
   }> {
-    const res = await api.get<{ subscriptions: Subscription[]; monthlyCommittedCents: number }>(
-      '/api/finances/subscriptions'
-    )
+    const res = await api.get<{
+      subscriptions: Subscription[]
+      monthlyCommittedCents: number
+      monthlyRecurringIncomeCents: number
+    }>('/api/finances/subscriptions')
     return res.data
   }
 

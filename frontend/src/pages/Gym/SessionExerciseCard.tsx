@@ -113,7 +113,7 @@ export default function SessionExerciseCard({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Opciones del ejercicio">
-              <MoreVertical className="h-4 w-4" />
+              <MoreVertical className="h-4 w-4 rotate-90" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -140,12 +140,12 @@ export default function SessionExerciseCard({
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => commit([...rows, nextRow(rows)])}>
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1 h-5 w-5" />
             Serie
           </Button>
           {rows.length === 0 && (
             <Button variant="ghost" size="sm" onClick={prefill}>
-              <RotateCcw className="mr-1 h-4 w-4" />
+              <RotateCcw className="mr-1 h-5 w-5" />
               Copiar última
             </Button>
           )}

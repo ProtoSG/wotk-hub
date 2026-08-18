@@ -1,10 +1,10 @@
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -94,13 +94,13 @@ export default function LoginPage() {
                   aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
             </div>
             <Button type="submit" className="w-full" disabled={signingIn}>
-              {signingIn && <Loader2 size={14} className="animate-spin" />}
+              {signingIn && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {signingIn ? 'Ingresando…' : 'Ingresar'}
             </Button>
           </form>

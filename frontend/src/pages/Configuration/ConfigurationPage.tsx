@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Moon, Sun, Trash2, ShieldOff, Plus, Copy, Loader2, Palette, Database, ShieldCheck } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Copy, Database, Loader2, Moon, Palette, Plus, ShieldCheck, ShieldOff, Sun, Trash2, Users } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -19,8 +19,21 @@ import { useDbStore } from '@/store/dbStore'
 import { useAuthStore } from '@/store/authStore'
 import { useAuthApi } from '@/hooks/useAuthApi'
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, type CreatedApiKey } from '@/hooks/useApiKeys'
+import { usePermissionsApi, type ModulePermission } from '@/hooks/usePermissionsApi'
+import { ApiError } from '@/lib/axios'
 import type { SavedConnection } from '@/types/db.types'
 import type { ApiKey } from '@/types/auth.types'
+
+// Label + description shown per module row — kept in the same order as
+// AllModules on the backend (dashboard, finances, gym, ytdlp). DB Manager
+// and Configuración never appear here on purpose: neither is ever
+// grantable (see permissions/types.go's AllModules comment).
+const MODULE_LABELS: Record<string, { label: string; description: string }> = {
+  dashboard: { label: 'Inicio', description: 'Resumen general y métricas' },
+  finances: { label: 'Finanzas', description: 'Movimientos, tarjetas, presupuestos y metas' },
+  gym: { label: 'Gimnasio', description: 'Rutinas, entrenamientos y progreso' },
+  ytdlp: { label: 'YouTube a MP3', description: 'Descargar audio de videos' },
+}
 
 const TABS = [
   { value: 'general', label: 'General', icon: Palette },
@@ -52,6 +65,51 @@ export default function ConfigurationPage() {
   const { keys, isLoading: isLoadingKeys, refetch: refetchKeys } = useApiKeys()
   const createApiKey = useCreateApiKey()
   const revokeApiKey = useRevokeApiKey()
+
+  const { listGuest, updateGuest } = usePermissionsApi()
+  const [guestModules, setGuestModules] = useState<ModulePermission[]>([])
+  const [isLoadingGuestModules, setIsLoadingGuestModules] = useState(true)
+  const [savingModule, setSavingModule] = useState<string | null>(null)
+  const [guestMissing, setGuestMissing] = useState(false)
+
+  const refetchGuestModules = useCallback(async () => {
+    setIsLoadingGuestModules(true)
+    setGuestMissing(false)
+    try {
+      setGuestModules(await listGuest())
+    } catch (err) {
+      // No guest account yet is a normal state for a fresh install, not an
+      // error worth a toast — everything else genuinely is.
+      if (err instanceof ApiError && err.status === 404) {
+        setGuestMissing(true)
+      } else {
+        toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los permisos')
+      }
+    } finally {
+      setIsLoadingGuestModules(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as useApiKeys
+    refetchGuestModules()
+  }, [refetchGuestModules])
+
+  async function handleToggleModule(module: string, enabled: boolean) {
+    setSavingModule(module)
+    // Optimistic — the switch should feel instant, and a failed PUT still
+    // gets caught and reverted below.
+    setGuestModules((prev) => prev.map((m) => (m.module === module ? { ...m, enabled } : m)))
+    try {
+      setGuestModules(await updateGuest({ [module]: enabled }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar el permiso')
+      setGuestModules((prev) => prev.map((m) => (m.module === module ? { ...m, enabled: !enabled } : m)))
+    } finally {
+      setSavingModule(null)
+    }
+  }
 
   const [createOpen, setCreateOpen] = useState(false)
   const [creatingKey, setCreatingKey] = useState(false)
@@ -152,7 +210,7 @@ export default function ConfigurationPage() {
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+                    {theme === 'dark' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                     <Label>Modo oscuro</Label>
                   </div>
                   <Switch checked={theme === 'dark'} onCheckedChange={toggleTheme} />
@@ -216,7 +274,7 @@ export default function ConfigurationPage() {
                               onClick={() => handleDeleteConnection(conn)}
                               aria-label={`Eliminar conexión ${conn.name}`}
                             >
-                              <Trash2 size={14} />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -234,18 +292,57 @@ export default function ConfigurationPage() {
           >
             <CozyCard className="animate-card-in">
               <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Permisos de tu pareja
+                </CardTitle>
+                <CardDescription>Elegí qué módulos puede ver y usar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingGuestModules ? (
+                  <p className="text-sm text-muted-foreground">Cargando…</p>
+                ) : guestMissing ? (
+                  <p className="text-sm text-muted-foreground">
+                    Todavía no hay una cuenta de invitado creada.
+                  </p>
+                ) : (
+                  <div className="divide-y">
+                    {guestModules.map((m) => {
+                      const info = MODULE_LABELS[m.module]
+                      if (!info) return null
+                      return (
+                        <div key={m.module} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                          <div className="min-w-0">
+                            <Label>{info.label}</Label>
+                            <p className="text-xs text-muted-foreground">{info.description}</p>
+                          </div>
+                          <Switch
+                            checked={m.enabled}
+                            disabled={savingModule === m.module}
+                            onCheckedChange={(checked) => handleToggleModule(m.module, checked)}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </CozyCard>
+
+            <CozyCard className="animate-card-in [animation-delay:60ms]">
+              <CardHeader>
                 <CardTitle>Seguridad</CardTitle>
                 <CardDescription>Cerrá la sesión en todos los dispositivos donde iniciaste sesión</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button variant="outline" className="text-destructive hover:text-destructive" onClick={handleLogoutAll}>
-                  <ShieldOff size={16} />
+                  <ShieldOff className="h-5 w-5" />
                   Cerrar sesión en todos los dispositivos
                 </Button>
               </CardContent>
             </CozyCard>
 
-            <CozyCard className="animate-card-in [animation-delay:60ms]">
+            <CozyCard className="animate-card-in [animation-delay:120ms]">
               <CardHeader>
                 <CardTitle>API Keys</CardTitle>
                 <CardDescription>
@@ -255,7 +352,7 @@ export default function ConfigurationPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <Button variant="outline" onClick={() => setCreateOpen(true)}>
-                  <Plus size={16} />
+                  <Plus className="h-5 w-5" />
                   Generar nueva key
                 </Button>
 
@@ -296,7 +393,7 @@ export default function ConfigurationPage() {
                                 onClick={() => setKeyToRevoke(k)}
                                 aria-label={`Revocar API key ${k.name || '(sin nombre)'}`}
                               >
-                                <Trash2 size={14} />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </TableCell>
@@ -363,7 +460,7 @@ export default function ConfigurationPage() {
               Cancelar
             </Button>
             <Button type="button" disabled={creatingKey} onClick={handleCreateKey}>
-              {creatingKey && <Loader2 size={14} className="animate-spin" />}
+              {creatingKey && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {creatingKey ? 'Generando…' : 'Generar'}
             </Button>
           </DialogFooter>
@@ -379,7 +476,7 @@ export default function ConfigurationPage() {
           <div className="space-y-2">
             <Input readOnly value={revealedKey?.key ?? ''} onFocus={(e) => e.target.select()} className="font-mono text-xs" />
             <Button type="button" variant="outline" onClick={handleCopyKey}>
-              <Copy size={14} />
+              <Copy className="h-3.5 w-3.5" />
               Copiar
             </Button>
             <p className="text-xs text-destructive">
@@ -409,7 +506,7 @@ export default function ConfigurationPage() {
               Cancelar
             </Button>
             <Button type="button" variant="destructive" disabled={revokingKey} onClick={handleConfirmRevokeKey}>
-              {revokingKey && <Loader2 size={14} className="animate-spin" />}
+              {revokingKey && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {revokingKey ? 'Revocando…' : 'Revocar'}
             </Button>
           </DialogFooter>

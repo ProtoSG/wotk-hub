@@ -1,6 +1,6 @@
+import { Flame, LineChart as LineChartIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Flame, LineChart as LineChartIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'

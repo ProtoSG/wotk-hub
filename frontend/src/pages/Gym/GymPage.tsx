@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
+import { ClipboardList, Dumbbell, History, ListChecks, Plus, TrendingUp } from 'lucide-react'
 import { useGymApi } from '@/hooks/useGymApi'
 import type { Exercise } from '@/types/gym.types'
-import { ClipboardList, Dumbbell, History, ListChecks, TrendingUp } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
@@ -131,7 +130,7 @@ export default function GymPage() {
                   className="hidden sm:flex"
                   onClick={() => openExerciseForm(null)}
                 >
-                  <Plus className="mr-1 h-4 w-4" />
+                  <Plus className="mr-1 h-5 w-5" />
                   Nuevo ejercicio
                 </Button>
               </CardHeader>

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Heart, Loader2 } from 'lucide-react'
+import { useEffect } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2, Heart } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import { solesToCents, centsToSoles } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { DATE_CATEGORIES, DATE_CATEGORY_LABELS, type CoupleDate, type DateStatus } from '@/types/couple.types'
+import {
+  DATE_CATEGORIES,
+  DATE_CATEGORY_LABELS,
+  type CoupleDate,
+  type CoupleDateInput,
+  type DateStatus,
+} from '@/types/couple.types'
+import { datesKey } from './coupleKeys'
 import DatePhotos from './DatePhotos'
 
 const schema = z.object({
@@ -37,7 +45,6 @@ type FormValues = z.infer<typeof schema>
 interface Props {
   open: boolean
   onClose: () => void
-  onSaved: () => void
   editing?: CoupleDate | null
 }
 
@@ -65,9 +72,9 @@ function defaults(editing?: CoupleDate | null): FormValues {
       }
 }
 
-export default function DateForm({ open, onClose, onSaved, editing }: Props) {
-  const [saving, setSaving] = useState(false)
+export default function DateForm({ open, onClose, editing }: Props) {
   const { createDate, updateDate } = useCoupleApi()
+  const queryClient = useQueryClient()
 
   const {
     register,
@@ -79,6 +86,19 @@ export default function DateForm({ open, onClose, onSaved, editing }: Props) {
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: defaults(editing),
+  })
+
+  const mutation = useMutation({
+    mutationFn: (input: CoupleDateInput) => (editing ? updateDate(editing.id, input) : createDate(input)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: datesKey() })
+      toast.success(editing ? 'Cita actualizada' : 'Cita registrada')
+      reset()
+      onClose()
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la cita')
+    },
   })
 
   useEffect(() => {
@@ -98,33 +118,18 @@ export default function DateForm({ open, onClose, onSaved, editing }: Props) {
     }
   }
 
-  const onSubmit: SubmitHandler<FormValues> = async (values) => {
-    setSaving(true)
-    try {
-      const input = {
-        occurredOn: values.occurredOn,
-        place: values.place,
-        category: values.category,
-        notes: values.notes,
-        costCents: values.cost != null ? solesToCents(values.cost) : null,
-        rating: values.rating,
-        tiktokUrl: values.tiktokUrl,
-        status: values.status,
-      }
-      if (editing) {
-        await updateDate(editing.id, input)
-      } else {
-        await createDate(input)
-      }
-      toast.success(editing ? 'Cita actualizada' : 'Cita registrada')
-      reset()
-      onSaved()
-      onClose()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la cita')
-    } finally {
-      setSaving(false)
+  const onSubmit: SubmitHandler<FormValues> = (values) => {
+    const input: CoupleDateInput = {
+      occurredOn: values.occurredOn,
+      place: values.place,
+      category: values.category,
+      notes: values.notes,
+      costCents: values.cost != null ? solesToCents(values.cost) : null,
+      rating: values.rating,
+      tiktokUrl: values.tiktokUrl,
+      status: values.status,
     }
+    mutation.mutate(input)
   }
 
   return (
@@ -202,9 +207,8 @@ export default function DateForm({ open, onClose, onSaved, editing }: Props) {
                     className="p-2 transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
                   >
                     <Heart
-                      size={18}
                       className={cn(
-                        'transition-colors duration-150',
+                        'h-[18px] w-[18px] transition-colors duration-150',
                         rating != null && n <= rating
                           ? 'fill-primary text-primary'
                           : 'text-muted-foreground'
@@ -236,9 +240,9 @@ export default function DateForm({ open, onClose, onSaved, editing }: Props) {
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? 'Guardando…' : 'Guardar'}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {mutation.isPending ? 'Guardando…' : 'Guardar'}
             </Button>
           </DialogFooter>
         </form>

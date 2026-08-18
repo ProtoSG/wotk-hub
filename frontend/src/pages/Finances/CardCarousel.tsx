@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Carousel,
   CarouselContent,
@@ -74,7 +74,7 @@ export default function CardCarousel({ cards, transactionsCount, onCardChange, o
             >
               <div className="flex items-start justify-between">
                 <span className="text-sm font-medium text-foreground/90">Todos</span>
-                <SlidersHorizontal className="text-foreground/50" size={16} />
+                <SlidersHorizontal className="h-4 w-4 text-foreground/50" />
               </div>
               <span className="text-xs text-foreground/40">{transactionsCount} movimientos</span>
             </button>

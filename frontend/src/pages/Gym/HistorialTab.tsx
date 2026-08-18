@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
 import { CalendarDays, ChevronRight, History } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useGymApi } from '@/hooks/useGymApi'

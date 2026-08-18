@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import api from '@/lib/axios'
 import type {
   CoupleDate,
@@ -97,22 +98,29 @@ export function useCoupleApi() {
     await api.delete(`/api/couple/dates/${dateId}/videos/${videoId}`)
   }
 
-  return {
-    listDates,
-    createDate,
-    updateDate,
-    deleteDate,
-    listPhotos,
-    uploadPhoto,
-    deletePhoto,
-    listGallery,
-    listPoems,
-    createPoem,
-    deletePoem,
-    markPoemSeen,
-    todayPoem,
-    listVideos,
-    uploadVideo,
-    deleteVideo,
-  }
+  // Memoized so callers (e.g. useEffect deps) get stable references instead
+  // of a brand-new object with brand-new functions on every render — without
+  // this, effects depending on these methods re-fire on every render and
+  // cause fetch loops.
+  return useMemo(
+    () => ({
+      listDates,
+      createDate,
+      updateDate,
+      deleteDate,
+      listPhotos,
+      uploadPhoto,
+      deletePhoto,
+      listGallery,
+      listPoems,
+      createPoem,
+      deletePoem,
+      markPoemSeen,
+      todayPoem,
+      listVideos,
+      uploadVideo,
+      deleteVideo,
+    }),
+    [],
+  )
 }

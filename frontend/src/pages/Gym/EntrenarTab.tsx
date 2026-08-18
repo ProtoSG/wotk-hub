@@ -127,7 +127,7 @@ export default function EntrenarTab({ pickerOpen, onPickerOpenChange }: Entrenar
             Buscá en el catálogo y las series se registran acá.
           </p>
           <Button className="mt-4" onClick={() => onPickerOpenChange(true)}>
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1 h-5 w-5" />
             Agregar ejercicio
           </Button>
         </div>
@@ -149,7 +149,7 @@ export default function EntrenarTab({ pickerOpen, onPickerOpenChange }: Entrenar
             className="hidden w-full sm:flex"
             onClick={() => onPickerOpenChange(true)}
           >
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1 h-5 w-5" />
             Agregar ejercicio
           </Button>
         </>
@@ -213,7 +213,7 @@ function StartPrompt({ routines, starting, onStartFreestyle, onStartRoutine }: S
         onClick={onStartFreestyle}
         disabled={starting}
       >
-        {starting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
+        {starting ? <Loader2 className="mr-1 h-5 w-5 animate-spin" /> : <Plus className="mr-1 h-5 w-5" />}
         Entrenamiento libre
       </Button>
     </div>
@@ -268,15 +268,15 @@ function SessionHeader({ session, onFinish, finishing, onDiscard }: SessionHeade
             history, behind a confirmation. */}
         {empty ? (
           <Button variant="ghost" size="sm" onClick={onDiscard} className="text-muted-foreground">
-            <Trash2 className="mr-1 h-4 w-4" />
+            <Trash2 className="mr-1 h-5 w-5" />
             Descartar
           </Button>
         ) : (
           <Button size="sm" onClick={onFinish} disabled={finishing}>
             {finishing ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-1 h-5 w-5 animate-spin" />
             ) : (
-              <Flag className="mr-1 h-4 w-4" />
+              <Flag className="mr-1 h-5 w-5" />
             )}
             Terminar
           </Button>

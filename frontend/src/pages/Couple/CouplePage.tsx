@@ -1,27 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRef, useState, type ComponentType } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  Pencil,
-  Trash2,
-  Heart,
-  MoreVertical,
-  Images,
-  Link as LinkIcon,
-  Plus,
-  Check,
-  UtensilsCrossed,
-  Sandwich,
-  Film,
-  Plane,
-  TreePine,
-  Home,
-  PartyPopper,
-  Sparkles,
   BarChart3,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Film,
+  Heart,
+  Home,
+  Images,
+  Link as LinkIcon,
+  MoreVertical,
+  PartyPopper,
+  Pencil,
+  Plane,
+  Plus,
+  Sandwich,
+  Sparkles,
+  Trash2,
+  TreePine,
+  UtensilsCrossed,
   Video,
-  type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,9 +40,11 @@ import { useCoupleApi } from '@/hooks/useCoupleApi'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import { formatPEN, monthLabel } from '@/lib/currency'
-import { DATE_CATEGORY_LABELS, type CoupleDate } from '@/types/couple.types'
+import { DATE_CATEGORY_LABELS, type CoupleDate, type CoupleDateInput } from '@/types/couple.types'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
+import { IconChip } from '@/components/ui/icon-chip'
 import CoupleCover from './CoupleCover'
+import { datesKey } from './coupleKeys'
 import DateForm from './DateForm'
 import GaleriaTab from './GaleriaTab'
 import EstadisticasTab from './EstadisticasTab'
@@ -66,7 +68,7 @@ const TAB_CONTENT_CLASS =
 // established elsewhere in the app (brand terracotta, sage --success, and
 // the cover's sakura/ink tones) rather than a new arbitrary palette — ties
 // the card grid back to the cover's ink-wash mood.
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
+const CATEGORY_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   cena: UtensilsCrossed,
   almuerzo: Sandwich,
   cine: Film,
@@ -91,18 +93,7 @@ const CATEGORY_ACCENTS: Record<string, string> = {
 function CategoryChip({ category }: { category: string }) {
   const Icon = CATEGORY_ICONS[category] ?? Sparkles
   const accent = CATEGORY_ACCENTS[category] ?? '--cover-ink-mid'
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-      style={{
-        backgroundColor: `color-mix(in oklch, var(${accent}) 16%, var(--card))`,
-        color: `var(${accent})`,
-      }}
-    >
-      <Icon size={15} strokeWidth={2.25} />
-    </span>
-  )
+  return <IconChip icon={Icon} accent={accent} />
 }
 
 // Small abstract accent ring on each date-entry card, tastefully echoing
@@ -153,7 +144,7 @@ function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone, canManage, can
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Más acciones">
-                    <MoreVertical className="h-4 w-4" />
+                    <MoreVertical className="h-4 w-4 rotate-90" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -178,8 +169,10 @@ function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone, canManage, can
               {[1, 2, 3, 4, 5].map((n) => (
                 <Heart
                   key={n}
-                  size={12}
-                  className={cn(n <= (d.rating ?? 0) ? 'fill-primary text-primary' : 'text-muted-foreground')}
+                  className={cn(
+                    'h-3 w-3',
+                    n <= (d.rating ?? 0) ? 'fill-primary text-primary' : 'text-muted-foreground'
+                  )}
                 />
               ))}
             </div>
@@ -208,7 +201,6 @@ function DateCard({ date: d, delay, onEdit, onDelete, onMarkDone, canManage, can
 }
 
 export default function CouplePage() {
-  const [dates, setDates] = useState<CoupleDate[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CoupleDate | null>(null)
   // Steps "Realizadas" one month+year at a time (e.g. "agosto 2026") instead
@@ -220,8 +212,14 @@ export default function CouplePage() {
   // not the section that gets crowded over time.
   const [monthFilter, setMonthFilter] = useState('')
   const { listDates, updateDate, deleteDate } = useCoupleApi()
+  const queryClient = useQueryClient()
   const role = useAuthStore((s) => s.user?.role)
   const pendingDeletes = useRef(new Map<number, number>())
+
+  const { data: dates = [] } = useQuery({
+    queryKey: datesKey(),
+    queryFn: () => listDates(),
+  })
   // Estadísticas/Poemas are admin-only — frontend gate only (same as
   // canManage/canSeePrice below), no backend enforcement. Filtered out of
   // the tab list itself (not just the panel) so a guest can't reach them via
@@ -235,38 +233,25 @@ export default function CouplePage() {
   const { tab, setSearchParams } = useActiveTab(visibleTabs, 'citas')
   const goToTab = (value: string) => setSearchParams({ tab: value }, { replace: true })
 
-  const load = useCallback(async () => {
-    try {
-      setDates(await listDates())
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las citas')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set on mount, same pattern as Finances/DbManager pages
-    load()
-  }, [load])
-
-  async function commitDelete(id: number) {
-    pendingDeletes.current.delete(id)
-    try {
-      await deleteDate(id)
-    } catch (err) {
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteDate(id),
+    onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la cita')
-      load()
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: datesKey() })
+    },
+  })
 
   function handleDelete(d: CoupleDate) {
     let removedIndex = -1
-    setDates((prev) => {
+    queryClient.setQueryData<CoupleDate[]>(datesKey(), (prev = []) => {
       removedIndex = prev.findIndex((x) => x.id === d.id)
       return prev.filter((x) => x.id !== d.id)
     })
 
-    const timer = window.setTimeout(() => commitDelete(d.id), UNDO_WINDOW_MS)
+    const timer = window.setTimeout(() => {
+      pendingDeletes.current.delete(d.id)
+      deleteMutation.mutate(d.id)
+    }, UNDO_WINDOW_MS)
     pendingDeletes.current.set(d.id, timer)
 
     toast.success('Cita eliminada', {
@@ -279,7 +264,7 @@ export default function CouplePage() {
             window.clearTimeout(timerId)
             pendingDeletes.current.delete(d.id)
           }
-          setDates((prev) => {
+          queryClient.setQueryData<CoupleDate[]>(datesKey(), (prev = []) => {
             const next = [...prev]
             next.splice(Math.min(removedIndex, next.length), 0, d)
             return next
@@ -289,10 +274,9 @@ export default function CouplePage() {
     })
   }
 
-  async function handleMarkDone(d: CoupleDate) {
-    setDates((prev) => prev.map((x) => (x.id === d.id ? { ...x, status: 'done' } : x)))
-    try {
-      await updateDate(d.id, {
+  const markDoneMutation = useMutation({
+    mutationFn: (d: CoupleDate) => {
+      const input: CoupleDateInput = {
         occurredOn: d.occurredOn,
         place: d.place,
         category: d.category,
@@ -301,11 +285,20 @@ export default function CouplePage() {
         rating: d.rating ?? null,
         tiktokUrl: d.tiktokUrl,
         status: 'done',
-      })
-    } catch (err) {
+      }
+      return updateDate(d.id, input)
+    },
+    onError: (err, d) => {
       toast.error(err instanceof Error ? err.message : 'No se pudo actualizar la cita')
-      setDates((prev) => prev.map((x) => (x.id === d.id ? d : x)))
-    }
+      queryClient.setQueryData<CoupleDate[]>(datesKey(), (prev = []) => prev.map((x) => (x.id === d.id ? d : x)))
+    },
+  })
+
+  function handleMarkDone(d: CoupleDate) {
+    queryClient.setQueryData<CoupleDate[]>(datesKey(), (prev = []) =>
+      prev.map((x) => (x.id === d.id ? { ...x, status: 'done' } : x))
+    )
+    markDoneMutation.mutate(d)
   }
 
   const doneDates = dates.filter((d) => d.status === 'done')
@@ -406,7 +399,7 @@ export default function CouplePage() {
                         disabled={effectiveMonthIndex <= 0}
                         aria-label="Mes anterior"
                       >
-                        <ChevronLeft size={16} />
+                        <ChevronLeft className="h-4 w-4" />
                       </Button>
                       <span className="min-w-28 text-center text-sm font-medium capitalize">
                         {monthLabel(effectiveMonth)}
@@ -418,7 +411,7 @@ export default function CouplePage() {
                         disabled={effectiveMonthIndex >= monthOptions.length - 1}
                         aria-label="Mes siguiente"
                       >
-                        <ChevronRight size={16} />
+                        <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
                   )}
@@ -456,7 +449,7 @@ export default function CouplePage() {
                         className="animate-card-in flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[var(--radius)] border-2 border-dashed border-muted-foreground/25 p-5 text-muted-foreground/70 transition-colors hover:border-primary/40 hover:text-primary"
                         style={{ animationDelay: `${Math.min(filteredDoneDates.length * 40, 320)}ms` }}
                       >
-                        <Plus className="h-5 w-5" />
+                        <Plus className="h-6 w-6" />
                         <span className="text-sm font-medium">Agregar otra cita</span>
                       </button>
                     )}
@@ -507,7 +500,7 @@ export default function CouplePage() {
         fabVisible={(tab === 'citas' || tab === 'videos') && canManage}
       />
 
-      <DateForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editing={editing} />
+      <DateForm open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
     </>
   )
 }

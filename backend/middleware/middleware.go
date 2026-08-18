@@ -26,11 +26,20 @@ func Logger(next http.Handler) http.Handler {
 	})
 }
 
-func CORS(origins string) func(http.Handler) http.Handler {
+// ParseAllowedOrigins splits a comma-separated origins string into a
+// trimmed slice. Shared by CORS below and the games module's WebSocket
+// upgrade origin check (see shared/wshub.NewUpgrader) so the two never
+// drift out of sync on what counts as an allowed origin.
+func ParseAllowedOrigins(origins string) []string {
 	allowed := strings.Split(origins, ",")
 	for i := range allowed {
 		allowed[i] = strings.TrimSpace(allowed[i])
 	}
+	return allowed
+}
+
+func CORS(origins string) func(http.Handler) http.Handler {
+	allowed := ParseAllowedOrigins(origins)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqOrigin := r.Header.Get("Origin")
@@ -118,6 +127,24 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), userContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// OptionalAuth populates the request context from the access_token cookie
+// when one is present and valid, same as JWTAuth — but never rejects: a
+// missing or invalid cookie just means the handler sees UserFromContext's
+// !ok, not a 401. For routes that are deliberately reachable without a
+// session (e.g. finances' public GET /categories) but still want to
+// recognize a logged-in caller when there is one, instead of always
+// treating everyone as anonymous.
+func OptionalAuth(secret string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if user, err := verifyJWTCookie(r, secret); err == nil {
+				r = r.WithContext(context.WithValue(r.Context(), userContextKey, user))
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

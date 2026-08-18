@@ -1,6 +1,6 @@
+import { Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Sparkles } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -73,7 +73,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="flex h-56 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-              <Sparkles size={20} />
+              <Sparkles className="h-5 w-5" />
               <p className="text-sm">Próximamente</p>
               <p className="max-w-xs text-xs">
                 El seguimiento de consultas y actividad del DB Manager todavía no está implementado en el backend.

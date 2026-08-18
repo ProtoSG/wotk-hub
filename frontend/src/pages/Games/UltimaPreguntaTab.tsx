@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Heart, Lightbulb, Clock, Trophy, AlertCircle, History, Flame, Dices } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,11 +7,10 @@ import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard, paperSurfaceStyle } from '@/components/ui/cozy-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useGamesApi } from '@/hooks/useGamesApi'
+import { useGameSocket } from '@/hooks/useGameSocket'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import type { DailyRiddle, RiddleGameSession, RiddleGuessResult } from '@/types/games.types'
-
-const POLL_INTERVAL_MS = 6000
 
 const DIFFICULTY_LABELS: Record<string, string> = {
   easy: 'Fácil',
@@ -114,51 +113,27 @@ export default function UltimaPreguntaTab() {
   // new riddle loading automatically requires reconfirmation — no effect
   // needed to reset it.
   const [confirmedBonusRiddleId, setConfirmedBonusRiddleId] = useState<number | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Must be called before any early returns — hooks can't be conditional
   const countdown = useCountdown(riddle?.expiresAt ?? new Date().toISOString())
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
-
-  // Poll session for live updates — no websockets, same pattern as EmojiMoviesTab.
-  // Keep polling while the session is 'active' (waiting on either partner);
-  // stop only once it reaches a terminal state.
-  const startPolling = useCallback(() => {
-    stopPolling()
-    pollRef.current = setInterval(async () => {
-      try {
-        const { session: s } = await getRiddleSession()
-        setSession(s)
-        if (s?.status === 'solved' || s?.status === 'gameover') {
-          stopPolling()
-        }
-      } catch {
-        // transient poll failure — next tick retries
-      }
-    }, POLL_INTERVAL_MS)
-  }, [getRiddleSession, stopPolling])
-
-  useEffect(() => () => stopPolling(), [stopPolling])
-
-  // Pause polling while the tab isn't visible — no point burning requests
-  // for a screen nobody's looking at. Resume on return if session is still live.
-  useEffect(() => {
-    function handleVisibility() {
-      if (document.hidden) {
-        stopPolling()
-      } else if (session?.status === 'active') {
-        startPolling()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [session?.status, startPolling, stopPolling])
+  // Live updates over WebSocket — replaces the old 6s poll. The partner's
+  // guess/expiry/reset lands here as a 'riddle.session' event; on
+  // (re)connect we reconcile once via REST in case anything was missed
+  // while disconnected.
+  useGameSocket({
+    onMessage: (event) => {
+      if (event.type !== 'riddle.session') return
+      setSession(event.session)
+    },
+    onOpen: () => {
+      getRiddleSession()
+        .then(({ session: s }) => setSession(s))
+        .catch(() => {
+          // transient reconcile failure — the next event/reconnect will catch up
+        })
+    },
+  })
 
   // Initial load
   useEffect(() => {
@@ -167,14 +142,11 @@ export default function UltimaPreguntaTab() {
         const [{ riddle: r }, { session: s }] = await Promise.all([getRiddleToday(), getRiddleSession()])
         setRiddle(r)
         setSession(s)
-        if (!s || s.status === 'active') {
-          startPolling()
-        }
       } catch {
         toast.error('No se pudo cargar el juego')
       }
     })()
-  }, [getRiddleToday, getRiddleSession, startPolling])
+  }, [getRiddleToday, getRiddleSession])
 
   async function handleGuess() {
     if (!riddle || !guessText.trim()) return
@@ -198,7 +170,6 @@ export default function UltimaPreguntaTab() {
         ? `¡Doblaste tus puntos! 🎲 +${result.pointsEarned} pts`
         : (POINTS_LABELS[result.pointsEarned] ?? `¡Correcto! +${result.pointsEarned} pts`)
       toast.success(!riddle?.isBonus && result.session.streak > 1 ? `${base} · 🔥 racha de ${result.session.streak} días` : base)
-      stopPolling()
       // Auto-advance after 5s
       setTimeout(() => {
         setFeedback(null)
@@ -215,7 +186,6 @@ export default function UltimaPreguntaTab() {
       const [{ riddle: r }, { session: s }] = await Promise.all([getRiddleToday(), getRiddleSession()])
       setRiddle(r)
       setSession(s)
-      if (s?.status === 'active') startPolling()
     } catch {
       // ignore
     }
@@ -226,7 +196,6 @@ export default function UltimaPreguntaTab() {
     try {
       const { session: s } = await getRiddleSession()
       setSession(s)
-      if (s?.status === 'active') startPolling()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo iniciar')
     } finally {

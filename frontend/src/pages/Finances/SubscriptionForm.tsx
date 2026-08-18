@@ -1,9 +1,9 @@
+import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,17 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { useCategories } from '@/hooks/useCategories'
 import { solesToCents, centsToSoles } from '@/lib/currency'
-import {
-  FREQUENCY_LABELS,
-  type Subscription,
-  type Frequency,
-  type Card,
-} from '@/types/finance.types'
+import { cn } from '@/lib/utils'
+import { FREQUENCY_LABELS, type Subscription, type Frequency, type Card } from '@/types/finance.types'
 
 const schema = z.object({
   name: z.string().min(1, 'Requerido'),
   amount: z.number().positive('Debe ser mayor a 0'),
   frequency: z.enum(['weekly', 'monthly', 'yearly']),
+  type: z.enum(['income', 'expense']),
   category: z.string().min(1, 'Requerido'),
   nextBillingOn: z.string().min(1, 'Requerido'),
   active: z.boolean(),
@@ -44,6 +41,7 @@ function defaults(editing?: Subscription | null): Partial<FormValues> {
         name: editing.name,
         amount: centsToSoles(editing.amountCents),
         frequency: editing.frequency,
+        type: editing.type,
         category: editing.category,
         nextBillingOn: editing.nextBillingOn,
         active: editing.active,
@@ -52,6 +50,7 @@ function defaults(editing?: Subscription | null): Partial<FormValues> {
     : {
         name: '',
         frequency: 'monthly',
+        type: 'expense',
         category: 'suscripciones',
         nextBillingOn: new Date().toISOString().slice(0, 10),
         active: true,
@@ -86,8 +85,10 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
   }, [open, editing, reset])
 
   const frequency = watch('frequency')
+  const type = watch('type')
   const category = watch('category')
   const cardId = watch('cardId')
+  const categories = type === 'income' ? categoriesByKind.income : categoriesByKind.expense
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     setSaving(true)
@@ -96,6 +97,7 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
         name: values.name,
         amountCents: solesToCents(values.amount),
         frequency: values.frequency,
+        type: values.type,
         category: values.category,
         nextBillingOn: values.nextBillingOn,
         active: values.active,
@@ -124,23 +126,84 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
           <DialogTitle>{editing ? 'Editar suscripción' : 'Nueva suscripción'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1">
-            <Label>Nombre</Label>
-            <Input placeholder="Netflix, renta, gimnasio…" {...register('name')} />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+          <div className="flex rounded-lg bg-muted p-1">
+            {(['expense', 'income'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  setValue('type', v)
+                  setValue('category', v === 'income' ? 'sueldo' : 'suscripciones')
+                }}
+                className={cn(
+                  'flex-1 rounded-md py-1.5 text-sm font-medium transition-colors',
+                  type === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {v === 'expense' ? 'Gasto' : 'Ingreso'}
+              </button>
+            ))}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
-              <Label>Monto (S/)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                {...register('amount', { valueAsNumber: true })}
-              />
+              <Label>Nombre</Label>
+              <Input placeholder="Netflix, sueldo, renta…" {...register('name')} />
+              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label>Monto</Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  S/
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  className="pl-8"
+                  {...register('amount', { valueAsNumber: true })}
+                />
+              </div>
               {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="min-w-0 space-y-1">
+              <Label>Categoría</Label>
+              <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label>Tarjeta</Label>
+              <Select value={cardId} onValueChange={(v) => setValue('cardId', v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegí una tarjeta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cards.map((card) => (
+                    <SelectItem key={card.id} value={card.id.toString()}>
+                      {card.name} ({card.last4})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {type === 'income' ? 'Se deposita acá' : 'Se descuenta de acá'}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
               <Label>Frecuencia</Label>
               <Select value={frequency} onValueChange={(v) => setValue('frequency', v as Frequency)}>
@@ -156,23 +219,6 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="min-w-0 space-y-1">
-              <Label>Categoría</Label>
-              <Select value={category} onValueChange={(v) => setValue('category', v)} disabled={categoriesLoading}>
-                <SelectTrigger>
-                  <SelectValue placeholder={categoriesLoading ? 'Cargando…' : undefined} />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoriesByKind.expense.map((c) => (
-                    <SelectItem key={c.id} value={c.name}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="min-w-0 space-y-1">
               <Label>Próximo cobro</Label>
               <Input type="date" {...register('nextBillingOn')} />
@@ -181,30 +227,12 @@ export default function SubscriptionForm({ open, onClose, onSaved, editing }: Pr
               )}
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Tarjeta</Label>
-            <Select value={cardId} onValueChange={(v) => setValue('cardId', v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elegí una tarjeta" />
-              </SelectTrigger>
-              <SelectContent>
-                {cards.map((card) => (
-                  <SelectItem key={card.id} value={card.id.toString()}>
-                    {card.name} ({card.last4})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Los cobros automáticos descontarán de esta tarjeta
-            </p>
-          </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {saving ? 'Guardando…' : 'Guardar'}
             </Button>
           </DialogFooter>

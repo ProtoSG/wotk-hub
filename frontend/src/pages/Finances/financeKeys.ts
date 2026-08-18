@@ -14,6 +14,10 @@ export function goalsKey() {
   return ['finances', 'goals'] as const
 }
 
+export function contributionsKey(goalId: number) {
+  return ['finances', 'goals', goalId, 'contributions'] as const
+}
+
 export function budgetsKey(month: string) {
   return ['finances', 'budgets', month] as const
 }

@@ -1,18 +1,31 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PiggyBank, Plus, Trash2, Pencil, TrendingUp, Calendar, CreditCard, MoreVertical } from 'lucide-react'
+import {
+  Calendar,
+  CreditCard,
+  History,
+  MoreVertical,
+  Pencil,
+  PiggyBank,
+  Plus,
+  Trash2,
+  TrendingUp,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { IconChip } from '@/components/ui/icon-chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import { formatPEN } from '@/lib/currency'
 import type { SavingsGoal } from '@/types/finance.types'
-import { goalsKey, cardsKey } from './financeKeys'
+import { goalsKey, cardsKey, contributionsKey } from './financeKeys'
 import { useOpenFormOnQueryParam } from './useOpenFormOnQueryParam'
 import GoalForm from './GoalForm'
+import { GOAL_ICON_MAP } from './goalIcons'
 import ContributionForm from './ContributionForm'
+import ContributionHistoryDialog from './ContributionHistoryDialog'
 import DeleteGoalDialog from './DeleteGoalDialog'
 
 export default function MetasTab() {
@@ -20,6 +33,8 @@ export default function MetasTab() {
   const [editGoal, setEditGoal] = useState<SavingsGoal | undefined>()
   const [contributionOpen, setContributionOpen] = useState(false)
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyGoal, setHistoryGoal] = useState<SavingsGoal | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [goalToDelete, setGoalToDelete] = useState<SavingsGoal | null>(null)
   const { listGoals, deleteGoal, listCards } = useFinanceApi()
@@ -68,7 +83,7 @@ export default function MetasTab() {
             setFormOpen(true)
           }}
         >
-          <Plus size={14} />
+          <Plus className="h-4 w-4" />
           Nueva meta
         </Button>
       </div>
@@ -124,13 +139,13 @@ export default function MetasTab() {
                 >
                   <CardHeader className="flex flex-row items-start justify-between pb-2">
                     <div className="flex items-center gap-2">
-                      <PiggyBank className="h-4 w-4" style={{ color: goal.color }} />
+                      <IconChip icon={GOAL_ICON_MAP[goal.icon] ?? PiggyBank} accent={goal.color} size="sm" />
                       <CardTitle className="text-sm font-medium">{goal.name}</CardTitle>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" aria-label={`Más acciones para ${goal.name}`}>
-                          <MoreVertical size={14} />
+                          <MoreVertical className="h-3.5 w-3.5 rotate-90" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -203,7 +218,19 @@ export default function MetasTab() {
                       </div>
                     )}
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs text-muted-foreground"
+                        onClick={() => {
+                          setHistoryGoal(goal)
+                          setHistoryOpen(true)
+                        }}
+                      >
+                        <History className="mr-1 h-3.5 w-3.5" />
+                        Ver aportes
+                      </Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -214,7 +241,7 @@ export default function MetasTab() {
                           setContributionOpen(true)
                         }}
                       >
-                        <Plus className="mr-1 h-3 w-3" />
+                        <Plus className="mr-1 h-3.5 w-3.5" />
                         Agregar ahorro
                       </Button>
                     </div>
@@ -240,14 +267,21 @@ export default function MetasTab() {
           onSaved={() => {
             // A contribution both bumps goal.currentCents and debits the
             // goal's default card (it creates a transfer-kind Transaction
-            // row, same as a card transfer) — invalidate all three.
+            // row, same as a card transfer) — invalidate all four.
             queryClient.invalidateQueries({ queryKey: goalsKey() })
             queryClient.invalidateQueries({ queryKey: cardsKey() })
             queryClient.invalidateQueries({ queryKey: ['finances', 'transactions'] })
+            queryClient.invalidateQueries({ queryKey: contributionsKey(selectedGoal.id) })
           }}
           goal={selectedGoal}
         />
       )}
+
+      <ContributionHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        goal={historyGoal}
+      />
 
       <DeleteGoalDialog
         open={deleteDialogOpen}

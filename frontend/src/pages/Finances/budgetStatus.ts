@@ -10,7 +10,10 @@ export function getBudgetStatus(budget: Budget) {
   const over = budget.spentCents > budget.monthlyLimitCents
   const isDanger = over || pct >= 80
   const indicatorColor = over ? 'bg-destructive' : pct >= 80 ? 'bg-warning' : 'bg-primary'
+  // Same status, expressed as an IconChip accent token instead of a
+  // Tailwind background class.
+  const accent = over ? '--destructive' : pct >= 80 ? '--warning' : '--primary'
   const stripeStyle = isDanger ? DANGER_STRIPE_STYLE : {}
 
-  return { pct, over, isDanger, indicatorColor, stripeStyle }
+  return { pct, over, isDanger, indicatorColor, accent, stripeStyle }
 }

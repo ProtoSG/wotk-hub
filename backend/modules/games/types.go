@@ -149,3 +149,27 @@ type riddleHistoryItem struct {
 type riddleHistoryResponse struct {
 	History []riddleHistoryItem `json:"history"`
 }
+
+// ─── WebSocket Events ──────────────────────────────────────────────────────
+
+// Event type discriminators the frontend switches on — see
+// useGameSocket.ts. One event shape per game, both carrying the fresh
+// session exactly as the corresponding REST response would.
+const (
+	wsEventTypeEmojiMovies = "emoji_movies.session"
+	wsEventTypeRiddle      = "riddle.session"
+)
+
+// wsEmojiMoviesEvent / wsRiddleEvent are pushed over the games WS hub after
+// any handler mutates the corresponding session — purely how the OTHER
+// player's screen updates without polling; the REST response to the acting
+// player is unchanged.
+type wsEmojiMoviesEvent struct {
+	Type    string           `json:"type"`
+	Session EmojiGameSession `json:"session"`
+}
+
+type wsRiddleEvent struct {
+	Type    string            `json:"type"`
+	Session RiddleGameSession `json:"session"`
+}

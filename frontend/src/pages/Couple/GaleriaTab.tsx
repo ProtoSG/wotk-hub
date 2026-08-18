@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
 import { ImageOff, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import type { GalleryPhoto } from '@/types/couple.types'
+import { galleryKey } from './coupleKeys'
 
 // One row per date, in the same order the API returns them (occurredOn
 // desc, matching couple_dates' own default order elsewhere in this
@@ -36,29 +37,19 @@ function groupByDate(photos: GalleryPhoto[]): DateGroup[] {
 // each date's own edit dialog (DatePhotos.tsx). This tab is purely for
 // browsing everything at once, grouped by the cita it belongs to.
 export default function GaleriaTab() {
-  const [groups, setGroups] = useState<DateGroup[]>([])
-  const [loading, setLoading] = useState(true)
   const [preview, setPreview] = useState<GalleryPhoto | null>(null)
   const { listGallery } = useCoupleApi()
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setGroups(groupByDate(await listGallery()))
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'No se pudo cargar la galería')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const { data: photos = [], isPending } = useQuery({
+    queryKey: galleryKey(),
+    queryFn: () => listGallery(),
+  })
+  const groups = groupByDate(photos)
 
-  if (loading) {
+  if (isPending) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 size={20} className="animate-spin" />
+        <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     )
   }

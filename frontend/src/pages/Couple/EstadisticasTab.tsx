@@ -1,4 +1,4 @@
-import { Heart, CalendarDays, Clock, Wallet } from 'lucide-react'
+import { CalendarDays, Clock, Heart, Wallet } from 'lucide-react'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { formatPEN } from '@/lib/currency'
@@ -60,7 +60,7 @@ export default function EstadisticasTab({ dates, canSeePrice }: EstadisticasTabP
                 {daysSince === 0 ? 'Hoy' : `Hace ${daysSince}d`}
               </div>
             ) : (
-              <Heart className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
+              <Heart className="h-6 w-6 text-muted-foreground/35" />
             )}
           </CardContent>
         </CozyCard>
@@ -75,7 +75,7 @@ export default function EstadisticasTab({ dates, canSeePrice }: EstadisticasTabP
             {avgRating != null ? (
               <div className="text-2xl font-bold">{avgRating.toFixed(1)}</div>
             ) : (
-              <Heart className="h-6 w-6 text-muted-foreground/35" strokeWidth={1.75} />
+              <Heart className="h-6 w-6 text-muted-foreground/35" />
             )}
           </CardContent>
         </CozyCard>

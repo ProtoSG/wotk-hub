@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"workhub/shared/scope"
 
 	chi "github.com/go-chi/chi/v5"
 )
@@ -37,14 +38,9 @@ func monthRange(month string) (time.Time, time.Time, error) {
 	return start, start.AddDate(0, 1, 0), nil
 }
 
-// scopeToOwner appends an "AND created_by = $N" clause (and its arg) to
-// query when role isn't explicitly "admin" — deny-by-default, so any
-// non-admin role only ever sees their own transactions. Admins see
-// everything unscoped, including legacy rows with a NULL created_by.
+// scopeToOwner is finances' name for the shared scope.ToOwner helper (see
+// backend/shared/scope) — kept as a package-local wrapper so the ~20
+// existing call sites across this module don't need to change.
 func scopeToOwner(query string, args []any, role string, userID int64) (string, []any) {
-	if role == "admin" {
-		return query, args
-	}
-	args = append(args, userID)
-	return query + " AND created_by = $" + itoa(len(args)), args
+	return scope.ToOwner(query, args, role, userID)
 }

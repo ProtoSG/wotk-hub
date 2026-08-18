@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Heart, Send, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Heart, Send, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useCoupleApi } from '@/hooks/useCoupleApi'
 import type { Poem } from '@/types/couple.types'
+import { poemsKey } from './coupleKeys'
 
 const MAX_CHARS = 1000
 const UNDO_WINDOW_MS = 4500
@@ -24,69 +26,60 @@ interface PoemasTabProps {
 
 export default function PoemasTab({ canManage }: PoemasTabProps) {
   const { listPoems, createPoem, deletePoem } = useCoupleApi()
+  const queryClient = useQueryClient()
 
-  const [poems, setPoems] = useState<Poem[]>([])
-  const [loading, setLoading] = useState(true)
   const [composing, setComposing] = useState('')
-  const [sending, setSending] = useState(false)
   const [myPoemsOpen, setMyPoemsOpen] = useState(false)
   const pendingDeletes = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const load = useCallback(async () => {
-    try {
-      setPoems(await listPoems())
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los poemas')
-    } finally {
-      setLoading(false)
-    }
-  }, [listPoems])
+  const { data: poems = [], isPending } = useQuery({
+    queryKey: poemsKey(),
+    queryFn: () => listPoems(),
+  })
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-  }, [load])
+  const createMutation = useMutation({
+    mutationFn: (content: string) => createPoem({ content }),
+    onSuccess: (newPoem) => {
+      queryClient.setQueryData<Poem[]>(poemsKey(), (prev = []) => [...prev, newPoem])
+      setComposing('')
+      toast.success('¡Poema enviado!')
+      setMyPoemsOpen(true)
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo enviar el poema')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deletePoem(id),
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el poema')
+      queryClient.invalidateQueries({ queryKey: poemsKey() })
+    },
+  })
 
   const receivedPoems = poems.filter((p) => !p.isMine)
   const myPoems = poems.filter((p) => p.isMine)
   const unseenCount = receivedPoems.filter((p) => !p.isSeen).length
 
-  async function handleSend() {
+  function handleSend() {
     const content = composing.trim()
-    if (!content || sending) return
-    setSending(true)
-    try {
-      const newPoem = await createPoem({ content })
-      setPoems((prev) => [...prev, newPoem])
-      setComposing('')
-      toast.success('¡Poema enviado!')
-      setMyPoemsOpen(true)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo enviar el poema')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  async function commitDelete(id: number) {
-    pendingDeletes.current.delete(id)
-    try {
-      await deletePoem(id)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el poema')
-      load()
-    }
+    if (!content || createMutation.isPending) return
+    createMutation.mutate(content)
   }
 
   function handleDelete(poem: Poem) {
     let removedIndex = -1
-    setPoems((prev) => {
+    queryClient.setQueryData<Poem[]>(poemsKey(), (prev = []) => {
       removedIndex = prev.findIndex((x) => x.id === poem.id)
       return prev.filter((x) => x.id !== poem.id)
     })
 
-    const timer = setTimeout(() => commitDelete(poem.id), UNDO_WINDOW_MS)
+    const timer = setTimeout(() => {
+      pendingDeletes.current.delete(poem.id)
+      deleteMutation.mutate(poem.id)
+    }, UNDO_WINDOW_MS)
     pendingDeletes.current.set(poem.id, timer)
 
     toast.success('Poema eliminado', {
@@ -99,7 +92,7 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
             clearTimeout(timerId)
             pendingDeletes.current.delete(poem.id)
           }
-          setPoems((prev) => {
+          queryClient.setQueryData<Poem[]>(poemsKey(), (prev = []) => {
             const next = [...prev]
             next.splice(Math.min(removedIndex, next.length), 0, poem)
             return next
@@ -109,7 +102,7 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
     })
   }
 
-  if (loading) {
+  if (isPending) {
     return (
       <div className="flex justify-center py-12">
         <Heart className="h-6 w-6 animate-pulse text-muted-foreground" />
@@ -171,11 +164,11 @@ export default function PoemasTab({ canManage }: PoemasTabProps) {
             <div className="flex justify-end">
               <Button
                 onClick={handleSend}
-                disabled={!composing.trim() || sending}
+                disabled={!composing.trim() || createMutation.isPending}
                 className="gap-2"
               >
                 <Send className="h-4 w-4" />
-                {sending ? 'Enviando...' : 'Enviar'}
+                {createMutation.isPending ? 'Enviando...' : 'Enviar'}
               </Button>
             </div>
           </CardContent>

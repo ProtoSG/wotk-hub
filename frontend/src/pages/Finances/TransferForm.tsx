@@ -107,14 +107,20 @@ export default function TransferForm({ open, onClose, onSaved, fromCard, cards }
             {errors.toCardId && <p className="text-xs text-destructive">{errors.toCardId.message}</p>}
           </div>
           <div className="space-y-1">
-            <Label>Monto (PEN)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0.01"
-              {...register('amount', { valueAsNumber: true })}
-              placeholder="0.00"
-            />
+            <Label>Monto</Label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                S/
+              </span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                className="pl-8"
+                {...register('amount', { valueAsNumber: true })}
+                placeholder="0.00"
+              />
+            </div>
             {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
           </div>
           <DialogFooter>

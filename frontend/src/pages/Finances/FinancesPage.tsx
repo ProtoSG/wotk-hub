@@ -1,6 +1,6 @@
+import { ArrowLeftRight, CreditCard, LayoutDashboard, Loader2, PiggyBank, Repeat, Settings, Target } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ArrowLeftRight, Repeat, Target, CreditCard, PiggyBank, Settings, Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { FloatingActionButton } from '@/components/ui/floating-action-button'
@@ -66,7 +66,7 @@ export default function FinancesPage() {
                 aria-label="Administrar categorías"
                 onClick={() => navigate('/finances/categories')}
               >
-                <Settings size={16} />
+                <Settings className="h-4 w-4" />
               </Button>
             </div>
             <MonthPicker month={month} onChange={setMonth} />
@@ -77,7 +77,7 @@ export default function FinancesPage() {
 
         {viewState === 'loading' && (
           <div className="flex min-h-[50vh] items-center justify-center">
-            <Loader2 className="animate-spin text-muted-foreground" size={24} />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         )}
 

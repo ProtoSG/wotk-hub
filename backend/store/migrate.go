@@ -227,6 +227,29 @@ func Migrate(db *sql.DB) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			UNIQUE (name, kind)
 		)`,
+		// categories.created_by + the swap from a single global UNIQUE(name,kind)
+		// to two partial ones has to happen here, immediately after CREATE
+		// TABLE and before the seed INSERT below — not batched with
+		// budgets/subscriptions' created_by further down — because that seed
+		// INSERT's ON CONFLICT target has to already exist the very first time
+		// this file runs against a fresh database, and statements execute in
+		// file order every boot.
+		//
+		// The bug this fixes: a plain UNIQUE(name,kind) made a category name
+		// globally exclusive even though visibility is per-user (see
+		// ListCategories) — one partner creating "comida_rapida" silently
+		// blocked the other partner from ever creating their own
+		// "comida_rapida", with no way to see what was blocking them (they
+		// don't get shown the other partner's private category). Splitting
+		// into two partial indexes gives each partner their own namespace for
+		// rows they own, while keeping the 15 seeded defaults (created_by
+		// NULL) unique among themselves so the seed INSERT stays idempotent.
+		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_kind_key`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_kind_owned
+		   ON categories (name, kind, created_by) WHERE created_by IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_kind_shared
+		   ON categories (name, kind) WHERE created_by IS NULL`,
 		`INSERT INTO categories (name, kind, label) VALUES
 			('comida', 'expense', 'Comida'),
 			('transporte', 'expense', 'Transporte'),
@@ -243,7 +266,7 @@ func Migrate(db *sql.DB) error {
 			('inversiones', 'income', 'Inversiones'),
 			('regalo', 'income', 'Regalo'),
 			('otros', 'income', 'Otros')
-			ON CONFLICT (name, kind) DO NOTHING`,
+			ON CONFLICT (name, kind) WHERE created_by IS NULL DO NOTHING`,
 		// Gym module — see GYM_SPEC.md. The catalog is seeded from a bundled
 		// CSV (modules/gym/data/exercises.csv) by gym.SeedExercises, which
 		// matches on name, so name carries a UNIQUE constraint. Equipment and
@@ -579,6 +602,155 @@ func Migrate(db *sql.DB) error {
 			UNIQUE (team_id, action, care_date)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_pet_missed_actions_team_date ON pet_missed_actions (team_id, care_date)`,
+
+		// Finances per-user scoping, extended to budgets/subscriptions/categories
+		// to match the created_by model transactions/cards/savings_goals already
+		// have (see explore R? — budgets/subscriptions/categories had zero
+		// ownership scoping, so any guest could read/edit/delete any other
+		// user's row). NULL created_by = legacy/seeded rows, still visible to
+		// everyone (see scopeToOwner and ListCategories' explicit OR NULL).
+		// categories.created_by is added earlier, right after that table's own
+		// CREATE TABLE — see the comment there for why it can't wait until here.
+		`ALTER TABLE budgets ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(id)`,
+		// budgets.category was globally UNIQUE, which made per-user budgets
+		// impossible (two users could never each have their own "comida"
+		// limit). Widen the uniqueness to (category, created_by) — Postgres
+		// treats NULL as distinct across rows, so legacy NULL-owner rows don't
+		// collide with each other either. The old single-column constraint
+		// used Postgres' default inline-UNIQUE naming (<table>_<column>_key).
+		`ALTER TABLE budgets DROP CONSTRAINT IF EXISTS budgets_category_key`,
+		// Postgres has no "ADD CONSTRAINT IF NOT EXISTS" — a DO block
+		// checking pg_constraint is the idiom for an idempotent add.
+		`DO $$
+		 BEGIN
+		   IF NOT EXISTS (
+		     SELECT 1 FROM pg_constraint WHERE conname = 'budgets_category_created_by_key'
+		   ) THEN
+		     ALTER TABLE budgets ADD CONSTRAINT budgets_category_created_by_key UNIQUE (category, created_by);
+		   END IF;
+		 END $$`,
+		// Missing indices flagged by the same audit: created_by is now on the
+		// hot path of nearly every finances read (scopeToOwner appends
+		// "AND created_by = $N"), and next_billing_on is what the
+		// subscriptions billing ticker filters/locks on every run.
+		`CREATE INDEX IF NOT EXISTS idx_transactions_created_by ON transactions (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_cards_created_by ON cards (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_savings_goals_created_by ON savings_goals (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_budgets_created_by ON budgets (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscriptions_created_by ON subscriptions (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscriptions_next_billing_on ON subscriptions (next_billing_on)`,
+		`CREATE INDEX IF NOT EXISTS idx_categories_created_by ON categories (created_by)`,
+
+		// Audit-trail rollout, app-wide (see the full-schema audit this slice
+		// is based on). Two moves:
+		//
+		// 1. created_at on the three tables that had NO audit trail at all
+		//    (routine_exercises/session_exercises/exercise_sets). No
+		//    created_by alongside it on purpose — these rows are always
+		//    written in lockstep with an already-attributed parent
+		//    (routine_id -> routines.created_by, session_id (chained through
+		//    session_exercises) -> workout_sessions.created_by), so a second
+		//    created_by here would just be a denormalized copy that could
+		//    drift from the parent instead of the real foreign key it already
+		//    has. Ownership for these is enforced in Go by checking the
+		//    parent's created_by, not by a column on the child.
+		//
+		// 2. updated_at/updated_by (nullable, no default — NULL means "never
+		//    edited since creation") on every table that has a real
+		//    user-driven UPDATE path today. Columns only for now: nothing
+		//    populates them yet, that's the next slice once this schema
+		//    lands. System/scheduler-only writers (subscriptions' billing
+		//    tick, pet_state's decay tick, riddle_game_sessions' expiry
+		//    sweep) are deliberately excluded from "populate" scope later —
+		//    there's no real acting user for those, and forcing one would be
+		//    misleading, not accurate.
+		`ALTER TABLE routine_exercises ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+		`ALTER TABLE session_exercises ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+		`ALTER TABLE exercise_sets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+
+		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE cards ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE budgets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE budgets ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE couple_dates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE couple_dates ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE couple_poems ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE couple_poems ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE exercises ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE exercises ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE routines ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE routines ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE workout_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE workout_sessions ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE emoji_game_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE emoji_game_sessions ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE riddle_game_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE riddle_game_sessions ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE pet_state ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+		`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ`,
+		`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+
+		// Missing indices app-wide, beyond the finances set above (same
+		// audit) — every created_by/actor column that sits on a WHERE/JOIN
+		// path but had no supporting index.
+		`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_routine_exercises_exercise_id ON routine_exercises (exercise_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_workout_sessions_routine_id ON workout_sessions (routine_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_routines_created_by ON routines (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_workout_sessions_created_by ON workout_sessions (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercises_created_by ON exercises (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_dates_created_by ON couple_dates (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_date_photos_created_by ON couple_date_photos (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_couple_date_videos_created_by ON couple_date_videos (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_riddle_game_sessions_partner_id ON riddle_game_sessions (partner_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_riddle_attempts_riddle_id ON riddle_attempts (riddle_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_riddle_attempts_solver_id ON riddle_attempts (solver_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_care_log_user_id ON pet_care_log (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_savings_goals_default_card_id ON savings_goals (default_card_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_savings_contributions_created_by ON savings_contributions (created_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_savings_contributions_transaction_id ON savings_contributions (transaction_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscriptions_card_id ON subscriptions (card_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_emoji_movies_created_by ON emoji_movies (created_by)`,
+
+		// Admin-granted per-module access for the guest account (Configuración
+		// -> permissions). No row / enabled = false means no access — deny by
+		// default, same convention as scopeToOwner elsewhere. Keyed by
+		// (user_id, module) rather than a single guest-only row so the model
+		// still makes sense if this app ever serves more than one guest.
+		`CREATE TABLE IF NOT EXISTS module_permissions (
+			id         BIGSERIAL PRIMARY KEY,
+			user_id    BIGINT NOT NULL REFERENCES users(id),
+			module     TEXT   NOT NULL,
+			enabled    BOOLEAN NOT NULL DEFAULT false,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ,
+			updated_by BIGINT REFERENCES users(id),
+			UNIQUE (user_id, module)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_module_permissions_user_id ON module_permissions (user_id)`,
+
+		// Subscriptions were expense-only (every category check hardcoded
+		// "expense") — no way to model a recurring INCOME like a fixed
+		// paycheck that should auto-register itself, same as a recurring
+		// bill already does. Defaulting existing rows to 'expense' preserves
+		// their current behavior exactly; only new/edited subscriptions can
+		// pick 'income'.
+		`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'expense' CHECK (type IN ('income','expense'))`,
 	}
 	for i, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

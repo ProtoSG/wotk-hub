@@ -4,9 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"workhub/shared/scope"
 
 	chi "github.com/go-chi/chi/v5"
 )
+
+// scopeToOwner is gym's name for the shared scope.ToOwner helper (see
+// backend/shared/scope, extracted from the identical pattern finances
+// established first) — deny-by-default: non-admin roles only see their own
+// routines/sessions, admin sees everything.
+func scopeToOwner(query string, args []any, role string, userID int64) (string, []any) {
+	return scope.ToOwner(query, args, role, userID)
+}
 
 // parseID reads a positive int64 URL param. Unlike finances.parseID it takes
 // the param name, since gym has nested routes with two of them.

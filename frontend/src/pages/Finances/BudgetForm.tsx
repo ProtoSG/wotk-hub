@@ -1,9 +1,9 @@
+import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -108,8 +108,19 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
               </Select>
             </div>
             <div className="min-w-0 space-y-1">
-              <Label>Límite mensual (S/)</Label>
-              <Input type="number" step="0.01" min="0" {...register('limit', { valueAsNumber: true })} />
+              <Label>Límite mensual</Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  S/
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="pl-8"
+                  {...register('limit', { valueAsNumber: true })}
+                />
+              </div>
               {errors.limit && <p className="text-xs text-destructive">{errors.limit.message}</p>}
             </div>
           </div>
@@ -118,7 +129,7 @@ export default function BudgetForm({ open, onClose, onSaved, editing, usedCatego
               Cancelar
             </Button>
             <Button type="submit" disabled={saving || !category}>
-              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {saving ? 'Guardando…' : 'Guardar'}
             </Button>
           </DialogFooter>

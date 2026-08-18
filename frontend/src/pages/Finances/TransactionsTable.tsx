@@ -1,4 +1,4 @@
-import { Pencil, Trash2, RotateCcw, ArrowLeftRight, MoreVertical } from 'lucide-react'
+import { ArrowLeftRight, MoreVertical, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -120,7 +120,7 @@ export default function TransactionsTable({
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" aria-label="Más acciones">
-                            <MoreVertical size={14} />
+                            <MoreVertical className="h-3.5 w-3.5 rotate-90" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">

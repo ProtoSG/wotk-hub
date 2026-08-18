@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Plus, Repeat } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
+import { IconChip } from '@/components/ui/icon-chip'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
+import { useCategories, toLabelMap } from '@/hooks/useCategories'
 import { formatPEN } from '@/lib/currency'
 import { type Subscription } from '@/types/finance.types'
 import { subscriptionsKey } from './financeKeys'
@@ -20,11 +22,19 @@ export default function SuscripcionesTab() {
   const [editing, setEditing] = useState<Subscription | null>(null)
   const { listSubscriptions, updateSubscription, deleteSubscription } = useFinanceApi()
   const queryClient = useQueryClient()
+  const { data: categoriesByKind } = useCategories()
 
   const { data: { subscriptions, monthlyCommittedCents: committed } = { subscriptions: [], monthlyCommittedCents: 0 } } = useQuery({
     queryKey: subscriptionsKey(),
     queryFn: () => listSubscriptions(),
   })
+
+  // Subscriptions can now be expense OR income (recurring paycheck, etc.),
+  // so category labels must resolve from both kinds.
+  const categoryLabelMap = useMemo(
+    () => toLabelMap([...categoriesByKind.expense, ...categoriesByKind.income]),
+    [categoriesByKind.expense, categoriesByKind.income]
+  )
 
   useOpenFormOnQueryParam(() => {
     setEditing(null)
@@ -37,6 +47,7 @@ export default function SuscripcionesTab() {
         name: s.name,
         amountCents: s.amountCents,
         frequency: s.frequency,
+        type: s.type,
         category: s.category,
         nextBillingOn: s.nextBillingOn,
         cardId: s.cardId ?? 0,
@@ -81,10 +92,11 @@ export default function SuscripcionesTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <CozyCard className="animate-card-in min-w-64">
-          <CardHeader className="pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total mensual comprometido
+              Total mensual en suscripciones
             </CardTitle>
+            <IconChip icon={Repeat} accent="--primary" size="sm" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatPEN(committed)}</div>
@@ -100,13 +112,14 @@ export default function SuscripcionesTab() {
             setFormOpen(true)
           }}
         >
-          <Plus size={14} />
+          <Plus className="h-4 w-4" />
           Nueva suscripción
         </Button>
       </div>
 
       <SubscriptionsTable
         subscriptions={subscriptions}
+        categoryLabelMap={categoryLabelMap}
         onEdit={(s) => {
           setEditing(s)
           setFormOpen(true)
@@ -121,6 +134,7 @@ export default function SuscripcionesTab() {
 
       <SubscriptionsMobileList
         subscriptions={subscriptions}
+        categoryLabelMap={categoryLabelMap}
         onEdit={(s) => {
           setEditing(s)
           setFormOpen(true)

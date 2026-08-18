@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"workhub/httpx"
+	"workhub/middleware"
 )
 
 // AddSessionExercise appends an exercise to a session, at the end of the
@@ -22,6 +23,11 @@ import (
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id}/exercises [post]
 func (h *handler) AddSessionExercise(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	sessionID, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
@@ -37,7 +43,7 @@ func (h *handler) AddSessionExercise(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.sessionExists(sessionID); err == sql.ErrNoRows {
+	if err := h.sessionOwned(sessionID, role, userID); err == sql.ErrNoRows {
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "session not found")
 		return
 	} else if err != nil {
@@ -85,9 +91,22 @@ func (h *handler) AddSessionExercise(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id}/exercises/{exerciseId} [delete]
 func (h *handler) RemoveSessionExercise(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	sessionID, sessionExerciseID, err := parseSessionExerciseIDs(r)
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.sessionOwned(sessionID, role, userID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "session not found")
+		return
+	} else if err != nil {
+		log.Printf("gym: remove session exercise ownership check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 
@@ -153,9 +172,22 @@ func (h *handler) RemoveSessionExercise(w http.ResponseWriter, r *http.Request) 
 // @Failure 404 {object} httpx.APIError
 // @Router /gym/sessions/{id}/exercises/{exerciseId}/sets [put]
 func (h *handler) ReplaceSets(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	sessionID, sessionExerciseID, err := parseSessionExerciseIDs(r)
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
+		return
+	}
+	if err := h.sessionOwned(sessionID, role, userID); err == sql.ErrNoRows {
+		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "session not found")
+		return
+	} else if err != nil {
+		log.Printf("gym: replace sets ownership check failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
 	var req replaceSetsRequest
@@ -234,21 +266,29 @@ func (h *handler) ReplaceSets(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} httpx.APIError
 // @Router /gym/exercises/{id}/last-sets [get]
 func (h *handler) LastSets(w http.ResponseWriter, r *http.Request) {
+	userID, role, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
 	exerciseID, err := parseID(r, "id")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, err.Error())
 		return
 	}
 
-	var sessionExerciseID int64
-	var occurredOn string
-	err = h.db.QueryRow(`
+	// Scoped to the caller's own training history — what THEY last lifted,
+	// not whichever partner logged it most recently.
+	query, args := scopeToOwner(`
 		SELECT se.id, to_char(s.occurred_on, 'YYYY-MM-DD')
 		FROM session_exercises se
 		JOIN workout_sessions s ON s.id = se.session_id
-		WHERE se.exercise_id = $1 AND EXISTS (SELECT 1 FROM exercise_sets st WHERE st.session_exercise_id = se.id)
-		ORDER BY s.occurred_on DESC, s.started_at DESC
-		LIMIT 1`, exerciseID).Scan(&sessionExerciseID, &occurredOn)
+		WHERE se.exercise_id = $1 AND EXISTS (SELECT 1 FROM exercise_sets st WHERE st.session_exercise_id = se.id)`,
+		[]any{exerciseID}, role, userID)
+	var sessionExerciseID int64
+	var occurredOn string
+	err = h.db.QueryRow(query+` ORDER BY s.occurred_on DESC, s.started_at DESC LIMIT 1`, args...).
+		Scan(&sessionExerciseID, &occurredOn)
 	if err == sql.ErrNoRows {
 		httpx.WriteJSON(w, http.StatusOK, lastSetsResponse{Sets: []ExerciseSet{}})
 		return
@@ -286,11 +326,6 @@ func (h *handler) LastSets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, lastSetsResponse{Sets: sets, OccurredOn: occurredOn})
-}
-
-func (h *handler) sessionExists(id int64) error {
-	var got int64
-	return h.db.QueryRow(`SELECT id FROM workout_sessions WHERE id = $1`, id).Scan(&got)
 }
 
 // writeSession responds with the session's full current state. Every mutation
