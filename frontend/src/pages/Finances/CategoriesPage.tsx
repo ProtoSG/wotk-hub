@@ -3,7 +3,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Tag, Loader2 } from 'lucide-react'
+import { Loader2, Pencil, Plus, Tag, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
@@ -21,23 +21,24 @@ import type { Category } from '@/types/finance.types'
 
 const UNDO_WINDOW_MS = 4500
 
-// Normalizes free typing into the lowercase-hyphenated slug the backend
-// expects for `name` — spaces (and any run of whitespace) become a single
-// hyphen, everything else non [a-z0-9-] is stripped.
+// Normalizes free typing into the slug the backend expects for `name` (see
+// categoryNameRe in finances/types.go: ^[a-z0-9_]+$ — underscores, not
+// hyphens) — spaces (and any run of whitespace) become a single underscore,
+// everything else outside [a-z0-9_] is stripped.
 function slugify(value: string): string {
   return value
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/_+/g, '_')
 }
 
 const schema = z.object({
   name: z
     .string()
     .min(1, 'Requerido')
-    .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
+    .regex(/^[a-z0-9_]+$/, 'Solo minúsculas, números y guiones bajos'),
   label: z.string().min(1, 'Requerido'),
 })
 
@@ -103,9 +104,13 @@ function CategoryForm({ open, onClose, onSaved, kind, editing }: CategoryFormPro
               {...register('name', {
                 onChange: (e) => setValue('name', slugify(e.target.value)),
               })}
-              placeholder="Ej: comida-rapida"
+              placeholder="Ej: comida_rapida"
             />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+            {errors.name ? (
+              <p className="text-xs text-destructive">{errors.name.message}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Solo minúsculas, números y guiones bajos</p>
+            )}
           </div>
           <div className="space-y-1">
             <Label>Etiqueta</Label>
@@ -117,7 +122,7 @@ function CategoryForm({ open, onClose, onSaved, kind, editing }: CategoryFormPro
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {saving ? 'Guardando…' : 'Guardar'}
             </Button>
           </DialogFooter>
@@ -153,7 +158,7 @@ function CategorySection({
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base font-semibold">{title}</CardTitle>
         <Button variant="ghost" size="icon" aria-label={`Agregar categoría de ${title.toLowerCase()}`} onClick={onAdd}>
-          <Plus size={16} />
+          <Plus className="h-5 w-5" />
         </Button>
       </CardHeader>
       <CardContent>
@@ -182,7 +187,7 @@ function CategorySection({
                     aria-label={`Editar categoría ${c.label}`}
                     onClick={() => onEdit(c)}
                   >
-                    <Pencil size={14} />
+                    <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -190,7 +195,7 @@ function CategorySection({
                     aria-label={`Eliminar categoría ${c.label}`}
                     onClick={() => onDelete(c)}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>

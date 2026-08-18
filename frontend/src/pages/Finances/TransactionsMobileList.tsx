@@ -1,9 +1,10 @@
-import { ArrowUpRight, ArrowDownRight, MoreVertical, Pencil, Trash2, RotateCcw, ArrowLeftRight } from 'lucide-react'
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, MoreVertical, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { CardContent } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { IconChip } from '@/components/ui/icon-chip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatPEN } from '@/lib/currency'
@@ -54,18 +55,12 @@ export default function TransactionsMobileList({
         ) : (
           transactions.map((t) => (
             <div key={t.id} className="flex items-center gap-3 border-b p-4 last:border-0">
-              <div
-                className={cn(
-                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-                  t.type === 'income' ? 'bg-income/10 text-income' : 'bg-expense/10 text-expense'
-                )}
-              >
-                {t.type === 'income' ? (
-                  <ArrowUpRight className="h-5 w-5" />
-                ) : (
-                  <ArrowDownRight className="h-5 w-5" />
-                )}
-              </div>
+              <IconChip
+                icon={t.type === 'income' ? ArrowUpRight : ArrowDownRight}
+                accent={t.type === 'income' ? '--income' : '--expense'}
+                size="sm"
+                className="shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
                   {categoryLabelMap[t.category] ?? t.category}
@@ -86,7 +81,7 @@ export default function TransactionsMobileList({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="shrink-0" aria-label="Más acciones">
-                    <MoreVertical className="h-4 w-4" />
+                    <MoreVertical className="h-4 w-4 rotate-90" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

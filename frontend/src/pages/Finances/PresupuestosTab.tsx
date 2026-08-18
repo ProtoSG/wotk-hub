@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, AlertTriangle, Target, MoreVertical } from 'lucide-react'
+import { AlertTriangle, MoreVertical, Pencil, Plus, Target, Trash2 } from 'lucide-react'
+import { getCategoryAccent, getCategoryIcon } from './categoryIcons'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard } from '@/components/ui/cozy-card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { IconChip } from '@/components/ui/icon-chip'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
@@ -69,7 +71,7 @@ export default function PresupuestosTab({ month }: Props) {
             setFormOpen(true)
           }}
         >
-          <Plus size={14} />
+          <Plus className="h-4 w-4" />
           Nuevo presupuesto
         </Button>
       </div>
@@ -94,7 +96,12 @@ export default function PresupuestosTab({ month }: Props) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {budgets.map((b, i) => {
-            const { pct, over, indicatorColor, stripeStyle } = getBudgetStatus(b)
+            const { pct, over, isDanger, indicatorColor, accent, stripeStyle } = getBudgetStatus(b)
+            // Category color normally (matches Citas' per-category chips —
+            // not every budget should look the same); status color takes
+            // over once it's actually a warning, so the danger signal still
+            // reads at a glance.
+            const chipAccent = isDanger ? accent : getCategoryAccent(b.category)
             return (
               <CozyCard
                 key={b.id}
@@ -102,20 +109,23 @@ export default function PresupuestosTab({ month }: Props) {
                 style={{ animationDelay: `${Math.min(i * 40, 320)}ms` }}
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {b.category}
-                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <IconChip icon={getCategoryIcon(b.category)} accent={chipAccent} size="sm" />
+                    <CardTitle className="text-sm font-medium">
+                      {b.category}
+                    </CardTitle>
+                  </div>
                   <div className="flex items-center gap-1">
                     {over && (
                       <Badge variant="destructive" className="gap-1">
-                        <AlertTriangle size={12} />
+                        <AlertTriangle className="h-3 w-3" />
                         Excedido
                       </Badge>
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" aria-label={`Más acciones para ${b.category}`}>
-                          <MoreVertical size={14} />
+                          <MoreVertical className="h-3.5 w-3.5 rotate-90" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">

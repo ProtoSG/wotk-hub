@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
 import type { Card } from '@/types/finance.types'
+import { CARD_ICON_MAP, CARD_ICON_OPTIONS } from './cardIcons'
 
 // Derived from the app's --chart-1..8 tokens (index.css) so card swatches
 // stay in the same warm terracotta family as the rest of the UI instead of
@@ -71,6 +72,7 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
   })
 
   const color = watch('color')
+  const icon = watch('icon')
 
   const onSubmit: SubmitHandler<CardFormValues> = async (values) => {
     setSaving(true)
@@ -126,13 +128,19 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
         {!editCard && (
           <div className="min-w-0 space-y-1">
             <Label>Saldo inicial (opcional)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              {...register('initialBalance', { valueAsNumber: true })}
-              placeholder="0.00"
-            />
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                S/
+              </span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                className="pl-8"
+                {...register('initialBalance', { valueAsNumber: true })}
+                placeholder="0.00"
+              />
+            </div>
             {errors.initialBalance && (
               <p className="text-xs text-destructive">{errors.initialBalance.message}</p>
             )}
@@ -140,17 +148,47 @@ export function CardFormFields({ editCard, onSaved, onClose }: CardFormFieldsPro
         )}
         <div className="min-w-0 space-y-1">
           <Label>Límite de crédito (opcional)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            {...register('creditLimit', { valueAsNumber: true })}
-            placeholder="0.00"
-          />
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              S/
+            </span>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              className="pl-8"
+              {...register('creditLimit', { valueAsNumber: true })}
+              placeholder="0.00"
+            />
+          </div>
           {errors.creditLimit && (
             <p className="text-xs text-destructive">{errors.creditLimit.message}</p>
           )}
         </div>
+      </div>
+      <div className="space-y-1">
+        <Label>Icono</Label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {CARD_ICON_OPTIONS.map((opt) => {
+            const Icon = CARD_ICON_MAP[opt.value]
+            const selected = icon === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setValue('icon', opt.value)}
+                aria-label={opt.label}
+                title={opt.label}
+                className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 ${
+                  selected ? 'border-primary bg-primary/10 text-primary' : 'border-transparent bg-muted text-muted-foreground'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+              </button>
+            )
+          })}
+        </div>
+        {errors.icon && <p className="text-xs text-destructive">{errors.icon.message}</p>}
       </div>
       <div className="space-y-1">
         <Label>Color</Label>

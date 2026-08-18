@@ -13,6 +13,7 @@ import { useFinanceApi } from '@/hooks/useFinanceApi'
 import type { SavingsGoal, SavingsGoalInput } from '@/types/finance.types'
 import { GOAL_COLORS } from '@/types/finance.types'
 import { cardsKey } from './financeKeys'
+import { GOAL_ICON_MAP, GOAL_ICON_OPTIONS } from './goalIcons'
 
 const schema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
@@ -35,15 +36,6 @@ function defaults(editGoal?: SavingsGoal): FormValues {
     defaultCardId: editGoal ? String(editGoal.defaultCardId) : '',
   }
 }
-
-const GOAL_ICON_OPTIONS = [
-  { value: 'piggy-bank', label: 'Ahorro' },
-  { value: 'target', label: 'Meta' },
-  { value: 'plane', label: 'Viaje' },
-  { value: 'home', label: 'Casa' },
-  { value: 'car', label: 'Auto' },
-  { value: 'graduation-cap', label: 'Educación' },
-]
 
 interface GoalFormProps {
   open: boolean
@@ -73,6 +65,7 @@ export default function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormP
   })
 
   const color = watch('color')
+  const icon = watch('icon')
 
   useEffect(() => {
     if (open) reset(defaults(editGoal))
@@ -119,14 +112,20 @@ export default function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormP
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="min-w-0 space-y-1">
-              <Label>Monto objetivo (PEN)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0.01"
-                {...register('targetCents', { valueAsNumber: true })}
-                placeholder="500.00"
-              />
+              <Label>Monto objetivo</Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  S/
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  className="pl-8"
+                  {...register('targetCents', { valueAsNumber: true })}
+                  placeholder="500.00"
+                />
+              </div>
               {errors.targetCents && (
                 <p className="text-xs text-destructive">{errors.targetCents.message}</p>
               )}
@@ -136,49 +135,56 @@ export default function GoalForm({ open, onClose, onSaved, editGoal }: GoalFormP
               <Input type="date" {...register('deadline')} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="min-w-0 space-y-1">
-              <Label>Icono</Label>
-              <Select value={watch('icon')} onValueChange={(v) => setValue('icon', v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {GOAL_ICON_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
+          <div className="min-w-0 space-y-1">
+            <Label>Tarjeta predeterminada</Label>
+            <Select
+              value={watch('defaultCardId')}
+              onValueChange={(v) => setValue('defaultCardId', v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Elegí una tarjeta" />
+              </SelectTrigger>
+              <SelectContent>
+                {cards
+                  .filter((card) => card.creditLimitCents === 0)
+                  .map((card) => (
+                    <SelectItem key={card.id} value={card.id.toString()}>
+                      {card.name} ({card.last4})
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <Label>Tarjeta predeterminada</Label>
-              <Select
-                value={watch('defaultCardId')}
-                onValueChange={(v) => setValue('defaultCardId', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegí una tarjeta" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cards
-                    .filter((card) => card.creditLimitCents === 0)
-                    .map((card) => (
-                      <SelectItem key={card.id} value={card.id.toString()}>
-                        {card.name} ({card.last4})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {errors.defaultCardId && (
-                <p className="text-xs text-destructive">{errors.defaultCardId.message}</p>
-              )}
-            </div>
+              </SelectContent>
+            </Select>
+            {errors.defaultCardId && (
+              <p className="text-xs text-destructive">{errors.defaultCardId.message}</p>
+            )}
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">
             Las aportaciones descontarán de esta tarjeta automáticamente
           </p>
+          <div className="space-y-1">
+            <Label>Icono</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {GOAL_ICON_OPTIONS.map((opt) => {
+                const Icon = GOAL_ICON_MAP[opt.value]
+                const selected = icon === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setValue('icon', opt.value)}
+                    aria-label={opt.label}
+                    title={opt.label}
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 ${
+                      selected ? 'border-primary bg-primary/10 text-primary' : 'border-transparent bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </button>
+                )
+              })}
+            </div>
+            {errors.icon && <p className="text-xs text-destructive">{errors.icon.message}</p>}
+          </div>
           <div className="space-y-1">
             <Label>Color</Label>
             <div className="mt-1 flex flex-wrap gap-2">
