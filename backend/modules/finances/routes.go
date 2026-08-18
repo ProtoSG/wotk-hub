@@ -20,7 +20,12 @@ func Routes(db *sql.DB, jwtSecret string) http.Handler {
 	h := &handler{db: db}
 	r := chi.NewRouter()
 
-	r.Get("/categories", h.ListCategories)
+	// OptionalAuth, not no middleware at all: ListCategories still needs to
+	// tell a logged-in caller's own categories apart from an anonymous
+	// visitor's (see its scoping) — a route with zero middleware never
+	// populates UserFromContext even when a valid cookie is sent, which
+	// silently made every caller, logged in or not, look anonymous here.
+	r.With(middleware.OptionalAuth(jwtSecret)).Get("/categories", h.ListCategories)
 
 	r.Group(func(pr chi.Router) {
 		pr.Use(middleware.RequireAuth(db, jwtSecret))
