@@ -26,11 +26,20 @@ func Logger(next http.Handler) http.Handler {
 	})
 }
 
-func CORS(origins string) func(http.Handler) http.Handler {
+// ParseAllowedOrigins splits a comma-separated origins string into a
+// trimmed slice. Shared by CORS below and the games module's WebSocket
+// upgrade origin check (see shared/wshub.NewUpgrader) so the two never
+// drift out of sync on what counts as an allowed origin.
+func ParseAllowedOrigins(origins string) []string {
 	allowed := strings.Split(origins, ",")
 	for i := range allowed {
 		allowed[i] = strings.TrimSpace(allowed[i])
 	}
+	return allowed
+}
+
+func CORS(origins string) func(http.Handler) http.Handler {
+	allowed := ParseAllowedOrigins(origins)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqOrigin := r.Header.Get("Origin")

@@ -132,6 +132,55 @@ func (h *handler) RandomMovie(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, puzzleResponse{ID: m.ID, EmojiStr: m.EmojiStr, Difficulty: m.Difficulty})
 }
 
+// broadcastEmojiSession pushes a fresh emoji-movies session over the games
+// WS hub so the OTHER player's screen updates without polling. Best-effort:
+// resolving the team failing here only costs a missed live update, never
+// the REST response the caller already got back.
+func (h *handler) broadcastEmojiSession(s EmojiGameSession) {
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("games: ws broadcast resolve team id failed: %v", err)
+		return
+	}
+	h.hub.BroadcastToTeam(teamID, wsEmojiMoviesEvent{Type: wsEventTypeEmojiMovies, Session: s})
+}
+
+// broadcastRiddleSession is broadcastEmojiSession's riddle-game counterpart.
+func (h *handler) broadcastRiddleSession(s RiddleGameSession) {
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("games: ws broadcast resolve team id failed: %v", err)
+		return
+	}
+	h.hub.BroadcastToTeam(teamID, wsRiddleEvent{Type: wsEventTypeRiddle, Session: s})
+}
+
+// ServeWS upgrades the connection and registers it under the caller's team —
+// the live channel both UltimaPreguntaTab and EmojiMoviesTab connect to
+// instead of polling. Auth already happened in the JWTAuth middleware this
+// router is mounted behind (see routes.go), so UserFromContext here is only
+// a defense-in-depth check, same call every other handler in this file
+// makes.
+func (h *handler) ServeWS(w http.ResponseWriter, r *http.Request) {
+	_, _, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "unauthorized")
+		return
+	}
+	teamID, err := team.ResolveTeamID(h.db)
+	if err != nil {
+		log.Printf("games: ws resolve team id failed: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
+		return
+	}
+	conn, err := h.wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("games: ws upgrade failed: %v", err)
+		return
+	}
+	h.hub.Register(teamID, conn)
+}
+
 func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := middleware.UserFromContext(r.Context())
 	if !ok {
@@ -171,6 +220,7 @@ func (h *handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
+	h.broadcastEmojiSession(s)
 	httpx.WriteJSON(w, http.StatusCreated, s)
 }
 
@@ -226,6 +276,7 @@ func (h *handler) JoinSession(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
+	h.broadcastEmojiSession(s)
 	httpx.WriteJSON(w, http.StatusOK, s)
 }
 
@@ -314,6 +365,7 @@ func (h *handler) Guess(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
+	h.broadcastEmojiSession(updated)
 	httpx.WriteJSON(w, http.StatusOK, guessResponse{Correct: true, Session: updated})
 }
 
@@ -372,6 +424,7 @@ func (h *handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
 	}
+	h.broadcastEmojiSession(updated)
 	httpx.WriteJSON(w, http.StatusOK, revealResponse{Answer: answer, Session: updated})
 }
 
@@ -539,15 +592,25 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 	// existing session instead of inserting a new blank one on every call
 	// (this used to insert unconditionally, so every poll tick spawned a
 	// fresh 'active' row and buried any solved/scored state under it).
-	if _, err := h.db.Exec(
+	res, err := h.db.Exec(
 		`INSERT INTO riddle_game_sessions (team_id, partner_id, current_riddle_id, status, lives_remaining, p1_score, p2_score, streak)
 		 VALUES ($1, $1, $2, 'active', $3, $4, $5, $6)
 		 ON CONFLICT (team_id, current_riddle_id) DO NOTHING`,
 		teamID, todayRiddleID.Int64, carryLives, carryP1, carryP2, carryStreak,
-	); err != nil {
+	)
+	if err != nil {
 		log.Printf("games: get riddle session failed: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "internal server error")
 		return
+	}
+	// A genuinely new row (not the ON CONFLICT no-op) means today's session
+	// just appeared out from under whichever partner didn't make this
+	// particular request — broadcast it so their idle tab picks it up
+	// instead of only ever seeing it on their own next GetRiddleSession
+	// call.
+	createdNewSession := false
+	if n, rerr := res.RowsAffected(); rerr == nil && n > 0 {
+		createdNewSession = true
 	}
 
 	var sessionID int64
@@ -567,6 +630,9 @@ func (h *handler) GetRiddleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.populateAnswerIfRevealed(s)
+	if createdNewSession {
+		h.broadcastRiddleSession(*s)
+	}
 	httpx.WriteJSON(w, http.StatusOK, riddleSessionResponse{Session: s})
 }
 
@@ -649,6 +715,16 @@ func (h *handler) expireStaleSessions(teamID int64, today string) (int64, error)
 			newStatus, newLives, s.id,
 		); err != nil {
 			return 0, err
+		}
+		// Broadcast the change so the partner's screen updates immediately
+		// instead of waiting for their own next request to hit this same
+		// expiry sweep — this is a server-driven state change, not a
+		// response to whoever happened to call GetRiddleSession.
+		if updated, lerr := h.loadRiddleSession(s.id); lerr == nil {
+			h.populateAnswerIfRevealed(updated)
+			h.broadcastRiddleSession(*updated)
+		} else {
+			log.Printf("games: load expired session for broadcast failed: %v", lerr)
 		}
 	}
 	return justGameoverID, nil
@@ -768,6 +844,8 @@ func (h *handler) SubmitRiddleGuess(w http.ResponseWriter, r *http.Request) {
 				s.P1Score, s.P2Score, s.ID,
 			); err != nil {
 				log.Printf("games: bonus-day score wipe failed: %v", err)
+			} else {
+				h.broadcastRiddleSession(s)
 			}
 		}
 		httpx.WriteJSON(w, http.StatusOK, riddleGuessResponse{Correct: false, PointsEarned: 0, Session: s})
@@ -833,6 +911,7 @@ func (h *handler) SubmitRiddleGuess(w http.ResponseWriter, r *http.Request) {
 		s.P1Score, s.P2Score, s.Streak, s.ID)
 	s.Status = "solved"
 	s.Answer = &rid.Answer
+	h.broadcastRiddleSession(s)
 
 	// Let the partner know — fired in the background so a slow/unreachable
 	// push service can't add latency to the guess response itself. Skipped

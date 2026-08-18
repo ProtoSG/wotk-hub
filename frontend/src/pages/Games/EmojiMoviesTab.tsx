@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Trophy, Copy, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,11 +6,10 @@ import { Input } from '@/components/ui/input'
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CozyCard, paperSurfaceStyle } from '@/components/ui/cozy-card'
 import { useGamesApi } from '@/hooks/useGamesApi'
+import { useGameSocket } from '@/hooks/useGameSocket'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import type { EmojiGameSession, MovieDifficulty } from '@/types/games.types'
-
-const POLL_INTERVAL_MS = 6000
 
 const DIFFICULTIES: { value: MovieDifficulty; label: string }[] = [
   { value: 'easy', label: 'Fácil' },
@@ -43,56 +42,33 @@ export default function EmojiMoviesTab() {
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
   const [difficulty, setDifficulty] = useState<MovieDifficulty | ''>('')
   const [busy, setBusy] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
-
-  // No websockets in this app — poll the shared session so both players'
-  // screens converge on join/opponent guesses without a manual refresh.
-  const startPolling = useCallback(
-    (id: number) => {
-      stopPolling()
-      pollRef.current = setInterval(async () => {
-        try {
-          const s = await getSession(id)
-          setSession(s)
-          if (s.status === 'finished') stopPolling()
-        } catch {
-          // transient poll failure — next tick retries, nothing to show the user
-        }
-      }, POLL_INTERVAL_MS)
+  // Live updates over WebSocket — replaces the old 6s poll. The hub
+  // broadcasts to the whole team, not scoped to one session id, so only
+  // apply an event that's actually about the session on screen; on
+  // (re)connect reconcile once via REST in case anything was missed while
+  // disconnected.
+  useGameSocket({
+    onMessage: (event) => {
+      if (event.type !== 'emoji_movies.session') return
+      if (session && event.session.id !== session.id) return
+      setSession(event.session)
     },
-    [getSession, stopPolling]
-  )
-
-  useEffect(() => stopPolling, [stopPolling])
-
-  // Pause polling while the tab isn't visible — no point burning requests
-  // for a screen nobody's looking at. Resume on return if the session is
-  // still live (same pattern as UltimaPreguntaTab).
-  useEffect(() => {
-    function handleVisibility() {
-      if (document.hidden) {
-        stopPolling()
-      } else if (session && (session.status === 'waiting' || session.status === 'active')) {
-        startPolling(session.id)
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [session, startPolling, stopPolling])
+    onOpen: () => {
+      if (!session) return
+      getSession(session.id)
+        .then(setSession)
+        .catch(() => {
+          // transient reconcile failure — the next event/reconnect will catch up
+        })
+    },
+  })
 
   async function handleCreate() {
     setBusy(true)
     try {
       const s = await createSession(difficulty || undefined)
       setSession(s)
-      startPolling(s.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo crear la partida')
     } finally {
@@ -110,7 +86,6 @@ export default function EmojiMoviesTab() {
     try {
       const s = await joinSession(id)
       setSession(s)
-      startPolling(s.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo unir a la partida')
     } finally {
@@ -126,7 +101,6 @@ export default function EmojiMoviesTab() {
       setSession(result.session)
       setFeedback(result.correct ? 'correct' : 'wrong')
       if (result.correct) setGuessText('')
-      if (result.session.status === 'finished') stopPolling()
       setTimeout(() => setFeedback(null), 1500)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo enviar la respuesta')
@@ -150,7 +124,6 @@ export default function EmojiMoviesTab() {
   }
 
   function handleNewGame() {
-    stopPolling()
     setSession(null)
     setGuessText('')
     setFeedback(null)

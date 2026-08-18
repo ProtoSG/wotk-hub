@@ -93,3 +93,21 @@ export interface RiddleHistoryItem {
   pointsEarned: number
   expired: boolean
 }
+
+// ─── Live updates (WebSocket) ──────────────────────────────────────────────
+
+// Discriminated union of every event the games WS hub can push — see
+// backend/modules/games/types.go's wsEmojiMoviesEvent/wsRiddleEvent (the
+// `type` string literals must match those exactly) and
+// hooks/useGameSocket.ts, which is the only place these are consumed.
+export interface EmojiMoviesSessionEvent {
+  type: 'emoji_movies.session'
+  session: EmojiGameSession
+}
+
+export interface RiddleSessionEvent {
+  type: 'riddle.session'
+  session: RiddleGameSession
+}
+
+export type GameSocketEvent = EmojiMoviesSessionEvent | RiddleSessionEvent
