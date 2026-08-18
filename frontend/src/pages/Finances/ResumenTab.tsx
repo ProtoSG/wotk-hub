@@ -20,6 +20,10 @@ interface Props {
   cards: Card[]
   goals: SavingsGoal[]
   isLoading: boolean
+  /** Drill-down from the trend/category charts into Movimientos — see
+   * FinancesPage, which owns both `month` and the tab query param. */
+  onMonthClick?: (month: string) => void
+  onCategoryClick?: (category: string) => void
 }
 
 function AnimatedPEN({ cents }: { cents: number }) {
@@ -90,7 +94,15 @@ function SkeletonCharts() {
   )
 }
 
-export default function ResumenTab({ summary, committed, cards, goals, isLoading }: Props) {
+export default function ResumenTab({
+  summary,
+  committed,
+  cards,
+  goals,
+  isLoading,
+  onMonthClick,
+  onCategoryClick,
+}: Props) {
   // Controlled (not just hover) so the "Neto" explainer tooltip also opens
   // on tap — Radix's default hover/focus-only trigger doesn't respond to
   // touch, and this app is mobile-first.
@@ -291,8 +303,8 @@ export default function ResumenTab({ summary, committed, cards, goals, isLoading
         </CozyCard>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
-        <TrendChart data={summary?.monthlyTrend ?? []} />
-        <CategoryChart data={summary?.categoryBreakdown ?? []} />
+        <TrendChart data={summary?.monthlyTrend ?? []} onMonthClick={onMonthClick} />
+        <CategoryChart data={summary?.categoryBreakdown ?? []} onCategoryClick={onCategoryClick} />
       </div>
     </div>
   )
