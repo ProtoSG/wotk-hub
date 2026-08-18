@@ -14,7 +14,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { cn } from '@/lib/utils'
 import { solesToCents, centsToSoles } from '@/lib/currency'
 import { todayISO } from '@/lib/date'
-import type { Transaction, TransactionType, Card } from '@/types/finance.types'
+import type { Transaction, Card } from '@/types/finance.types'
 
 const schema = z.object({
   type: z.enum(['income', 'expense']),
