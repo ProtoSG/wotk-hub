@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/ui/date-field'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFinanceApi } from '@/hooks/useFinanceApi'
@@ -181,7 +182,7 @@ export default function TransactionForm({ open, onClose, onSaved, editing, defau
           {editing && (
             <div className="space-y-1">
               <Label>Fecha</Label>
-              <Input type="date" {...register('date')} />
+              <DateField value={watch('date')} onChange={(v) => setValue('date', v)} />
               {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
             </div>
           )}
