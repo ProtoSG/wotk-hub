@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ytdlp-cookies-sync every morning
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+# If the laptop was asleep/off at 08:00, run it as soon as it's back —
+# instead of silently skipping that whole day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
