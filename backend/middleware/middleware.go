@@ -1,12 +1,15 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -268,4 +271,19 @@ func (rw *responseWriter) WriteHeader(status int) {
 // ResponseWriter instead of stopping at this wrapper.
 func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
+}
+
+// Hijack lets gorilla/websocket upgrade the connection (games.ServeWS).
+// Unlike ytdlp's deadline extension above, gorilla/websocket type-asserts
+// http.Hijacker directly against the ResponseWriter it's given — it doesn't
+// go through http.ResponseController/Unwrap — so this wrapper has to
+// implement Hijacker itself and forward to the underlying ResponseWriter,
+// or every websocket upgrade fails with "does not implement http.Hijacker"
+// the moment this Logger middleware wraps it.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return hj.Hijack()
 }
