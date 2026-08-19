@@ -35,7 +35,7 @@ export function usePublicYtdlpApi() {
           throw new Error('El token del link es incorrecto.', { cause: err })
         }
         if (err.response?.status === 429) {
-          throw new Error('El servidor está ocupado, probá de nuevo en un momento.', { cause: err })
+          throw new Error('El servidor está ocupado, intenta de nuevo en un momento.', { cause: err })
         }
         if (err.response?.status === 400) throw new Error('Ese link no es de YouTube.', { cause: err })
       }

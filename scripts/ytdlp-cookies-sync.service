@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync YouTube cookies from Zen to workhub server
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/sync-ytdlp-cookies.sh
