@@ -18,10 +18,13 @@ async function readBackendError(data: unknown): Promise<string | undefined> {
 export function usePublicYtdlpApi() {
   async function downloadMp3(url: string, token: string): Promise<{ blob: Blob; filename: string }> {
     try {
+      // Streams the actual audio file back — easily exceeds the global 30s
+      // API timeout (that default exists to fail hung *JSON* requests
+      // fast, not to cap a real download). 0 = no timeout, just this call.
       const res = await publicApi.post(
         '/api/ytdlp/public/download',
         { url },
-        { params: { token }, responseType: 'blob' }
+        { params: { token }, responseType: 'blob', timeout: 0 }
       )
       return { blob: res.data as Blob, filename: parseFilename(res.headers['content-disposition']) }
     } catch (err) {
