@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -121,7 +122,11 @@ func main() {
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":    "ok",
+			"message":   "Servidor corriendo",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		})
 	})
 
 	// Unauthenticated by design, same as /health above — this is a personal/
