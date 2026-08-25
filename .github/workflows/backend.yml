@@ -97,18 +97,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Dokploy redeploy over SSH
-        uses: appleboy/ssh-action@v1
-        env:
-          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
-          DOKPLOY_APP_ID: ${{ secrets.DOKPLOY_APP_ID_BACKEND }}
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          envs: DOKPLOY_TOKEN,DOKPLOY_APP_ID
-          script: |
-            curl -fsS -X POST http://localhost:3000/api/application.deploy \
-              -H "x-api-key: $DOKPLOY_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"applicationId\":\"$DOKPLOY_APP_ID\"}"
+      - name: Deploy to Dokploy
+        run: |
+          curl -fsS -X POST https://dokploy.kulab.dev/api/application.deploy \
+            -H "x-api-key: ${{ secrets.DOKPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"applicationId": "${{ secrets.DOKPLOY_APP_ID_BACKEND }}"}'
